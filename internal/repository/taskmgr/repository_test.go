@@ -3,6 +3,8 @@ package taskmgr
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -176,6 +178,51 @@ func TestDashboardSections(t *testing.T) {
 	}
 	if !containsID(blockedIDs, dep.ID) {
 		t.Errorf("ReadyExplain.Blocked missing dep E: %v", blockedIDs)
+	}
+}
+
+// TestDashboardSkipsTheSessionsOfAnUnreadableCommentStream pins that one
+// broken comment sidecar drops that issue's sessions and fails nothing else.
+func TestDashboardSkipsTheSessionsOfAnUnreadableCommentStream(t *testing.T) {
+	r, store := newTestRepo(t)
+	ctx := context.Background()
+
+	var ids []string
+	for _, title := range []string{"broken", "healthy"} {
+		id := mustCreate(t, r, domain.CreateIssueInput{Title: title})
+		if err := r.UpdateIssue(ctx, id, domain.UpdateIssueInput{Status: ptr("in_progress")}); err != nil {
+			t.Fatalf("update %s: %v", title, err)
+		}
+		if _, err := store.AddComment(id, tasks.Actor{Name: "ada", Agent: "claude-code", Session: "s-" + title}, "note"); err != nil {
+			t.Fatalf("AddComment %s: %v", title, err)
+		}
+		ids = append(ids, id)
+	}
+	broken, healthy := ids[0], ids[1]
+
+	sidecars, err := filepath.Glob(filepath.Join(store.Dir(), "comments", broken+".*"))
+	if err != nil || len(sidecars) != 1 {
+		t.Fatalf("expected one comment sidecar for %s, got %v (%v)", broken, sidecars, err)
+	}
+	if err := os.WriteFile(sidecars[0], []byte("---\nid: [unclosed\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Comments(broken); err == nil {
+		t.Fatal("expected the broken sidecar to fail to read")
+	}
+
+	dash, err := r.Dashboard(ctx, repository.DashboardOptions{})
+	if err != nil {
+		t.Fatalf("Dashboard: %v", err)
+	}
+	if !containsID(summaryIDs(dash.InProgress), broken) {
+		t.Errorf("InProgress missing the issue with the broken sidecar: %v", summaryIDs(dash.InProgress))
+	}
+	if _, ok := dash.InProgressSessions[broken]; ok {
+		t.Errorf("InProgressSessions has an entry for the broken sidecar: %v", dash.InProgressSessions)
+	}
+	if got := dash.InProgressSessions[healthy]; !equalSlice(got, []string{"s-healthy"}) {
+		t.Errorf("InProgressSessions[%s] = %v, want [s-healthy]", healthy, got)
 	}
 }
 

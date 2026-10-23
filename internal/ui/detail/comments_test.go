@@ -1,12 +1,14 @@
 package detail
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -26,7 +28,7 @@ func commentsState(t *testing.T) State {
 				{ID: "c-3", Author: "carol", Body: "Third chronologically", CreatedAt: mustTime(t, "2026-04-05T14:00:00Z")},
 			},
 		},
-		ButtonKeys: ButtonKeys{EditIssue: "alt+u", AddComment: "alt+a", EditComment: "enter", DeleteComment: "alt+d"},
+		ButtonKeys: ButtonKeys{EditIssue: "alt+u", AddComment: "alt+a", EditComment: "enter", DeleteComment: "alt+d", LaunchAgent: "alt+i", FocusAgent: "alt+o"},
 		Width:      100,
 		Height:     30,
 	}
@@ -141,9 +143,12 @@ func TestHitTestFindsTheButtonsAndTheCommentsWhereRenderDrewThem(t *testing.T) {
 		state.Width, state.Height = width, 50
 		state.FocusPane = FocusPaneComments
 		state.CommentIndex = 1
+		state.Agents = []revier.Agent{{Panel: "3", Status: revier.StatusRunning, Session: "s-3"}}
 		view := Render(state)
 
 		for text, want := range map[string]Hit{
+			"agent alt+i":  {Pane: FocusPaneContent, Button: ButtonLaunchAgent},
+			"open alt+o":   {Pane: FocusPaneContent, Button: ButtonFocusAgent},
 			"edit alt+u":   {Pane: FocusPaneContent, Button: ButtonEdit},
 			"add alt+a":    {Pane: FocusPaneContent, Button: ButtonAddComment},
 			"edit enter":   {Pane: FocusPaneComments, Comment: 1, Button: ButtonEditComment},
@@ -250,8 +255,69 @@ func TestAnIDLineWithoutRoomDrawsNoEditButton(t *testing.T) {
 	pane := ContentPaneState{Detail: commentsState(t).Detail}
 	pane.Detail.Summary.ID = "tm-a-long-issue-id"
 	content := renderContentPaneLines(pane, 30, 20)
-	if !strings.Contains(content.lines[0], "tm-a-long-issue-id") || strings.Contains(content.lines[0], "edit") || content.edit != (cells{}) {
-		t.Errorf("the ID line is %q with the button at %+v, want the whole ID and no button", content.lines[0], content.edit)
+	if !strings.Contains(content.lines[0], "tm-a-long-issue-id") || strings.Contains(content.lines[0], "edit") || content.idButtons != nil {
+		t.Errorf("the ID line is %q with the button at %+v, want the whole ID and no button", content.lines[0], content.idButtons)
+	}
+}
+
+// The open button stands left of agent and edit only while an agent is
+// linked to the issue. agent and edit keep their cells when it comes or goes,
+// and edit still ends in the column of add.
+func TestTheOpenButtonIsDrawnOnlyWithALinkedAgent(t *testing.T) {
+	t.Parallel()
+
+	state := commentsState(t)
+	view := Render(state)
+	if plain := testui.Downsample(view); strings.Contains(plain, "open alt+o") || !strings.Contains(plain, "agent alt+i  ·  edit alt+u") {
+		t.Errorf("without a linked agent the ID line is not agent and edit:\n%s", plain)
+	}
+	agentX, agentY := testui.FindCell(t, view, "agent alt+i")
+	editX, _ := testui.FindCell(t, view, "edit alt+u")
+
+	state.Agents = []revier.Agent{{Panel: "3", Status: revier.StatusIdle, Session: "s-3"}}
+	view = Render(state)
+	if !strings.Contains(testui.Downsample(view), "open alt+o  ·  agent alt+i  ·  edit alt+u") {
+		t.Errorf("with a linked agent the ID line is not open, agent and edit:\n%s", testui.Downsample(view))
+	}
+	if x, y := testui.FindCell(t, view, "agent alt+i"); x != agentX || y != agentY {
+		t.Errorf("agent moved from (%d,%d) to (%d,%d) when open came", agentX, agentY, x, y)
+	}
+	if x, _ := testui.FindCell(t, view, "edit alt+u"); x != editX {
+		t.Errorf("edit moved from column %d to %d when open came", editX, x)
+	}
+	addX, _ := testui.FindCell(t, view, "add alt+a")
+	if editX+len("edit alt+u") != addX+len("add alt+a") {
+		t.Errorf("edit ends in column %d, add in column %d", editX+len("edit alt+u"), addX+len("add alt+a"))
+	}
+}
+
+// An ID line without room for every button keeps open and edit while an agent
+// is linked, and edit alone without one, so agent never takes the cells open
+// held. Narrower still, it draws edit alone.
+func TestAnIDLineWithoutRoomForEveryButtonKeepsOpenAndEdit(t *testing.T) {
+	t.Parallel()
+
+	pane := commentsState(t).contentPane(0, 0)
+	for _, tc := range []struct {
+		width  int
+		agents []revier.Agent
+		want   []Button
+	}{
+		// 50 cells: the Content pane of the three-pane layout at 120 columns.
+		{50, []revier.Agent{{Panel: "3", Status: revier.StatusIdle, Session: "s-3"}}, []Button{ButtonFocusAgent, ButtonEdit}},
+		{50, nil, []Button{ButtonEdit}},
+		{32, []revier.Agent{{Panel: "3", Status: revier.StatusIdle, Session: "s-3"}}, []Button{ButtonEdit}},
+	} {
+		pane.Agents = tc.agents
+		content := renderContentPaneLines(pane, tc.width, 20)
+		var got []Button
+		for _, placed := range content.idButtons {
+			got = append(got, placed.button)
+		}
+		line := testui.Downsample(content.lines[0])
+		if !strings.Contains(line, "tm-77") || !strings.HasSuffix(line, "edit alt+u ") || strings.Contains(line, "agent") || !slices.Equal(got, tc.want) {
+			t.Errorf("width %d, %d agents: the ID line is %q with %v, want the ID and %v", tc.width, len(tc.agents), line, got, tc.want)
+		}
 	}
 }
 
@@ -262,9 +328,12 @@ func TestTheButtonUnderThePointerIsLit(t *testing.T) {
 
 	state := commentsState(t)
 	state.FocusPane = FocusPaneComments
+	state.Agents = []revier.Agent{{Panel: "3", Status: revier.StatusRunning, Session: "s-3"}}
 	idle := Render(state)
 
 	for button, drawn := range map[Button][2]string{
+		ButtonLaunchAgent:   {"agent", "alt+i"},
+		ButtonFocusAgent:    {"open", "alt+o"},
 		ButtonEdit:          {"edit", "alt+u"},
 		ButtonAddComment:    {"add", "alt+a"},
 		ButtonEditComment:   {"edit", "enter"},

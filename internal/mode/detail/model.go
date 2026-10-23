@@ -10,6 +10,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -55,6 +56,11 @@ type Model struct {
 
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
+
+	// liveAgents is the live agents of the store's revier project, by
+	// session. The shell sets it from each poll; Reset keeps it, because it
+	// belongs to the project and not to the issue on screen.
+	liveAgents map[string]revier.Agent
 }
 
 // OpenRelatedIssueMsg asks the shell to navigate detail mode to another issue.
@@ -161,7 +167,40 @@ func (m *Model) IsLoading() bool { return m.loading }
 func (m *Model) Error() string { return m.errText }
 
 // Reset returns the model to its zero state, dropping any in-flight load.
-func (m *Model) Reset() { *m = Model{Keys: m.Keys} }
+func (m *Model) Reset() { *m = Model{Keys: m.Keys, liveAgents: m.liveAgents} }
+
+// SetLiveAgents replaces the live agents of the store's revier project, keyed
+// by the session each holds.
+func (m *Model) SetLiveAgents(agents map[string]revier.Agent) {
+	m.liveAgents = agents
+}
+
+// LinkedAgents is the live agents linked to the issue open in Detail: those
+// whose session wrote one of its comments. The first is the one that needs
+// the operator most: attention, then running, then idle, then by panel.
+func (m *Model) LinkedAgents() []revier.Agent {
+	return linkedAgents(m.liveAgents, m.Detail.Comments)
+}
+
+func linkedAgents(live map[string]revier.Agent, comments []domain.IssueComment) []revier.Agent {
+	var linked []revier.Agent
+	seen := make(map[string]bool)
+	for _, comment := range comments {
+		agent, ok := live[comment.Session]
+		if comment.Session == "" || !ok || seen[comment.Session] {
+			continue
+		}
+		seen[comment.Session] = true
+		linked = append(linked, agent)
+	}
+	slices.SortFunc(linked, func(a, b revier.Agent) int {
+		if rank := revier.Rank(a.Status) - revier.Rank(b.Status); rank != 0 {
+			return rank
+		}
+		return strings.Compare(a.Panel, b.Panel)
+	})
+	return linked
+}
 
 // SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation
 // so that:
@@ -328,7 +367,10 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 			AddComment:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionCommentIssue),
 			EditComment:   "enter",
 			DeleteComment: m.Keys.DisplayLabel(config.DetailContext, config.DetailActionDeleteComment),
+			LaunchAgent:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchAgent),
+			FocusAgent:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionFocusAgent),
 		},
+		Agents: linkedAgents(m.liveAgents, d.Comments),
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),

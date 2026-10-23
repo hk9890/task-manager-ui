@@ -2,6 +2,7 @@ package taskmgr
 
 import (
 	"context"
+	"slices"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
@@ -12,8 +13,10 @@ import (
 // Dashboard composes the board snapshot from two store reads: the graph of the
 // hot set, which gives the ready, blocked, in-progress and not-ready sections
 // one consistent view, and the closed page. It is fail-fast: the first error
-// aborts the whole call. A close or reopen between the two reads can show an
-// issue in both its section and Done, or in neither, until the next refresh.
+// of those two aborts the whole call. A close or reopen between the two reads
+// can show an issue in both its section and Done, or in neither, until the
+// next refresh. The comments of each In Progress issue are read after them for
+// InProgressSessions; a failure there drops that issue's sessions only.
 func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOptions) (repository.DashboardData, error) {
 	if err := ctx.Err(); err != nil {
 		return repository.DashboardData{}, err
@@ -69,11 +72,39 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 			TotalReady:   len(ready),
 			TotalBlocked: len(blocked),
 		},
-		InProgress:  toSummaries(inProgress),
-		Closed:      toSummaries(closedPage.Issues),
-		ClosedTotal: closedPage.Total,
-		Blocked:     toSummaries(notReady),
+		InProgress:         toSummaries(inProgress),
+		Closed:             toSummaries(closedPage.Issues),
+		ClosedTotal:        closedPage.Total,
+		Blocked:            toSummaries(notReady),
+		InProgressSessions: r.commentSessions(inProgress),
 	}, nil
+}
+
+// commentSessions reads the comments of each issue for the distinct sessions
+// that wrote them. An issue whose comments fail to read has no entry: one bad
+// comment stream must not fail the board.
+func (r *Repository) commentSessions(issues []*tasks.Issue) map[string][]string {
+	var sessions map[string][]string
+	for _, issue := range issues {
+		comments, err := r.store.Comments(issue.ID)
+		if err != nil {
+			continue
+		}
+		var distinct []string
+		for _, c := range comments {
+			if c.Session != "" && !slices.Contains(distinct, c.Session) {
+				distinct = append(distinct, c.Session)
+			}
+		}
+		if len(distinct) == 0 {
+			continue
+		}
+		if sessions == nil {
+			sessions = map[string][]string{}
+		}
+		sessions[issue.ID] = distinct
+	}
+	return sessions
 }
 
 // Issue returns the full detail model. An unknown ID yields

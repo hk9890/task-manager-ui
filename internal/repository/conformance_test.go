@@ -937,3 +937,98 @@ func TestSearchPagingConformance(t *testing.T) {
 		})
 	}
 }
+
+// sessionSeed is one issue of the comment-session seed: its title, its status
+// and the sessions of its comments in order ("" is a comment a person wrote).
+type sessionSeed struct {
+	title    string
+	status   string
+	sessions []string
+}
+
+var sessionSeeds = []sessionSeed{
+	{title: "Agent at work", status: "in_progress", sessions: []string{"s-1", "", "s-2", "s-1"}},
+	{title: "Person at work", status: "in_progress", sessions: []string{""}},
+	{title: "Waiting work", status: "open", sessions: []string{"s-3"}},
+}
+
+func buildMemoryBackendWithSessions(t *testing.T) repository.Repository {
+	t.Helper()
+	r := memory.New()
+	for i, s := range sessionSeeds {
+		id := fmt.Sprintf("m-%d", i+1)
+		r.Seed(memory.Issue{ID: id, Title: s.title, Status: s.status})
+		for _, session := range s.sessions {
+			comment := memory.Comment{Author: "ada", Body: "note"}
+			if session != "" {
+				comment.Agent, comment.Session = "claude-code", session
+			}
+			r.SeedComments(id, comment)
+		}
+	}
+	return r
+}
+
+func buildTaskmgrBackendWithSessions(t *testing.T) repository.Repository {
+	t.Helper()
+	store := newTaskmgrStore(t)
+	r := taskmgr.New(store, taskmgr.WithAuthor("tester"))
+	ctx := context.Background()
+	for _, s := range sessionSeeds {
+		res, err := r.CreateIssue(ctx, domain.CreateIssueInput{Title: s.title})
+		if err != nil {
+			t.Fatalf("CreateIssue(%q): %v", s.title, err)
+		}
+		if err := r.UpdateIssue(ctx, res.IssueID, domain.UpdateIssueInput{Status: strPtr(s.status)}); err != nil {
+			t.Fatalf("UpdateIssue(%q): %v", s.title, err)
+		}
+		for _, session := range s.sessions {
+			by := tasks.Actor{Name: "ada"}
+			if session != "" {
+				by.Agent, by.Session = "claude-code", session
+			}
+			if _, err := store.AddComment(res.IssueID, by, "note"); err != nil {
+				t.Fatalf("AddComment(%q): %v", s.title, err)
+			}
+		}
+	}
+	return r
+}
+
+// TestInProgressSessionsConformance pins that both backends report the
+// distinct comment sessions of an In Progress issue, in comment order, and no
+// entry for an issue without one or for an issue that is not In Progress. The
+// detail of the issue carries the agent and the session of each comment.
+func TestInProgressSessionsConformance(t *testing.T) {
+	for _, b := range []struct {
+		name string
+		repo repository.Repository
+	}{
+		{"memory", buildMemoryBackendWithSessions(t)},
+		{"taskmgr", buildTaskmgrBackendWithSessions(t)},
+	} {
+		data, err := b.repo.Dashboard(context.Background(), repository.DashboardOptions{})
+		if err != nil {
+			t.Fatalf("%s: Dashboard: %v", b.name, err)
+		}
+		agentAtWork := issueIDByTitle(t, b.repo, "Agent at work")
+
+		if len(data.InProgressSessions) != 1 {
+			t.Errorf("%s: InProgressSessions = %v, want one entry, for %q", b.name, data.InProgressSessions, agentAtWork)
+		}
+		if got, want := data.InProgressSessions[agentAtWork], []string{"s-1", "s-2"}; !equalStrings(got, want) {
+			t.Errorf("%s: InProgressSessions[%q] = %v, want %v", b.name, agentAtWork, got, want)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), agentAtWork)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if first := detail.Comments[0]; first.Agent != "claude-code" || first.Session != "s-1" {
+			t.Errorf("%s: first comment agent/session = %q/%q, want claude-code/s-1", b.name, first.Agent, first.Session)
+		}
+		if second := detail.Comments[1]; second.Agent != "" || second.Session != "" {
+			t.Errorf("%s: second comment agent/session = %q/%q, want none", b.name, second.Agent, second.Session)
+		}
+	}
+}

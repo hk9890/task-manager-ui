@@ -28,6 +28,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/repository/filestorage"
 	"github.com/hk9890/task-manager-ui/internal/repository/nostore"
 	repositorytaskmgr "github.com/hk9890/task-manager-ui/internal/repository/taskmgr"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	storecatalogtaskmgr "github.com/hk9890/task-manager-ui/internal/storecatalog/taskmgr"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 	appversion "github.com/hk9890/task-manager-ui/internal/version"
@@ -187,6 +188,7 @@ var startInteractive = func(cfg config.Model, opts startupOptions) error {
 	// The catalog is machine-wide and independent of the repository backend: it
 	// answers which stores exist, not what is inside the one now open.
 	services.StoreCatalog = storecatalogtaskmgr.New(resolveAuthor())
+	services.Revier = revier.NewExecClient()
 	services.ActiveStorePath = selected.storePath
 	services.StoreName = selected.storeName
 	services.ConfigPath = opts.configPath

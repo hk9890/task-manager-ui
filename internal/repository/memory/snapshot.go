@@ -33,6 +33,8 @@ type SnapshotIssue struct {
 type SnapshotComment struct {
 	ID        string
 	Author    string
+	Agent     string
+	Session   string
 	Body      string
 	CreatedAt time.Time
 }
@@ -66,6 +68,8 @@ func (r *Repository) Snapshot() []SnapshotIssue {
 			comments[i] = SnapshotComment{
 				ID:        c.id,
 				Author:    c.author,
+				Agent:     c.agent,
+				Session:   c.session,
 				Body:      c.body,
 				CreatedAt: c.createdAt,
 			}

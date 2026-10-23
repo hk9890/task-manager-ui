@@ -109,6 +109,11 @@ These, all expected:
   resolution record no longer names the store in use; read the latest of the two.
 - the Done-column load-more trace (DEBUG, `internal/mode/board/model.go`) — only when the
   column actually pages, and only under `--debug`.
+- `project is not a revier project; agent status not shown` (DEBUG, with `project_root` and
+  `error`) — the agent poll (`internal/app/agents.go`) found no revier project at the project
+  root, or no `revier` on the `PATH`. Detail and the board show no agent. Logged once until a
+  poll succeeds, and only under `--debug`. The poll then asks again about once a minute, and at
+  once after a store switch.
 
 Anything else after startup means something went wrong.
 
@@ -148,6 +153,10 @@ suppressed for the interactive session.
   `Model.watchStore` starts on the active store (`internal/app/storewatch.go`) is off: the
   operating system refused it, or the store directory was removed or renamed. No toast. The views
   refresh on the one-minute tick, on focus regain and on the reload key until another store is opened.
+- `revier agent listing failed; agent status not shown` (WARN, with `project` and `error`) —
+  `revier list` failed for a resolved project (`Model.applyAgentList`,
+  `internal/app/agents.go`). The agents leave Detail and the board. No toast. Logged once per
+  failure: the next record comes after a poll succeeds and another one fails.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.

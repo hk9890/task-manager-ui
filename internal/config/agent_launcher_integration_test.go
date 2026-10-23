@@ -79,7 +79,7 @@ func TestAgentLauncherPromptsTheNewAgentOnceItIsIdle(t *testing.T) {
 		"agent new --no-focus -p demo",
 		"agent wait demo:7 --until idle --timeout 60",
 		"agent wait demo:7 --until idle --timeout 60",
-		"agent prompt demo:7 -- Implement taskmgr issue tm-42.",
+		"agent prompt demo:7 -- Run this command, then stop: taskmgr comment add tm-42 hello",
 	}, "\n") + "\n"
 	if calls != want {
 		t.Fatalf("revier calls:\n%s\nwant:\n%s", calls, want)

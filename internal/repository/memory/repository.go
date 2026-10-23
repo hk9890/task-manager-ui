@@ -37,6 +37,8 @@ type storedIssue struct {
 type storedComment struct {
 	id        string
 	author    string
+	agent     string
+	session   string
 	body      string
 	createdAt time.Time
 }
@@ -65,6 +67,8 @@ type Issue struct {
 type Comment struct {
 	ID        string
 	Author    string
+	Agent     string
+	Session   string
 	Body      string
 	CreatedAt time.Time
 }
@@ -182,6 +186,8 @@ func (r *Repository) SeedComments(issueID string, comments ...Comment) {
 		si.comments = append(si.comments, storedComment{
 			id:        id,
 			author:    c.Author,
+			agent:     c.Agent,
+			session:   c.Session,
 			body:      c.Body,
 			createdAt: ts,
 		})

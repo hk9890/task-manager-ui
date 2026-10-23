@@ -182,6 +182,18 @@ type Model struct {
 	storeChanges   <-chan struct{}
 	storeChangeSeq int
 
+	// revierProject is the revier project of the store's project path, ""
+	// until a poll resolves it. agentPollInFlight is true while a poll runs,
+	// so ticks do not pile polls up behind a slow revier. agentPollFailing is
+	// true from a failed poll to the next one that succeeds: a failure is
+	// logged once, not every tick. projectLookupWait is the ticks left before
+	// a project lookup that failed is tried again: outside a revier project
+	// every lookup fails, and each one runs revier.
+	revierProject     string
+	agentPollInFlight bool
+	agentPollFailing  bool
+	projectLookupWait int
+
 	spinnerFrame int
 
 	// spinnerTicking is true while a loading.TickMsg is scheduled. The tick used
@@ -215,13 +227,15 @@ type Model struct {
 
 	runtime RuntimeOptions
 
-	// scheduleRefreshTick, scheduleToastDismiss, scheduleSpinnerTick and
-	// awaitStoreChange are the per-Model scheduler functions. Production code
+	// scheduleRefreshTick, scheduleToastDismiss, scheduleSpinnerTick,
+	// scheduleAgentPoll and awaitStoreChange are the per-Model scheduler
+	// functions. Production code
 	// initialises them to the default* functions; tests override them directly
 	// on the Model instance without needing a global mutex.
 	scheduleRefreshTick  func() tea.Cmd
 	scheduleToastDismiss func(time.Duration, int) tea.Cmd
 	scheduleSpinnerTick  func() tea.Cmd
+	scheduleAgentPoll    func() tea.Cmd
 	awaitStoreChange     func(<-chan struct{}) tea.Cmd
 }
 
@@ -261,6 +275,7 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 		scheduleRefreshTick:  defaultScheduleRefreshTick,
 		scheduleToastDismiss: defaultScheduleToastDismiss,
 		scheduleSpinnerTick:  defaultScheduleSpinnerTick,
+		scheduleAgentPoll:    defaultScheduleAgentPoll,
 		awaitStoreChange:     defaultAwaitStoreChange,
 		copyText:             tea.SetClipboard,
 	}
@@ -297,6 +312,12 @@ func (m *Model) bindStore(services Services) {
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
 	m.search = searchmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "search"), m.keys)
 	m.detail = detail.Model{Keys: m.keys}
+	// The agents belong to the previous store's project. The poll a caller
+	// starts after the bind resolves the new one.
+	m.revierProject = ""
+	m.agentPollInFlight = false
+	m.agentPollFailing = false
+	m.projectLookupWait = 0
 	m.applyWorkspaceSizeToBrowseModes()
 
 	m.active = mode.Board
@@ -346,6 +367,7 @@ func (m *Model) switchStore(opened storecatalog.Opened) tea.Cmd {
 	return batchCmds(
 		m.scoped(m.board.Init()),
 		m.waitForStoreChangeCmd(),
+		m.pollAgentsCmd(),
 		m.showToast(fmt.Sprintf("Opened store %s", opened.Name), toaster.StyleSuccess),
 	)
 }
@@ -446,6 +468,7 @@ func (m Model) Init() tea.Cmd {
 		if !m.runtime.DisableAutoRefresh {
 			cmds = append(cmds, m.scheduleRefreshTick())
 		}
+		cmds = append(cmds, m.armAgentPoll())
 		return tea.Batch(cmds...)
 	}
 
@@ -460,7 +483,7 @@ func (m Model) Init() tea.Cmd {
 	if m.runtime.DisableAutoRefresh {
 		return healthCheckCmd
 	}
-	return batchCmds(healthCheckCmd, m.scheduleRefreshTick(), m.waitForStoreChangeCmd())
+	return batchCmds(healthCheckCmd, m.scheduleRefreshTick(), m.waitForStoreChangeCmd(), m.armAgentPoll())
 }
 
 // lazyInitActiveTabCmd fires the active browse surface's Init() exactly once —
@@ -552,8 +575,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Health check passed — fire board loads now. Calling m.board.Init()
 		// here (from Update, which returns the model) correctly persists the
 		// board mutation (pendingResults=4, inflight=true) unlike calling it
-		// from Init() (value receiver, mutations discarded).
-		return m, m.scoped(m.board.Init())
+		// from Init() (value receiver, mutations discarded). The first agent
+		// poll starts here for the same reason.
+		return m, batchCmds(m.scoped(m.board.Init()), m.pollAgentsCmd())
 	}
 
 	// The program reports the terminal's colour profile when it starts, and
@@ -645,6 +669,16 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
+	case agentPollTickMsg:
+		return m, batchCmds(modeCmd, m.scheduleAgentPoll(), m.pollAgentsCmd())
+	case agentsListedMsg:
+		m.applyAgentList(msg)
+		return m, modeCmd
+	case agentFocusedMsg:
+		if msg.err != nil {
+			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Could not bring the agent to the front: %v", msg.err), toaster.StyleError))
+		}
+		return m, modeCmd
 	case storeChangedMsg:
 		m.storeChangeSeq++
 		return m, batchCmds(modeCmd, m.waitForStoreChangeCmd())
@@ -799,6 +833,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.openCommentEdit())
 		case mode.ActionDeleteComment:
 			return m, batchCmds(modeCmd, m.confirmCommentDelete())
+		case mode.ActionLaunchAgent:
+			return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
+		case mode.ActionFocusAgent:
+			return m, batchCmds(modeCmd, m.focusAgent())
 		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
@@ -1132,6 +1170,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
+	case m.keys.Match(config.ShellContext, config.ShellActionFocusAgent, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.focusAgent())
 	}
 
 	return m, modeCmd

@@ -9,7 +9,7 @@ import "strconv"
 //
 // The set covers the markers that carry meaning: the selection bar, the
 // spinner, the query prompt, the step markers of a setting, the toast
-// severities and the issue vocabulary. Section borders, the `…` of truncated
+// severities, the issue vocabulary and the live-agent mark. Section borders, the `…` of truncated
 // text and the skeleton bar are the same in every set.
 type GlyphSet struct {
 	// Cursor is the bar down the left of the selected row.
@@ -27,6 +27,10 @@ type GlyphSet struct {
 	ToastError   string
 	ToastInfo    string
 	ToastWarn    string
+
+	// Agent marks an issue that a live revier agent works on. Its colour
+	// says the agent's status (AgentStatusStyle).
+	Agent string
 
 	// issueType and status are keyed by the normalized token. A set that
 	// leaves status empty spells a status with its letters.
@@ -70,6 +74,7 @@ var glyphSets = map[string]GlyphSet{
 		StepPrev:     "‹",
 		StepNext:     "›",
 		ToastSuccess: "✅", ToastError: "❌", ToastInfo: "ℹ", ToastWarn: "⚠",
+		Agent:     "●",
 		issueType: letterTypes, issueTypeUnknown: "?",
 	},
 	"nerd": {
@@ -82,6 +87,7 @@ var glyphSets = map[string]GlyphSet{
 		ToastError:   "", // nf-fa-times
 		ToastInfo:    "", // nf-fa-info
 		ToastWarn:    "", // nf-fa-exclamation_triangle
+		Agent:        "󰚩", // nf-md-robot
 		issueType: map[string]string{
 			"bug":     "", // nf-fa-bug
 			"task":    "", // nf-fa-tasks
@@ -117,6 +123,7 @@ var glyphSets = map[string]GlyphSet{
 		// not jump where the count wraps.
 		Spinner:      []string{".", "o", "O", "o", "."},
 		ToastSuccess: "+", ToastError: "x", ToastInfo: "i", ToastWarn: "!",
+		Agent:     "@",
 		issueType: letterTypes, issueTypeUnknown: "?",
 	},
 }

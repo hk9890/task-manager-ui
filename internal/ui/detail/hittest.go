@@ -102,8 +102,8 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	return hit, true
 }
 
-// hitContent is what the Content pane draws at (x, y): the edit button on the
-// ID line, the add button on the Comments heading, a comment, or the buttons
+// hitContent is what the Content pane draws at (x, y): a button of the ID
+// line, the add button on the Comments heading, a comment, or the buttons
 // of the selected comment.
 func hitContent(state State, pane rect, x, y int) Hit {
 	hit := Hit{Pane: FocusPaneContent}
@@ -130,8 +130,10 @@ func hitContent(state State, pane rect, x, y int) Hit {
 
 	column-- // the border
 	if index == 0 {
-		if content.edit.covers(column) {
-			hit.Button = ButtonEdit
+		for _, placed := range content.idButtons {
+			if placed.cells.covers(column) {
+				hit.Button = placed.button
+			}
 		}
 		return hit
 	}

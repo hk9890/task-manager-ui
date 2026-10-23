@@ -7,11 +7,26 @@ import (
 	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
 // refreshTickMsg triggers periodic surface auto-refresh.
 type refreshTickMsg struct{}
+
+// agentPollTickMsg asks revier for the live agents of the project again.
+type agentPollTickMsg struct{}
+
+// agentsListedMsg carries the live agents of the store's revier project.
+// project is "" when the project root resolved to no revier project.
+type agentsListedMsg struct {
+	project string
+	agents  []revier.Agent
+	err     error
+}
+
+// agentFocusedMsg carries the result of bringing an agent to the front.
+type agentFocusedMsg struct{ err error }
 
 // storeChangedMsg reports that the active store changed on disk.
 type storeChangedMsg struct{}

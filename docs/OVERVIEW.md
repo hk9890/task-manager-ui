@@ -51,6 +51,8 @@ internal/
   config/                 config model, defaults, YAML loading, keybinding resolution, and Set,
                           the one writer of the config file (set.go)
   launcher/               external tool launch actions and the process runner
+  revier/                 the revier client: the live agents of a project and the focus of
+                          one, over the revier command line. Standard library only
   logging/                the single logging entrypoint: session IDs, JSON Lines sink, stderr mirroring
   testing/                repository fakes, the UI test harness, and repofixture — the writer for
                           the `--repo-file` JSONL that filestorage only reads

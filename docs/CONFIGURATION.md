@@ -41,7 +41,8 @@ The model is intentionally small and only covers app-shell concerns:
       print command.
     - `agent` → runs `sh -c` in the project root: `revier agent new --no-focus` adds an agent
       tab to the project's open revier workspace, and once that agent is idle,
-      `revier agent prompt` sends it `Implement taskmgr issue <id>.` It adds no agent when
+      `revier agent prompt` sends it `Run this command, then stop: taskmgr comment add <id> hello`.
+      The comment carries the agent's session, which links the agent to the issue. It adds no agent when
       `revier status` resolves the project root to another project: outside a project,
       revier falls back to the focused window's. Errors after `sh` starts reach no toast.
   - Each definition supports these YAML keys:
@@ -209,7 +210,7 @@ Supported actions by context:
   - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `open_config`,
     `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `create_issue`,
     `update_issue`, `close_issue`, `comment_issue`, `save_edit`, `launch_nvim`,
-    `launch_opencode`, `launch_shell_command`, `launch_agent`
+    `launch_opencode`, `launch_shell_command`, `launch_agent`, `focus_agent`
   - `save_edit` acts in the issue editor only. The keys that move between the fields there —
     `tab`, `shift+tab`, the arrows, `enter`, `pgup`, `pgdown` — are built in and follow no
     binding. Of the other `shell` actions only `quit`, `toggle_help` and `escape` act there.

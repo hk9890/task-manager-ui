@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
@@ -319,4 +320,49 @@ func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
 	}, 44, false)
 
 	testui.AssertMatchesGolden(t, []byte(strings.Join(lines, "\n")), "metadata_with_children_w44.golden")
+}
+
+// The Agents group follows Core, one field per linked agent in the order
+// given, with attention said as "needs you", so a short pane keeps it. A pane
+// with no linked agent draws no group.
+func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
+	t.Parallel()
+
+	state := MetadataPaneState{
+		Detail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Type: "task", Status: "in_progress"}},
+		Width:  metadataRailWidth,
+		Height: 40,
+	}
+	if view := testui.Downsample(RenderMetadataPane(state)); strings.Contains(view, "Agents") {
+		t.Errorf("a pane with no linked agent draws an Agents group:\n%s", view)
+	}
+
+	state.Agents = []revier.Agent{
+		{Panel: "2", Status: revier.StatusAttention, Session: "s-2"},
+		{Panel: "1\x1b", Status: revier.StatusRunning, Session: "s-1"},
+		{Panel: "10", Status: revier.StatusIdle, Session: "s-10"},
+	}
+	view := RenderMetadataPane(state)
+	if strings.Contains(view, "Tab 1\x1b") {
+		t.Errorf("a revier value reaches the screen uncleaned:\n%q", view)
+	}
+	view = testui.Downsample(view)
+	_, priorityY := testui.FindCell(t, view, "Priority")
+	_, agentsY := testui.FindCell(t, view, "Agents")
+	if agentsY != priorityY+2 {
+		t.Errorf("the Agents group on row %d does not follow Core, which ends on row %d:\n%s", agentsY, priorityY, view)
+	}
+	previous := agentsY
+	for _, want := range []string{"Tab 2 : needs you", "Tab 1 : running", "Tab 10: idle"} {
+		_, y := testui.FindCell(t, view, want)
+		if y != previous+1 {
+			t.Errorf("%q on row %d, want row %d:\n%s", want, y, previous+1, view)
+		}
+		previous = y
+	}
+
+	state.Height = 12
+	if view := testui.Downsample(RenderMetadataPane(state)); !strings.Contains(view, "Tab 10: idle") {
+		t.Errorf("a short pane cuts the Agents group:\n%s", view)
+	}
 }

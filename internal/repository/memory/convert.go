@@ -109,6 +109,8 @@ func (r *Repository) toDetailLocked(si *storedIssue) domain.IssueDetail {
 		comments[i] = domain.IssueComment{
 			ID:        c.id,
 			Author:    c.author,
+			Agent:     c.agent,
+			Session:   c.session,
 			Body:      c.body,
 			CreatedAt: c.createdAt,
 		}

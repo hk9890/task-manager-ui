@@ -39,7 +39,9 @@ shell. Every other package is pure.
   the refusal of a save on the issue editor),
   borders and overlays (`BorderDefaultColor`, `OverlayBorderColor`, `BorderHighlightFocusColor`),
   buttons (primary / secondary / danger, each with a `Focus` variant), toasts
-  (`ToastBorder{Success,Error,Info,Warn}Color`), and the issue vocabulary below.
+  (`ToastBorder{Success,Error,Info,Warn}Color`), the status of a live revier agent
+  (`AgentRunningColor`, `AgentIdleColor`, `AgentAttentionColor`, resolved by
+  `styles.AgentStatusStyle`), and the issue vocabulary below.
 - Focus on a pane or a column is `BorderHighlightFocusColor` on the border. Only the tabs, the
   modal buttons and the Save and Cancel buttons of the issue editor carry focus on a background
   instead, each with its own `Focus` role. A row's
@@ -102,6 +104,7 @@ column below shows the `unicode` set:
 | `❯` | the prompt in front of a query line | `Prompt` |
 | `‹ ›` | either side of a value the operator steps through, on the configuration screen and the issue editor | `StepPrev`, `StepNext` |
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
+| `●` | a live revier agent works on the issue, in the colour of the agent's status; after the status token of an In Progress card, drawn only with an agent | `Agent` |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
 - A new marker is a field of `GlyphSet` with a value in all three sets. A row marker that is not a
@@ -173,8 +176,9 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 ### A button in a pane
 
 A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
-has four, all in the Content pane: `edit` on the ID line, the first line of the pane, `add` on the
-Comments heading, and `edit` and `delete` on the header line of the selected comment.
+has them all in the Content pane: `open`, `agent` and `edit` on the ID line, the first line of the
+pane, `add` on the Comments heading, and `edit` and `delete` on the header line of the selected
+comment. `open` is drawn only while a live agent is linked to the issue (`State.Agents`).
 
 - Draw it with `paneButton` (`internal/ui/detail/buttons.go`): the two runs and the roles of a
   menu-bar button, `" label "` in `ShellActionColor` and `"key "` in `ShellFooterHelpColor`.
@@ -186,7 +190,10 @@ Comments heading, and `edit` and `delete` on the header line of the selected com
   the last cell of every button line is the same column: `edit` on the ID line ends where `add`
   ends (`TestTheEditButtonEndsInTheColumnOfTheAddButton`, `internal/ui/detail/comments_test.go`).
   It draws none when fewer than `buttonTextFloor` cells would stay for the text. The ID is never
-  cut for a button: an ID line without room for both draws no `edit` (`renderContentPaneLines`).
+  cut for a button. The width alone picks the ID line's set — `open`, `agent` and `edit`; else
+  `open` and `edit`; else `edit`; else none — measured with `open` drawn, so a linked agent coming
+  or going adds or removes `open` and moves no other button: a click aimed at `open` never lands
+  on `agent` (`placeIDLineButtons`). Place the buttons of one line with one `placeButtons` call.
 - `HitTest` reads the cells `placeButtons` returned, through `renderContentPaneLines`, so a click
   lands on the button that is drawn.
 - A pane border holds no button.
@@ -554,7 +561,8 @@ open until the store is created, so a rejected name or prefix is corrected in pl
 - The Metadata pane of Detail only shows. It is no focus stop (`focusStops`,
   `internal/mode/detail/model.go`), so its border never takes the focus colour; `HitTest` reports
   nothing on it; it has no cursor and no scroll offset. A pane too short for its lines ends on
-  `… (N more)` (`RenderMetadataPane`). Every action on the issue is a key and a button of the
+  `… (N more)` (`RenderMetadataPane`). Its `Agents` group, drawn only with a linked live agent
+  and right after `Core` so a short pane keeps it, only shows too: `open` on the ID line acts on the agents. Every action on the issue is a key and a button of the
   Content pane ([A button in a pane](#a-button-in-a-pane)).
 - A move of the comment cursor scrolls the Content pane with two calls, the last line of the
   comment and then its first: a comment that fits is drawn whole and a taller one starts at its

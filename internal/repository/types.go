@@ -16,6 +16,9 @@ type DashboardData struct {
 	Closed       []domain.IssueSummary
 	ClosedTotal  int
 	Blocked      []domain.IssueSummary
+	// InProgressSessions maps the ID of an In Progress issue to the distinct
+	// non-empty sessions of its comments. An issue without one has no entry.
+	InProgressSessions map[string][]string
 }
 
 // Catalogs holds the selectable option sets for create and edit forms.

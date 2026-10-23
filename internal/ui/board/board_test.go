@@ -10,6 +10,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -158,6 +159,46 @@ func TestRenderBoardResponsiveWideGolden(t *testing.T) {
 
 	assertEqualColumnHeights(t, Render(state))
 	testui.AssertMatchesGoldenStripANSI(t, []byte(Render(state)), "board_responsive_wide_w120.golden")
+}
+
+// An In Progress card whose issue a live agent works on draws the agent mark,
+// in the colour of the agent's status, after its status token. A card with no
+// agent draws none.
+func TestRenderBoardDrawsTheAgentMarkOnAnInProgressCard(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	state := State{
+		Placeholder:   "filter issues",
+		FocusedColumn: 0,
+		Width:         120,
+		Height:        16,
+		Columns: []Column{
+			{Title: "Ready", Rows: []domain.IssueSummary{{ID: "TM-1", Title: "Write the release notes", Type: "task", Status: "open", Priority: 2}}, SelectedRow: 0, Total: 1, TotalIsExact: true},
+			{
+				Title: "In Progress",
+				Rows: []domain.IssueSummary{
+					{ID: "TM-2", Title: "Link comments to agent sessions", Type: "feature", Status: "in_progress", Priority: 1},
+					{ID: "TM-3", Title: "Poll revier for live agents", Type: "task", Status: "in_progress", Priority: 1},
+				},
+				SelectedRow:  -1,
+				Total:        2,
+				TotalIsExact: true,
+				Agents:       map[string]string{"TM-2": revier.StatusAttention},
+			},
+		},
+	}
+
+	rendered := Render(state)
+	plain := testui.AnsiEscapePattern.ReplaceAllString(rendered, "")
+	if got := strings.Count(plain, styles.Glyphs.Agent); got != 1 {
+		t.Errorf("the board draws the agent mark %d times, want once:\n%s", got, plain)
+	}
+	testui.AssertContainsAll(t, plain, "P1 IP "+styles.Glyphs.Agent+" TM-2", "P1 IP TM-3")
+	if mark := styles.AgentStatusStyle(revier.StatusAttention).Render(styles.Glyphs.Agent); !strings.Contains(rendered, mark) {
+		t.Errorf("the mark is not drawn in the attention colour %q", mark)
+	}
+	assertEqualColumnHeights(t, rendered)
+	testui.AssertMatchesGoldenNormalized(t, []byte(rendered), "board_agent_mark_w120.golden")
 }
 
 // TestRefreshBoardCarriesDimPhaseStyle verifies that when a board column is

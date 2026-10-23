@@ -168,6 +168,10 @@ func applyFlavor(f catppuccin.Flavor, profile colorprofile.Profile) {
 	IssueStatusClosedColor = c(f.Overlay1())
 	IssueStatusDeferredColor = c(f.Lavender())
 
+	AgentRunningColor = c(f.Green())
+	AgentIdleColor = c(f.Overlay1())
+	AgentAttentionColor = c(f.Peach())
+
 	buildStyles()
 }
 

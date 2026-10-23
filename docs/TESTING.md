@@ -259,6 +259,12 @@ the real catalog reads and writes the registry of whoever runs the suite. The SD
 itself is tested against a real registry in `internal/storecatalog/taskmgr`, under a
 `TASKMGR_HOME` of the test's own.
 
+A revier client is one more: a test that polls or focuses an agent takes `FakeRevierClient`
+(`internal/testing/fakes/revier.go`), because the real revier starts and focuses real agents. The
+exec path of `revier.NewExecClient` is Tier 2: `internal/revier/revier_integration_test.go` puts a
+fake `revier` script first on `PATH`, as `internal/config/agent_launcher_integration_test.go`
+does for the agent launcher.
+
 The system clipboard is the last: a shell test replaces `Model.copyText` to read the text a
 selection sends. The real one is `tea.SetClipboard`, whose message only a running program writes
 to the terminal.

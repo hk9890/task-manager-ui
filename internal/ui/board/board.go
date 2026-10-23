@@ -59,6 +59,9 @@ type Column struct {
 	// a column ordered by UpdatedAt descending; the Done column, ordered by
 	// close date, leaves it false.
 	AgeMarkers bool
+	// Agents maps the ID of an issue that a live revier agent works on to that
+	// agent's status. The row of such an issue draws the agent mark.
+	Agents map[string]string
 }
 
 // State is the full board renderer input.
@@ -534,6 +537,7 @@ func (out *columnRows) appendIssueRows(col Column, maxWidth int, dim bool, phase
 			Width:    maxWidth,
 			Styled:   true,
 			Match:    match,
+			Agent:    col.Agents[issue.ID],
 			Dim:      dim,
 			Phase:    phase,
 		})...)
