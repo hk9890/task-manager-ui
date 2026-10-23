@@ -35,6 +35,7 @@ internal/
     helpscreen/             the full-screen help: every key, in sections; it renders instead of
                             the shell too
     modal/ toaster/ overlay/ loading/ scroll/ fatalerror/   shared shell primitives
+    selectmenu/             the menu a drag selection opens at the release cell; an overlay
   domain/                 issue, query, mutation, catalog and error models
   repository/             the Repository interface, plus shared errors and types
     taskmgr/                production backend: in-process adapter over the SDK

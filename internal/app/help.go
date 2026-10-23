@@ -114,6 +114,12 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
 		}},
+		{Title: "Selection menu", Entries: []helpscreen.Entry{
+			{Key: "up/down", Desc: "the entry above / below"},
+			{Key: "enter", Desc: "run the entry; a click on it does the same"},
+			{Key: shell(config.ShellActionEscape), Desc: "close the menu"},
+			{Key: "click outside", Desc: "close the menu, and do nothing else"},
+		}},
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/overlay"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
@@ -23,9 +24,11 @@ type selectionMenu struct {
 	sent     int
 	backdrop string
 	at       screenCell
-	entries  []selectionAction
-	cursor   int
-	pointer  *screenCell
+	// screenWidth is the width the menu is cut to.
+	screenWidth int
+	entries     []selectionAction
+	cursor      int
+	pointer     *screenCell
 }
 
 type selectionAction struct {
@@ -39,6 +42,7 @@ func (m *Model) openSelectionMenu(selected textSelection, text string, release s
 	for menu.cursor < len(menu.entries)-1 && menu.entries[menu.cursor].entry.Disabled {
 		menu.cursor++
 	}
+	menu.screenWidth = m.width
 	width, height := selectmenu.Size(menu.state())
 	menu.at.x, menu.at.y = selectmenu.Place(release.x, release.y, width, height, m.width, m.height)
 	m.selMenu = menu
@@ -54,7 +58,7 @@ func (m *Model) selectionActions() []selectionAction {
 	selection := m.currentSelection()
 	canQuote := onStore && selection != nil && selection.Issue.ID != ""
 	if canQuote {
-		quote = "Quote in a comment on " + selection.Issue.ID
+		quote = "Quote in a comment on " + displaytext.OneLine(selection.Issue.ID)
 	}
 	return []selectionAction{
 		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: (*Model).quoteInComment},
@@ -68,6 +72,7 @@ func (s *selectionMenu) state() selectmenu.State {
 	state := selectmenu.State{
 		Title:  fmt.Sprintf("Sent %d characters to the clipboard", s.sent),
 		Hint:   "shift+drag if not copied",
+		Width:  s.screenWidth,
 		Cursor: s.cursor,
 		Hover:  -1,
 	}
