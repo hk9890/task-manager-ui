@@ -97,7 +97,9 @@ func defaultLauncherDefinitions() []LauncherDefinition {
 			// Outside a project revier status resolves to the focused window's
 			// project instead of failing, so the resolved path is checked
 			// against the project root. revier agent wait fails until the
-			// harness in the new tab has started, hence the retry.
+			// harness in the new tab has started, hence the retry. Its exit
+			// status 2 is a timeout: the agent is there and not idle, which
+			// no retry changes.
 			Action:  "agent",
 			Command: "sh",
 			Args: []string{
@@ -107,7 +109,8 @@ func defaultLauncherDefinitions() []LauncherDefinition {
 project=$(printf '%s\n' "$status" | sed -n 's/^project  *//p')
 a=$(revier agent new --no-focus -p "$project") || exit 1
 i=0
-until revier agent wait "$a" --until idle --timeout 60 >/dev/null 2>&1; do
+until revier agent wait "$a" --until idle --timeout 60; do
+	[ $? -eq 2 ] && exit 1
 	i=$((i + 1))
 	[ "$i" -ge 30 ] && exit 1
 	sleep 2

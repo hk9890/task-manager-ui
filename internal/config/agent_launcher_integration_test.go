@@ -13,12 +13,15 @@ import (
 // fakeRevier logs every call to $REVIER_LOG. `status` resolves to
 // $REVIER_PROJECT_PATH, `agent new` prints an address, and the first
 // `agent wait` fails as it does before the harness in the new tab has started.
+// With $REVIER_WAIT_TIMES_OUT set, every `agent wait` exits 2, as a wait that
+// ran out of time does.
 const fakeRevier = `#!/bin/sh
 printf '%s\n' "$*" >> "$REVIER_LOG"
 case "$1 $2" in
 "status "*) printf 'project   demo\npath      %s\nruntime   kitty\n' "$REVIER_PROJECT_PATH" ;;
 "agent new") echo demo:7 ;;
 "agent wait")
+	[ -z "$REVIER_WAIT_TIMES_OUT" ] || exit 2
 	[ -e "$REVIER_LOG.started" ] || { : > "$REVIER_LOG.started"; exit 1; }
 	echo idle ;;
 esac
@@ -26,8 +29,8 @@ esac
 
 // runAgentLauncher runs the default agent launcher body in projectRoot for
 // issue tm-42, with a fake revier whose status resolves to resolvedPath, and
-// returns the revier calls it made.
-func runAgentLauncher(t *testing.T, projectRoot, resolvedPath string) (string, error) {
+// returns the revier calls it made. env is added to the body's environment.
+func runAgentLauncher(t *testing.T, projectRoot, resolvedPath string, env ...string) (string, error) {
 	t.Helper()
 
 	var agent LauncherDefinition
@@ -48,7 +51,11 @@ func runAgentLauncher(t *testing.T, projectRoot, resolvedPath string) (string, e
 
 	cmd := exec.Command("sh", "-c", agent.Args[1], "tm-42")
 	cmd.Dir = projectRoot
-	cmd.Env = append(os.Environ(), "PATH="+bin+":"+os.Getenv("PATH"), "REVIER_LOG="+log, "REVIER_PROJECT_PATH="+resolvedPath)
+	// PWD is what os/exec sets beside Dir when Env is nil, as it is for this
+	// launcher in the app. Without it sh takes the physical path of Dir, which
+	// differs from projectRoot under a TMPDIR behind a symlink (/var on macOS).
+	cmd.Env = append(os.Environ(), "PWD="+projectRoot, "PATH="+bin+":"+os.Getenv("PATH"), "REVIER_LOG="+log, "REVIER_PROJECT_PATH="+resolvedPath)
+	cmd.Env = append(cmd.Env, env...)
 	runErr := cmd.Run()
 
 	calls, err := os.ReadFile(log)
@@ -88,5 +95,24 @@ func TestAgentLauncherAddsNoAgentWhenRevierResolvesAnotherProject(t *testing.T) 
 	}
 	if calls != "status\n" {
 		t.Fatalf("expected status as the only revier call, got:\n%s", calls)
+	}
+}
+
+func TestAgentLauncherStopsWhenTheWaitTimesOut(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	calls, err := runAgentLauncher(t, root, root, "REVIER_WAIT_TIMES_OUT=1")
+	if err == nil {
+		t.Fatal("expected the agent launcher body to fail")
+	}
+
+	want := strings.Join([]string{
+		"status",
+		"agent new --no-focus -p demo",
+		"agent wait demo:7 --until idle --timeout 60",
+	}, "\n") + "\n"
+	if calls != want {
+		t.Fatalf("revier calls:\n%s\nwant:\n%s", calls, want)
 	}
 }
