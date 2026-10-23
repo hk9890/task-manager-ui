@@ -101,16 +101,26 @@ func HitTest(s State, x, y int) (entry int, inside bool) {
 	return row, true
 }
 
-// Place puts a menu of the given size beside the cell x, y of a screen:
-// below and right of it, and above or left of it where it would leave the
-// screen there. A screen smaller than the menu gets it at its top left.
-func Place(x, y, width, height, screenWidth, screenHeight int) (left, top int) {
-	left, top = x+1, y+1
-	if left+width > screenWidth {
-		left = x - width
-	}
-	if top+height > screenHeight {
-		top = y - height
-	}
+// Place puts a menu of the given size beside the cell x, y where a drag from
+// fromX, fromY ended: on the side of the cell away from the drag, so the menu
+// leaves the box clear, and on the other side where it would leave the screen.
+// A screen smaller than the menu gets it at its top left.
+func Place(fromX, fromY, x, y, width, height, screenWidth, screenHeight int) (left, top int) {
+	left = beside(x, fromX, width, screenWidth)
+	top = beside(y, fromY, height, screenHeight)
 	return textutil.Clamp(left, 0, max(screenWidth-width, 0)), textutil.Clamp(top, 0, max(screenHeight-height, 0))
+}
+
+// beside is where a span of size starts next to the cell at, along one axis:
+// after it when the drag went that way from from, else before it, and on the
+// other side where that side has no room.
+func beside(at, from, size, screen int) int {
+	after, before := at+1, at-size
+	if at < from {
+		after, before = before, after
+	}
+	if after < 0 || after+size > screen {
+		return before
+	}
+	return after
 }

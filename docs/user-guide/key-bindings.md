@@ -331,8 +331,11 @@ instead.
   outside does nothing else. Quote and search are off on screens where they
   would drop work in progress, such as the issue editor.
 - Quote and search leave out the pane borders, the selection bar and the
-  indent the screen adds; the clipboard gets the box as drawn. A resize
-  during a drag drops the box and copies nothing.
+  indent the screen adds; the clipboard gets the box as drawn. They are off
+  for a box of borders alone. A resize during a drag drops the box and
+  copies nothing.
+- The menu opens on the side of the pointer away from where the drag began,
+  so it does not cover the box.
 
 ## Notes
 

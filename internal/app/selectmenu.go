@@ -22,6 +22,7 @@ import (
 // change the screen it stands over.
 type selectionMenu struct {
 	text     string
+	title    string
 	backdrop string
 	at       screenCell
 	// screenWidth is the width the menu is cut to.
@@ -38,29 +39,35 @@ type selectionAction struct {
 
 // openSelectionMenu opens the menu for a selection the release just sent.
 func (m *Model) openSelectionMenu(selected textSelection, text string, release screenCell) {
-	menu := &selectionMenu{text: text, backdrop: selected.view(), entries: m.selectionActions()}
+	menu := &selectionMenu{
+		text:     text,
+		title:    fmt.Sprintf("Sent %d characters to the clipboard", sentCount(text)),
+		backdrop: selected.view(),
+		entries:  m.selectionActions(text),
+	}
 	for menu.cursor < len(menu.entries)-1 && menu.entries[menu.cursor].entry.Disabled {
 		menu.cursor++
 	}
 	menu.screenWidth = m.width
 	width, height := selectmenu.Size(menu.state())
-	menu.at.x, menu.at.y = selectmenu.Place(release.x, release.y, width, height, m.width, m.height)
+	menu.at.x, menu.at.y = selectmenu.Place(selected.from.x, selected.from.y, release.x, release.y, width, height, m.width, m.height)
 	m.selMenu = menu
 }
 
-// selectionActions are the menu's entries. Quoting and searching leave the
-// surface on screen, so they are off where that would drop work in progress
-// or where there is no store to act on.
+// selectionActions are the menu's entries for text. Quoting and searching
+// leave the surface on screen, so they are off where that would drop work in
+// progress or where there is no store to act on. They are off too for a box
+// that holds only the screen's chrome: it leaves them no text.
 //
 // The quote goes to the issue its label names: a refresh under the menu can
 // move the selection before the entry is chosen.
-func (m *Model) selectionActions() []selectionAction {
-	onStore := !m.showHelp && !m.showActionModal && m.storeOpen &&
+func (m *Model) selectionActions(text string) []selectionAction {
+	canAct := len(quotable(text)) > 0 && !m.showHelp && !m.showActionModal && m.storeOpen &&
 		m.active != mode.StorePicker && m.active != mode.Config && m.active != mode.IssueEdit
 	quote := "Quote in a comment"
 	var issue domain.IssueSummary
 	selection := m.currentSelection()
-	canQuote := onStore && selection != nil && selection.Issue.ID != ""
+	canQuote := canAct && selection != nil && selection.Issue.ID != ""
 	if canQuote {
 		issue = selection.Issue
 		quote = "Quote in a comment on " + displaytext.OneLine(issue.ID)
@@ -70,7 +77,7 @@ func (m *Model) selectionActions() []selectionAction {
 			m.quoteInComment(issue, text)
 			return nil
 		}},
-		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !onStore}, run: (*Model).searchSelection},
+		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: (*Model).searchSelection},
 		{
 			entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
 			run:   func(*Model, string) tea.Cmd { return nil },
@@ -80,7 +87,7 @@ func (m *Model) selectionActions() []selectionAction {
 
 func (s *selectionMenu) state() selectmenu.State {
 	state := selectmenu.State{
-		Title:  fmt.Sprintf("Sent %d characters to the clipboard", sentCount(s.text)),
+		Title:  s.title,
 		Hint:   "shift+drag if not copied",
 		Width:  s.screenWidth,
 		Cursor: s.cursor,
@@ -97,9 +104,11 @@ func (s *selectionMenu) state() selectmenu.State {
 	return state
 }
 
-func (s *selectionMenu) view(width, height int) string {
+// view draws the menu over under: the frozen screen, with what the shell
+// draws live over it.
+func (s *selectionMenu) view(width, height int, under string) string {
 	menu := selectmenu.Render(s.state())
-	return overlay.Place(overlay.Config{Width: width, Height: height, Position: overlay.At, X: s.at.x, Y: s.at.y}, menu, s.backdrop)
+	return overlay.Place(overlay.Config{Width: width, Height: height, Position: overlay.At, X: s.at.x, Y: s.at.y}, menu, under)
 }
 
 // selectionMenuKey works the menu by key: up and down move the cursor over
@@ -161,7 +170,10 @@ func (m Model) runSelectionAction(entry int) (tea.Model, tea.Cmd) {
 	}
 	text := m.selMenu.text
 	m.selMenu = nil
-	return m, action.run(&m, text)
+	// The run is a statement of its own: Go leaves unspecified whether m in
+	// the return is read before or after a call that changes it.
+	cmd := action.run(&m, text)
+	return m, cmd
 }
 
 // quoteInComment opens a new comment on issue with the text in it as a
@@ -175,31 +187,38 @@ func (m *Model) quoteInComment(issue domain.IssueSummary, text string) {
 }
 
 // quotable is the text of a selection without the screen's chrome around it:
-// the columns at the start that hold a border, the selection gutter or a
-// space on every line, the borders and spaces at the end of each line, and
-// the lines left empty at the top and the bottom. A line keeps the indent it
-// has over the others. The clipboard gets the box as it is drawn.
+// the border rows and empty lines at the top and the bottom, the columns at
+// the start that hold a side border, the selection gutter or a space on every
+// line, and the side borders and spaces at the end of each line. A line keeps
+// the indent it has over the others, and a tree or a table drawn in the text
+// keeps its glyphs. The clipboard gets the box as it is drawn.
 func quotable(text string) []string {
 	lines := strings.Split(text, "\n")
+	for len(lines) > 0 && isBorderRow(lines[0]) {
+		lines = lines[1:]
+	}
+	for len(lines) > 0 && isBorderRow(lines[len(lines)-1]) {
+		lines = lines[:len(lines)-1]
+	}
 	cells := make([][]rune, len(lines))
 	for i, line := range lines {
-		cells[i] = []rune(strings.TrimRightFunc(line, isBorder))
+		cells[i] = []rune(strings.TrimRightFunc(line, isSideBorder))
 	}
 	left := 0
 	for chromeColumn(cells, left) {
 		left++
 	}
-	var out []string
-	for _, line := range cells {
-		out = append(out, string(line[min(left, len(line)):]))
-	}
-	for len(out) > 0 && out[0] == "" {
-		out = out[1:]
-	}
-	for len(out) > 0 && out[len(out)-1] == "" {
-		out = out[:len(out)-1]
+	out := make([]string, len(cells))
+	for i, line := range cells {
+		out[i] = string(line[min(left, len(line)):])
 	}
 	return out
+}
+
+// isBorderRow reports a line of box-drawing glyphs and spaces alone: the top
+// or the bottom border of a pane, a rule, or an empty line.
+func isBorderRow(line string) bool {
+	return strings.IndexFunc(line, func(r rune) bool { return r != ' ' && (r < '─' || r > '╿') }) < 0
 }
 
 // chromeColumn reports whether column col is chrome on every line that
@@ -211,7 +230,7 @@ func chromeColumn(lines [][]rune, col int) bool {
 		if col >= len(line) {
 			continue
 		}
-		if !isBorder(line[col]) && string(line[col]) != styles.Glyphs.Cursor {
+		if !isSideBorder(line[col]) && string(line[col]) != styles.Glyphs.Cursor {
 			return false
 		}
 		reached = true
@@ -219,10 +238,10 @@ func chromeColumn(lines [][]rune, col int) bool {
 	return reached
 }
 
-// isBorder reports a space, or a box-drawing or block glyph: what the panes
-// draw their borders and the selection bar with.
-func isBorder(r rune) bool {
-	return r == ' ' || (r >= '─' && r <= '▟')
+// isSideBorder reports a space, the side border of a pane, or the selection
+// bar.
+func isSideBorder(r rune) bool {
+	return r == ' ' || r == '│' || r == '▌'
 }
 
 // searchSelection opens the store search with the text as its query, on one

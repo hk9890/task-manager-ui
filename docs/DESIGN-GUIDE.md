@@ -634,25 +634,29 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   to the clipboard with OSC 52. A drag that runs into the margin stops the box at the screen's
   edge (`mouseHeld`). While the box is up every other mouse event and every key
   but Escape and quit is dropped — each would change the screen the box stands over. A resize
-  ends the drag with no copy: the box stands over a screen of the old size.
+  that changes the screen's size ends the drag with no copy: the box stands over a screen of the
+  old size. One that changes the margin alone does not (`resizesScreen`).
 - The drag freezes the screen without the toast (`Model.frozenScreen`), and `Model.screen` draws
-  the toast live over the box and over the selection menu: its dismiss timer runs on, so a toast
-  that came meanwhile would otherwise go unseen.
+  the toast live over the frozen screen: its dismiss timer runs on, so a toast that came meanwhile
+  would otherwise go unseen. The selection menu is drawn over the toast, so a click lands on what
+  is drawn.
 - The release opens the selection menu (`internal/app/selectmenu.go`, drawn by
   `internal/ui/selectmenu`) beside the release cell, over the frozen screen with the box still on
-  it. `selectmenu.Place` moves it left of or above the cell where it would leave the screen.
+  it. `selectmenu.Place` puts it on the side of the cell away from the press, so it leaves the box
+  clear, and on the other side where it would leave the screen.
   - Its title says sent, not copied: OSC 52 has no reply.
   - It offers a quote of the text in a new comment on the selected issue, a store search for the
     text on one line, and close. The quote goes to the issue its label names, taken when the menu
-    opens. Quote and search read the text without the screen's chrome (`quotable`): the leading
-    columns that hold a border, the gutter or a space on every line, and the trailing borders; the
-    clipboard keeps the box as drawn. The search runs once, at once (`search.Model.SetQuery`).
-    Quote and search are off on the picker, the
-    configuration screen, the issue editor, help and under a dialog: each would leave the surface
-    with work on it.
+    opens. Quote and search read the text without the screen's chrome (`quotable`): the border
+    rows at the top and the bottom, the leading columns that hold a side border `│`, the gutter or
+    a space on every line, and the trailing side borders. A tree or a table drawn in the text keeps
+    its glyphs; the clipboard keeps the box as drawn. The search runs once, at once
+    (`search.Model.SetQuery`). Quote and search are off on the picker, the configuration screen,
+    the issue editor, help and under a dialog, where each would leave the surface with work on it,
+    and for a box of chrome alone.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
     outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
-    dropped while it is up, and a resize closes it.
+    dropped while it is up, and a resize that changes the screen's size closes it.
 
 ## Overlays
 
@@ -752,4 +756,6 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   at the width (`spliceTables`), because glamour sizes the columns. Where glamour cut a cell to
   make the table fit, the rows wrap as text instead.
 - Text that is not markdown wraps through `markdown.RenderPlain`, which keeps the line breaks and
-  the indent of the source. A log-like comment body is drawn with it.
+  the indent of the source. A log-like comment body is drawn with it. A line that starts with `>`
+  is a Markdown quote, not a log line, so a comment that quotes a selection is drawn as markdown
+  (`isLogLikeComment`).

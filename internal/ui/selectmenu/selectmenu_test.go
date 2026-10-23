@@ -26,22 +26,24 @@ func TestPlaceKeepsTheMenuOnTheScreen(t *testing.T) {
 
 	cases := []struct {
 		name         string
+		fromX, fromY int
 		x, y         int
 		wantX, wantY int
 	}{
-		{name: "room below and right", x: 10, y: 5, wantX: 11, wantY: 6},
+		{name: "a drag down and right: below and right", x: 10, y: 5, wantX: 11, wantY: 6},
 		{name: "right edge puts it left of the cell", x: 75, y: 5, wantX: 55, wantY: 6},
 		{name: "bottom edge puts it above the cell", x: 10, y: 22, wantX: 11, wantY: 14},
 		{name: "a corner does both", x: 79, y: 23, wantX: 59, wantY: 15},
-		{name: "near the top left with no room above", x: 2, y: 3, wantX: 3, wantY: 4},
+		{name: "a drag up and left: above and left, clear of the box", fromX: 40, fromY: 20, x: 30, y: 15, wantX: 10, wantY: 7},
+		{name: "up and left with no room there: below and right", fromX: 10, fromY: 10, x: 2, y: 3, wantX: 3, wantY: 4},
 	}
 	for _, tc := range cases {
-		left, top := Place(tc.x, tc.y, 20, 8, 80, 24)
+		left, top := Place(tc.fromX, tc.fromY, tc.x, tc.y, 20, 8, 80, 24)
 		if left != tc.wantX || top != tc.wantY {
 			t.Errorf("%s: placed at %d,%d, want %d,%d", tc.name, left, top, tc.wantX, tc.wantY)
 		}
 	}
-	if left, top := Place(5, 5, 20, 8, 10, 4); left != 0 || top != 0 {
+	if left, top := Place(0, 0, 5, 5, 20, 8, 10, 4); left != 0 || top != 0 {
 		t.Errorf("a screen smaller than the menu placed it at %d,%d, want 0,0", left, top)
 	}
 }

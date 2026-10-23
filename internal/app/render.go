@@ -48,6 +48,15 @@ func (m *Model) setTerminalSize(msg tea.WindowSizeMsg) {
 	m.marginTop, m.marginBottom, m.height = splitMargin(msg.Height, marginMinHeight, screenMarginRows)
 }
 
+// resizesScreen reports whether msg gives the screen inside the margin
+// another size. A terminal can send the size it already has, and a change the
+// margin takes up leaves every cell of the screen where it was.
+func (m Model) resizesScreen(msg tea.WindowSizeMsg) bool {
+	_, _, width := splitMargin(msg.Width, marginMinWidth, screenMarginCols)
+	_, _, height := splitMargin(msg.Height, marginMinHeight, screenMarginRows)
+	return width != m.width || height != m.height
+}
+
 // View is the frame and the terminal modes the program runs in. The modes are
 // set on every frame, the empty one before the size is known included.
 func (m Model) View() tea.View {
@@ -84,20 +93,20 @@ func (m Model) frame() string {
 // screen renders the root shell at the size the margin leaves.
 //
 // A drag and the selection menu stand over the screen as it was when the drag
-// began, and the toast is drawn live over them: its timer runs on, so a toast
-// that came during the drag or under the menu would otherwise go unseen.
+// began, and the toast is drawn live over that screen: its timer runs on, so a
+// toast that came meanwhile would otherwise go unseen. The menu is drawn over
+// the toast, so what a click lands on is what is drawn there.
 func (m Model) screen() string {
-	if m.sel.active {
-		return m.withToast(m.sel.view())
-	}
-
+	// The startup error comes first: with it up, update takes only a resize
+	// and quit, so a drag or a menu drawn over it could never end.
 	if m.fatalErrTitle != "" {
 		return m.fatalScreen()
 	}
-	// The startup error comes first: with it up, update takes only a resize
-	// and quit, so a menu drawn over it could never be closed.
+	if m.sel.active {
+		return m.withToast(m.sel.view())
+	}
 	if m.selMenu != nil {
-		return m.withToast(m.selMenu.view(m.width, m.height))
+		return m.selMenu.view(m.width, m.height, m.withToast(m.selMenu.backdrop))
 	}
 
 	view := m.renderSurface()
@@ -114,11 +123,9 @@ func (m Model) screen() string {
 }
 
 // frozenScreen is the screen a drag freezes: the screen without the toast,
-// which screen draws live over the freeze.
+// which screen draws live over the freeze. No drag begins while the startup
+// error is up: update takes no mouse event then.
 func (m Model) frozenScreen() string {
-	if m.fatalErrTitle != "" {
-		return m.fatalScreen()
-	}
 	view := m.renderSurface()
 	if m.showActionModal {
 		view = m.actionModal.Overlay(view)

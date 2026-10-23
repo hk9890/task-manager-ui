@@ -49,6 +49,19 @@ func TestRenderNoCommentsGolden(t *testing.T) {
 	testui.AssertMatchesGolden(t, []byte(Render(state)), "comments_none_w100.golden")
 }
 
+// TestAQuotedCommentIsMarkdownNotALog: a comment that quotes three lines or
+// more is drawn as a quote; a log with prompts inside its lines is a log.
+func TestAQuotedCommentIsMarkdownNotALog(t *testing.T) {
+	t.Parallel()
+
+	if isLogLikeComment("> first quoted line\n> second\n>\n> third\n\nWhat I think of it.") {
+		t.Error("a quote of three lines and more is taken for a log")
+	}
+	if !isLogLikeComment("PS C:\\> dir\nPS C:\\> cd src\nPS C:\\> go test ./...") {
+		t.Error("a log of prompts is no longer taken for a log")
+	}
+}
+
 // A state that does not focus the comments draws no selected comment, whatever
 // CommentIndex holds: the zero State must not mark comment 0.
 func TestCommentsWithoutTheFocusDrawNoBarAndNoCommentButtons(t *testing.T) {

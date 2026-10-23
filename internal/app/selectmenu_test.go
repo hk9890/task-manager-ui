@@ -178,6 +178,11 @@ func TestQuotableDropsTheScreenChromeAndKeepsTheIndent(t *testing.T) {
 			box:  "plain",
 			want: []string{"plain"},
 		},
+		{
+			name: "a tree drawn in the text keeps its glyphs",
+			box:  "│  ├── app/   │\n│  └── ui/    │",
+			want: []string{"├── app/", "└── ui/"},
+		},
 	}
 	for _, tc := range cases {
 		if got := quotable(tc.box); strings.Join(got, "\n") != strings.Join(tc.want, "\n") {
@@ -207,5 +212,56 @@ func TestTheMenuHoldsTheScreenUntilItCloses(t *testing.T) {
 	}
 	if got := m.currentSelection().Issue.ID; got != selected {
 		t.Fatalf("the click that closed the menu selected %q, want %q kept", got, selected)
+	}
+}
+
+// TestTheStartupErrorIsDrawnOverADrag: with the startup error up the shell
+// takes no mouse event, so a drag drawn over it could never end.
+func TestTheStartupErrorIsDrawnOverADrag(t *testing.T) {
+	m, _ := newSelectingShell(t)
+	x, y := testui.FindCell(t, testui.View(m), "progress-first")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+10, y+2))
+	if !m.sel.active {
+		t.Fatal("the drag did not begin")
+	}
+	m.fatalErrTitle = "no task-manager store here"
+	if view := testui.View(m); !strings.Contains(view, "no task-manager store here") {
+		t.Fatalf("the drag hides the startup error:\n%s", view)
+	}
+}
+
+// TestASizeThatLeavesTheScreenAsItIsKeepsTheMenu: a terminal can send the
+// size it already has, and a change the margin takes up moves no cell.
+func TestASizeThatLeavesTheScreenAsItIsKeepsTheMenu(t *testing.T) {
+	m, _ := selectTwoTitles(t)
+	if m = send(t, m, tea.WindowSizeMsg{Width: 160, Height: 30}); m.selMenu == nil {
+		t.Fatal("the same size closed the menu")
+	}
+	if m = send(t, m, tea.WindowSizeMsg{Width: 120, Height: 30}); m.selMenu != nil {
+		t.Fatal("a resize left the menu over a screen of the old size")
+	}
+}
+
+// TestABoxOfBordersAloneLeavesQuoteAndSearchOff: a drag down a column border
+// sends the border, but leaves the quote and the search no text.
+func TestABoxOfBordersAloneLeavesQuoteAndSearchOff(t *testing.T) {
+	m, copied := newSelectingShell(t)
+	// The empty column draws its placeholder right of its left border.
+	x, y := testui.FindCell(t, testui.View(m), "(no issues)")
+	x--
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x, y+2))
+	m = send(t, m, testui.Release(x, y+2))
+	if m.selMenu == nil || len(*copied) != 1 || strings.Trim((*copied)[0], "│\n") != "" {
+		t.Fatalf("copied %q, menu %v: want the border sent and the menu open", *copied, m.selMenu != nil)
+	}
+	for _, action := range m.selMenu.entries[:2] {
+		if !action.entry.Disabled {
+			t.Errorf("%q is on for a box of borders alone", action.entry.Label)
+		}
+	}
+	if label := m.selMenu.entries[m.selMenu.cursor].entry.Label; label != "Close" {
+		t.Errorf("the cursor is on %q, want Close", label)
 	}
 }

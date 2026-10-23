@@ -132,6 +132,11 @@ func isLogLikeComment(body string) bool {
 
 	for _, raw := range lines {
 		line := strings.TrimSpace(raw)
+		// A line that starts with ">" is a Markdown quote, which markdown
+		// draws; the "> " of a log is a prompt inside the line.
+		if strings.HasPrefix(line, ">") {
+			continue
+		}
 		if raw != "" && strings.Contains(raw, "\t") {
 			tabLines++
 		}

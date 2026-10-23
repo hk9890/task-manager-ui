@@ -601,7 +601,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return next.handleMouse(event)
 	}
-	if _, ok := msg.(tea.WindowSizeMsg); ok {
+	if size, ok := msg.(tea.WindowSizeMsg); ok && m.resizesScreen(size) {
 		// A drag and the menu stand over a screen of the old size: the drag
 		// ends without a copy, and the menu closes.
 		m.press, m.sel, m.selMenu = nil, textSelection{}, nil
