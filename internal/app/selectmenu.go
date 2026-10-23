@@ -8,6 +8,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/overlay"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
@@ -21,7 +22,6 @@ import (
 // change the screen it stands over.
 type selectionMenu struct {
 	text     string
-	sent     int
 	backdrop string
 	at       screenCell
 	// screenWidth is the width the menu is cut to.
@@ -38,7 +38,7 @@ type selectionAction struct {
 
 // openSelectionMenu opens the menu for a selection the release just sent.
 func (m *Model) openSelectionMenu(selected textSelection, text string, release screenCell) {
-	menu := &selectionMenu{text: text, sent: sentCount(text), backdrop: selected.view(), entries: m.selectionActions()}
+	menu := &selectionMenu{text: text, backdrop: selected.view(), entries: m.selectionActions()}
 	for menu.cursor < len(menu.entries)-1 && menu.entries[menu.cursor].entry.Disabled {
 		menu.cursor++
 	}
@@ -51,26 +51,37 @@ func (m *Model) openSelectionMenu(selected textSelection, text string, release s
 // selectionActions are the menu's entries. Quoting and searching leave the
 // surface on screen, so they are off where that would drop work in progress
 // or where there is no store to act on.
+//
+// The quote goes to the issue its label names: a refresh under the menu can
+// move the selection before the entry is chosen.
 func (m *Model) selectionActions() []selectionAction {
 	onStore := !m.showHelp && !m.showActionModal && m.storeOpen &&
 		m.active != mode.StorePicker && m.active != mode.Config && m.active != mode.IssueEdit
 	quote := "Quote in a comment"
+	var issue domain.IssueSummary
 	selection := m.currentSelection()
 	canQuote := onStore && selection != nil && selection.Issue.ID != ""
 	if canQuote {
-		quote = "Quote in a comment on " + displaytext.OneLine(selection.Issue.ID)
+		issue = selection.Issue
+		quote = "Quote in a comment on " + displaytext.OneLine(issue.ID)
 	}
 	return []selectionAction{
-		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: (*Model).quoteInComment},
+		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: func(m *Model, text string) tea.Cmd {
+			m.quoteInComment(issue, text)
+			return nil
+		}},
 		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !onStore}, run: (*Model).searchSelection},
 		{entry: selectmenu.Entry{Label: "Copy again"}, run: (*Model).copyAgain},
-		{entry: selectmenu.Entry{Label: "Close", Key: "esc"}, run: func(*Model, string) tea.Cmd { return nil }},
+		{
+			entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
+			run:   func(*Model, string) tea.Cmd { return nil },
+		},
 	}
 }
 
 func (s *selectionMenu) state() selectmenu.State {
 	state := selectmenu.State{
-		Title:  fmt.Sprintf("Sent %d characters to the clipboard", s.sent),
+		Title:  fmt.Sprintf("Sent %d characters to the clipboard", sentCount(s.text)),
 		Hint:   "shift+drag if not copied",
 		Width:  s.screenWidth,
 		Cursor: s.cursor,
@@ -103,12 +114,12 @@ func (m Model) selectionMenuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.selMenu = nil
 		return m, nil
 	}
-	switch msg.String() {
-	case "up", "k":
+	switch {
+	case mode.PlainKey(msg, tea.KeyUp):
 		m.selMenu.move(-1)
-	case "down", "j":
+	case mode.PlainKey(msg, tea.KeyDown):
 		m.selMenu.move(1)
-	case "enter":
+	case mode.PlainKey(msg, tea.KeyEnter):
 		return m.runSelectionAction(m.selMenu.cursor)
 	}
 	return m, nil
@@ -159,14 +170,14 @@ func (m *Model) copyAgain(text string) tea.Cmd {
 	return batchCmds(m.copyText(text), toast)
 }
 
-// quoteInComment opens a new comment on the selected issue with the text in
-// it as a Markdown quote, and the cursor on the line after it.
-func (m *Model) quoteInComment(text string) tea.Cmd {
+// quoteInComment opens a new comment on issue with the text in it as a
+// Markdown quote, and the cursor on the line after it.
+func (m *Model) quoteInComment(issue domain.IssueSummary, text string) {
 	lines := strings.Split(text, "\n")
 	for i, line := range lines {
 		lines[i] = strings.TrimRight("> "+line, " ")
 	}
-	return m.openCommentWith(strings.Join(lines, "\n") + "\n\n")
+	m.openCommentOn(issue, strings.Join(lines, "\n")+"\n\n")
 }
 
 // searchSelection opens the store search with the text as its query, on one

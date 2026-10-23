@@ -87,9 +87,6 @@ func (m Model) screen() string {
 	if m.sel.active {
 		return m.sel.view()
 	}
-	if m.selMenu != nil {
-		return m.selMenu.view(m.width, m.height)
-	}
 
 	if m.fatalErrTitle != "" {
 		return fatalerror.Render(fatalerror.State{
@@ -98,6 +95,11 @@ func (m Model) screen() string {
 			Width:  m.width,
 			Height: m.height,
 		})
+	}
+	// The startup error comes first: with it up, update takes only a resize
+	// and quit, so a menu drawn over it could never be closed.
+	if m.selMenu != nil {
+		return m.selMenu.view(m.width, m.height)
 	}
 
 	view := m.renderSurface()

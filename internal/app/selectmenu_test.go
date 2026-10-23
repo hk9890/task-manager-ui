@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -56,6 +57,28 @@ func TestQuoteInACommentOpensTheCommentEditorWithTheTextQuoted(t *testing.T) {
 	view := testui.AnsiEscapePattern.ReplaceAllString(testui.View(m), "")
 	if !strings.Contains(view, "> progress-first") || !strings.Contains(view, "> progress-second") {
 		t.Fatalf("the comment does not quote the selection:\n%s", view)
+	}
+}
+
+// TestTheQuoteGoesToTheIssueItsLabelNames: a refresh that moves the selection
+// under the menu does not move the quote to another issue.
+func TestTheQuoteGoesToTheIssueItsLabelNames(t *testing.T) {
+	m, _ := selectTwoTitles(t)
+	m = send(t, m, mode.SelectionChangedMsg{Mode: mode.Board, Selection: &mode.Selection{Issue: domain.IssueSummary{ID: "tm-2"}}})
+	x, y := testui.FindCell(t, testui.View(m), "Quote in a comment on tm-4")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	if m.active != mode.IssueEdit || m.editorTarget.issueID != "tm-4" {
+		t.Fatalf("active %v on %q: want the comment editor on tm-4, the issue the label names", m.active, m.editorTarget.issueID)
+	}
+}
+
+// TestTheStartupErrorIsDrawnOverTheMenu: with the startup error up the shell
+// takes no key and no click but quit, so a menu over it could not be closed.
+func TestTheStartupErrorIsDrawnOverTheMenu(t *testing.T) {
+	m, _ := selectTwoTitles(t)
+	m.fatalErrTitle = "no task-manager store here"
+	if view := testui.View(m); !strings.Contains(view, "no task-manager store here") {
+		t.Fatalf("the menu hides the startup error:\n%s", view)
 	}
 }
 
