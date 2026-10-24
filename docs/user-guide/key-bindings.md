@@ -29,7 +29,7 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
-- `alt+i` — launch `agent` action in detail mode: a new revier agent is prompted to comment on the issue, which links it to the issue
+- `alt+i` — launch `agent` action in detail mode: a new revier agent is prompted to talk about the issue; it is linked to the issue once it comments on it
 - `alt+o` — in detail mode, bring the live revier agent that works on the issue to the front: the one that needs you first, then a running one, then an idle one
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that

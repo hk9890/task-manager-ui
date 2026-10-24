@@ -94,7 +94,7 @@ func defaultLauncherDefinitions() []LauncherDefinition {
 		{
 			// Adds an agent tab to the project's open revier workspace without
 			// taking the focus, waits until its harness is idle, and prompts it
-			// to comment on the issue, which links the agent's session to it.
+			// to talk about the issue before it does anything.
 			// Outside a project revier status resolves to the focused window's
 			// project instead of failing, so the resolved path is checked
 			// against the project root. revier agent wait fails until the
@@ -116,7 +116,7 @@ until revier agent wait "$a" --until idle --timeout 60; do
 	[ "$i" -ge 30 ] && exit 1
 	sleep 2
 done
-exec revier agent prompt "$a" -- "Run this command, then stop: taskmgr comment add $0 hello"`,
+exec revier agent prompt "$a" -- "lets start working on tasks $0 do not do anything just talk"`,
 				"{{issue.id}}",
 			},
 			WorkDir: "{{project.root}}",

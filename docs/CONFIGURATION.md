@@ -41,8 +41,8 @@ The model is intentionally small and only covers app-shell concerns:
       print command.
     - `agent` → runs `sh -c` in the project root: `revier agent new --no-focus` adds an agent
       tab to the project's open revier workspace, and once that agent is idle,
-      `revier agent prompt` sends it `Run this command, then stop: taskmgr comment add <id> hello`.
-      The comment carries the agent's session, which links the agent to the issue. It adds no agent when
+      `revier agent prompt` sends it `lets start working on tasks <id> do not do anything just talk`.
+      The agent is linked to the issue once it comments on it. It adds no agent when
       `revier status` resolves the project root to another project: outside a project,
       revier falls back to the focused window's. Errors after `sh` starts reach no toast.
   - Each definition supports these YAML keys:
