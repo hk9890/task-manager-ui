@@ -334,10 +334,21 @@ instead.
   go. A drag that runs into the blank margin stops the box at the last drawn
   cell.
 - Letting go sends the text to the clipboard through the terminal, with the
-  OSC 52 sequence, and a toast reads `Sent N characters to the clipboard;
-  shift+drag if not copied`. The app cannot tell whether the terminal took it.
-  A terminal or multiplexer that ignores OSC 52 leaves the clipboard as it
+  OSC 52 sequence, and opens a menu beside the pointer headed `Sent N
+  characters to the clipboard`. The app cannot tell whether the terminal took
+  it. A terminal or multiplexer that ignores OSC 52 leaves the clipboard as it
   was: **hold `shift` and drag** there, and copy with the terminal.
+- The menu offers to quote the text in a new comment on the selected issue, to
+  search the store for it, and to close. `up`/`down` and
+  `enter` or a click choose; `esc` or a click outside closes it, and the click
+  outside does nothing else. Quote and search are off on screens where they
+  would drop work in progress, such as the issue editor.
+- Quote and search leave out the pane borders, the selection bar and the
+  indent the screen adds; the clipboard gets the box as drawn. They are off
+  for a box of borders alone. A resize during a drag drops the box and
+  copies nothing.
+- The menu opens on the side of the pointer away from where the drag began,
+  so it does not cover the box.
 
 ## Notes
 

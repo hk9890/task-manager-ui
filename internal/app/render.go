@@ -48,6 +48,15 @@ func (m *Model) setTerminalSize(msg tea.WindowSizeMsg) {
 	m.marginTop, m.marginBottom, m.height = splitMargin(msg.Height, marginMinHeight, screenMarginRows)
 }
 
+// resizesScreen reports whether msg gives the screen inside the margin
+// another size. A terminal can send the size it already has, and a change the
+// margin takes up leaves every cell of the screen where it was.
+func (m Model) resizesScreen(msg tea.WindowSizeMsg) bool {
+	_, _, width := splitMargin(msg.Width, marginMinWidth, screenMarginCols)
+	_, _, height := splitMargin(msg.Height, marginMinHeight, screenMarginRows)
+	return width != m.width || height != m.height
+}
+
 // View is the frame and the terminal modes the program runs in. The modes are
 // set on every frame, the empty one before the size is known included.
 func (m Model) View() tea.View {
@@ -82,19 +91,22 @@ func (m Model) frame() string {
 }
 
 // screen renders the root shell at the size the margin leaves.
+//
+// A drag and the selection menu stand over the screen as it was when the drag
+// began, and the toast is drawn live over that screen: its timer runs on, so a
+// toast that came meanwhile would otherwise go unseen. The menu is drawn over
+// the toast, so what a click lands on is what is drawn there.
 func (m Model) screen() string {
-	// A drag selects text on the screen as it was when the drag began.
-	if m.sel.active {
-		return m.sel.view()
-	}
-
+	// The startup error comes first: with it up, update takes only a resize
+	// and quit, so a drag or a menu drawn over it could never end.
 	if m.fatalErrTitle != "" {
-		return fatalerror.Render(fatalerror.State{
-			Title:  m.fatalErrTitle,
-			Body:   m.fatalErrBody,
-			Width:  m.width,
-			Height: m.height,
-		})
+		return m.fatalScreen()
+	}
+	if m.sel.active {
+		return m.withToast(m.sel.view())
+	}
+	if m.selMenu != nil {
+		return m.selMenu.view(m.width, m.height, m.withToast(m.selMenu.backdrop))
 	}
 
 	view := m.renderSurface()
@@ -102,14 +114,39 @@ func (m Model) screen() string {
 	// Every overlay is applied in one place, for whatever surface is underneath.
 	// An overlay that renders for the shell and not for the picker is still live
 	// and still holds the keyboard — invisible, and with no way out.
-	if m.toast.Visible() {
-		view = m.toast.Overlay(view, m.width, m.height)
-	}
+	view = m.withToast(view)
 	if m.showActionModal {
 		view = m.actionModal.Overlay(view)
 	}
 
 	return view
+}
+
+// frozenScreen is the screen a drag freezes: the screen without the toast,
+// which screen draws live over the freeze. No drag begins while the startup
+// error is up: update takes no mouse event then.
+func (m Model) frozenScreen() string {
+	view := m.renderSurface()
+	if m.showActionModal {
+		view = m.actionModal.Overlay(view)
+	}
+	return view
+}
+
+func (m Model) fatalScreen() string {
+	return fatalerror.Render(fatalerror.State{
+		Title:  m.fatalErrTitle,
+		Body:   m.fatalErrBody,
+		Width:  m.width,
+		Height: m.height,
+	})
+}
+
+func (m Model) withToast(view string) string {
+	if !m.toast.Visible() {
+		return view
+	}
+	return m.toast.Overlay(view, m.width, m.height)
 }
 
 // renderSurface renders whatever surface is active, without overlays.

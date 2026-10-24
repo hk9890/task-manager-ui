@@ -16,6 +16,8 @@ const (
 	Center Position = iota
 	// Bottom places foreground at the bottom center.
 	Bottom
+	// At places the foreground's top left on the cell X, Y.
+	At
 )
 
 // Config controls overlay placement.
@@ -25,6 +27,8 @@ type Config struct {
 	Position Position
 	PadX     int
 	PadY     int
+	// X and Y are the cell At places the foreground on.
+	X, Y int
 }
 
 // Place renders foreground over background while preserving ANSI styles.
@@ -70,6 +74,8 @@ func Place(cfg Config, fg, bg string) string {
 
 func calculatePosition(cfg Config, fgWidth, fgHeight int) (x, y int) {
 	switch cfg.Position {
+	case At:
+		x, y = cfg.X, cfg.Y
 	case Bottom:
 		x = (cfg.Width - fgWidth) / 2
 		y = cfg.Height - fgHeight - cfg.PadY

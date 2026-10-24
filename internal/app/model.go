@@ -106,6 +106,8 @@ type Model struct {
 	press    *screenCell
 	sel      textSelection
 	copyText func(string) tea.Cmd
+	// selMenu is the menu a finished selection opens (selectmenu.go), or nil.
+	selMenu *selectionMenu
 
 	selectedByMode map[mode.ID]*mode.Selection
 
@@ -614,11 +616,27 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		event := pointerOf(mouse)
 		event.X -= m.marginLeft
 		event.Y -= m.marginTop
+		if m.selMenu != nil {
+			return m.selectionMenuMouse(event)
+		}
 		next, cmd, handled := m.mouseHeld(event)
 		if handled {
 			return next, cmd
 		}
 		return next.handleMouse(event)
+	}
+	if size, ok := msg.(tea.WindowSizeMsg); ok && m.resizesScreen(size) {
+		// A drag and the menu stand over a screen of the old size: the drag
+		// ends without a copy, and the menu closes.
+		m.press, m.sel, m.selMenu = nil, textSelection{}, nil
+	}
+	if m.selMenu != nil {
+		switch msg := msg.(type) {
+		case tea.KeyPressMsg:
+			return m.selectionMenuKey(msg)
+		case tea.PasteMsg:
+			return m, nil
+		}
 	}
 	if m.sel.active {
 		switch msg := msg.(type) {

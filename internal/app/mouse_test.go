@@ -26,6 +26,13 @@ import (
 // click however long the machine takes between them.
 func newMouseShell(t *testing.T) Model {
 	t.Helper()
+	m, _ := newMouseShellOn(t)
+	return m
+}
+
+// newMouseShellOn is newMouseShell with the repository it reads.
+func newMouseShellOn(t *testing.T) (Model, *fakes.TrackedRepository) {
+	t.Helper()
 	withModelNow(t, time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC))
 	// The row bands are backgrounds, which only a colour profile draws.
 	testui.ForceTrueColor(t)
@@ -46,7 +53,7 @@ func newMouseShell(t *testing.T) Model {
 
 	m := mustNewModel(t, services)
 	m = applyMessages(t, m, runBatch(m.Init()))
-	return applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 30}})
+	return applyMessages(t, m, []tea.Msg{tea.WindowSizeMsg{Width: 160, Height: 30}}), gw
 }
 
 // onScreen moves a mouse event from a cell of the screen to the terminal cell
