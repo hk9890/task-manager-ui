@@ -1,5 +1,5 @@
 ╭─ Dependencies ───────────── 3 ─╮  ╭─ Content ───────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ───────────────────╮
-│Blocked by (1)                  │  │F P1 IP tm-wide                                              edit e │  │  Core                        │
+│Blocked by (1)                  │  │F P1 IP tm-wide                                  agent i  ·  edit e │  │  Core                        │
 │  T P1 B tm-1 Auth migration    │  │Wide layout sample                                                  │  │  Type    : feature           │
 │                                │  │────────────────────────────────────────────────────────────────────│  │  Status  : in_progress       │
 │Blocks (1)                      │  │Description                                                         │  │  Priority: P1                │

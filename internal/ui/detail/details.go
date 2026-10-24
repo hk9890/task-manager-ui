@@ -9,6 +9,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/markdown"
@@ -62,6 +63,9 @@ type State struct {
 	// pointer is elsewhere. Its reference row draws the hover band, and its
 	// button is lit.
 	Hover *Hit
+	// Agents is the live agents linked to the issue, the one the open button
+	// acts on first. The Metadata pane lists them.
+	Agents []revier.Agent
 }
 
 // FocusPane identifies which detail pane is visually focused.
@@ -99,6 +103,8 @@ type ButtonKeys struct {
 	AddComment    string
 	EditComment   string
 	DeleteComment string
+	LaunchAgent   string
+	FocusAgent    string
 }
 
 // Render renders standalone issue detail metadata and content.
@@ -233,6 +239,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 		Width:    metadataWidth,
 		Height:   bottomHeight,
 		Skeleton: state.Skeleton,
+		Agents:   state.Agents,
 	})
 
 	contentLines := strings.Split(contentBox, "\n")
@@ -358,6 +365,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 		Width:    metadataWidth,
 		Height:   height,
 		Skeleton: state.Skeleton,
+		Agents:   state.Agents,
 	})
 
 	leftLines := strings.Split(leftBox, "\n")
@@ -408,6 +416,9 @@ type ContentPaneState struct {
 	CommentIndex    int
 	// Hover is the button under the pointer.
 	Hover Button
+	// Agents is the live agents linked to the issue: with one, the ID line
+	// draws the open button.
+	Agents []revier.Agent
 }
 
 // contentPane is the Content pane of state at the size the layout gives it.
@@ -425,6 +436,7 @@ func (state State) contentPane(width, height int) ContentPaneState {
 		ButtonKeys:      state.ButtonKeys,
 		CommentsFocused: state.FocusPane == FocusPaneComments,
 		CommentIndex:    state.CommentIndex,
+		Agents:          state.Agents,
 	}
 	if state.Hover != nil {
 		pane.Hover = state.Hover.Button
@@ -468,6 +480,9 @@ type MetadataPaneState struct {
 	// Skeleton renders the Counts group as placeholder glyphs instead of real
 	// numeric values, matching the Content pane's loading-state treatment.
 	Skeleton bool
+	// Agents is the live agents linked to the issue, drawn as a group of
+	// their own right after Core, so a short pane keeps it.
+	Agents []revier.Agent
 }
 
 // RenderMetadataPane renders the shared detail Metadata pane section. The pane
@@ -482,7 +497,11 @@ func RenderMetadataPane(state MetadataPaneState) string {
 		height = defaultDetailHeight
 	}
 
-	metadata := renderMetadataRail(state.Detail, width-2, state.Skeleton)
+	groups := metadataGroups(state.Detail, state.Skeleton)
+	if agents, ok := agentsGroup(state.Agents); ok {
+		groups = slices.Insert(groups, 1, agents)
+	}
+	metadata := renderMetadataGroups(groups, width-2)
 	metaView, _ := sliceWithOffset(metadata, 0, max(1, height-2), width-2)
 	return styles.FormSection(styles.FormSectionConfig{
 		Width:   width,
@@ -589,13 +608,19 @@ type contentLines struct {
 	comment []int
 	// heading is the line of the Comments heading, -1 in skeleton state.
 	heading int
-	// edit is the cells of the edit button on the first line, the ID line.
-	// add is the cells of the add button on the heading line. commentButtons
-	// is the cells of edit and delete on the first line of the selected
-	// comment. Each is empty when the button is not drawn.
-	edit           cells
+	// idButtons is the buttons drawn on the first line, the ID line, with
+	// their cells. add is the cells of the add button on the heading line.
+	// commentButtons is the cells of edit and delete on the first line of the
+	// selected comment. Each is empty when the button is not drawn.
+	idButtons      []placedButton
 	add            cells
 	commentButtons []cells
+}
+
+// placedButton is a button on a line and the cells it covers there.
+type placedButton struct {
+	button Button
+	cells  cells
 }
 
 func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) contentLines {
@@ -605,12 +630,10 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 
 	// Header: dashboard-styled meta row (type · priority · status · muted id), then the
 	// title, then a thin rule that visually separates the header from the body below.
-	// The ID is not cut to make room for the button: its key still edits.
 	idLine := contentHeaderMetaRow(detail.Summary, width)
-	edit := paneButton("edit", keys.EditIssue, pane.Hover == ButtonEdit)
-	var editCells []cells
-	if !pane.Skeleton && lipgloss.Width(idLine)+1+lipgloss.Width(edit) <= width {
-		idLine, editCells = placeButtons(idLine, width, edit)
+	var idButtons []placedButton
+	if !pane.Skeleton {
+		idLine, idButtons = placeIDLineButtons(idLine, width, pane, keys)
 	}
 	upper = append(upper, idLine)
 	upper = append(upper, textutil.TruncateString(displaytext.OneLine(emptyFallback(detail.Summary.Title, "(untitled)")), width))
@@ -654,10 +677,7 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 	// The comments stand at the bottom of the pane: a body shorter than the
 	// pane is followed by blank lines.
 	spacer := max(0, availableHeight-len(upper)-2-len(comments))
-	out := contentLines{heading: len(upper) + spacer + 1, commentButtons: commentButtons}
-	if len(editCells) > 0 {
-		out.edit = editCells[0]
-	}
+	out := contentLines{heading: len(upper) + spacer + 1, idButtons: idButtons, commentButtons: commentButtons}
 	if len(addCells) > 0 {
 		out.add = addCells[0]
 	}
@@ -668,6 +688,63 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 	out.lines = append(out.lines, comments...)
 	out.comment = append(out.comment, owner...)
 	return out
+}
+
+// placeIDLineButtons puts open (only with a linked agent), agent and edit at
+// the right end of the ID line. The ID is not cut to make room for them.
+//
+// The width alone picks the set: open, agent and edit; else open and edit;
+// else edit; else none. A set fits by the room it takes with open drawn, so a
+// linked agent coming or going adds or removes open and moves no other
+// button: a click aimed at open never lands on agent. Each key still does
+// what its button does.
+func placeIDLineButtons(idLine string, width int, pane ContentPaneState, keys ButtonKeys) (string, []placedButton) {
+	textRoom := max(lipgloss.Width(idLine)+1, buttonTextFloor)
+	for _, set := range [][]Button{
+		{ButtonFocusAgent, ButtonLaunchAgent, ButtonEdit},
+		{ButtonFocusAgent, ButtonEdit},
+		{ButtonEdit},
+	} {
+		if width-buttonsWidth(set, keys) < textRoom {
+			continue
+		}
+		if set[0] == ButtonFocusAgent && len(pane.Agents) == 0 {
+			set = set[1:]
+		}
+		drawn := make([]string, len(set))
+		for idx, button := range set {
+			drawn[idx] = idLineButton(button, keys, pane.Hover == button)
+		}
+		line, placed := placeButtons(idLine, width, drawn...)
+		out := make([]placedButton, len(set))
+		for idx, button := range set {
+			out[idx] = placedButton{button: button, cells: placed[idx]}
+		}
+		return line, out
+	}
+	return idLine, nil
+}
+
+// buttonsWidth is the cells the ID-line buttons of set take, separators
+// included.
+func buttonsWidth(set []Button, keys ButtonKeys) int {
+	used := (len(set) - 1) * lipgloss.Width(buttonSeparator)
+	for _, button := range set {
+		used += lipgloss.Width(idLineButton(button, keys, false))
+	}
+	return used
+}
+
+// idLineButton draws one button of the ID line.
+func idLineButton(button Button, keys ButtonKeys, lit bool) string {
+	switch button {
+	case ButtonLaunchAgent:
+		return paneButton("agent", keys.LaunchAgent, lit)
+	case ButtonFocusAgent:
+		return paneButton("open", keys.FocusAgent, lit)
+	default:
+		return paneButton("edit", keys.EditIssue, lit)
+	}
 }
 
 // noComment marks count lines as lines of no comment.
@@ -710,6 +787,12 @@ func (k ButtonKeys) withDefaults() ButtonKeys {
 	}
 	if strings.TrimSpace(k.DeleteComment) == "" {
 		k.DeleteComment = "d"
+	}
+	if strings.TrimSpace(k.LaunchAgent) == "" {
+		k.LaunchAgent = "i"
+	}
+	if strings.TrimSpace(k.FocusAgent) == "" {
+		k.FocusAgent = "o"
 	}
 	return k
 }

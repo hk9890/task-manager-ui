@@ -6,6 +6,8 @@ import (
 	"strings"
 
 	"charm.land/lipgloss/v2"
+
+	"github.com/hk9890/task-manager-ui/internal/revier"
 )
 
 // SkeletonShades are the three shades a cold-start placeholder cycles through
@@ -76,6 +78,12 @@ var (
 	SettingLabelColor color.Color
 	// ErrorTextColor is the text of a refused save on the issue editor.
 	ErrorTextColor color.Color
+	// AgentRunningColor, AgentIdleColor and AgentAttentionColor are the
+	// live-agent mark of a revier agent that works, waits for a prompt, and
+	// waits for the operator.
+	AgentRunningColor   color.Color
+	AgentIdleColor      color.Color
+	AgentAttentionColor color.Color
 )
 
 // The styles built from the roles. Apply rebuilds them with the roles.
@@ -198,6 +206,19 @@ func IssueStatusStyle(status string) lipgloss.Style {
 		return IssueStatusDeferredStyle
 	default:
 		return lipgloss.NewStyle().Foreground(TextMutedColor)
+	}
+}
+
+// AgentStatusStyle returns the style of the live-agent mark for a revier
+// agent status. A status revier does not document draws as idle.
+func AgentStatusStyle(status string) lipgloss.Style {
+	switch status {
+	case revier.StatusRunning:
+		return lipgloss.NewStyle().Foreground(AgentRunningColor)
+	case revier.StatusAttention:
+		return lipgloss.NewStyle().Foreground(AgentAttentionColor)
+	default:
+		return lipgloss.NewStyle().Foreground(AgentIdleColor)
 	}
 }
 

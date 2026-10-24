@@ -18,6 +18,8 @@ const (
 	ButtonAddComment
 	ButtonEditComment
 	ButtonDeleteComment
+	ButtonLaunchAgent
+	ButtonFocusAgent
 )
 
 const (

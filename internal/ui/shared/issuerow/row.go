@@ -131,6 +131,9 @@ type RenderConfig struct {
 	// Match is the words of the query that chose this row. A styled row draws
 	// every occurrence of one in its title and its ID as matched text.
 	Match []string
+	// Agent is the status of the live revier agent that works on the issue,
+	// "" for none. A row with one draws the agent mark after the status.
+	Agent string
 
 	// Dim, when true, applies a SkeletonShades foreground tint to the rendered
 	// row text — used to signal that the surface is refreshing stale data.
@@ -153,7 +156,8 @@ type ReferenceRenderConfig struct {
 }
 
 // RenderCompact renders one issue as Height lines: the type and the title,
-// then the priority, the status and the ID under the title. A styled row that
+// then the priority, the status, the agent mark when there is an agent, and
+// the ID under the title. A styled row that
 // is selected or under the pointer carries its band across the whole width of
 // both lines, and the selection bar runs down both.
 func RenderCompact(config RenderConfig) []string {
@@ -172,6 +176,9 @@ func RenderCompact(config RenderConfig) []string {
 		renderhelpers.CompactPriority(config.Issue.Priority),
 		renderhelpers.CompactIssueState(config.Issue.Status),
 	}
+	if config.Agent != "" {
+		meta = append(meta, styles.Glyphs.Agent)
+	}
 	idWidth := metaWidth - lipgloss.Width(strings.Join(meta, " ")) - 1
 
 	first := textutil.TruncateString(typePlain+" "+title, textWidth)
@@ -184,11 +191,15 @@ func RenderCompact(config RenderConfig) []string {
 		first = renderhelpers.CompactIssueTypeStyled(config.Issue.Type) + " " +
 			markMatches(textutil.TruncateString(title, metaWidth), config.Match, lipgloss.NewStyle())
 		if idWidth >= 1 {
-			second = indent + strings.Join([]string{
+			metaStyled := []string{
 				renderhelpers.CompactPriorityStyled(config.Issue.Priority),
 				renderhelpers.CompactIssueStateStyled(config.Issue.Status),
-				markMatches(renderhelpers.CompactIssueID(config.Issue.ID, idWidth), config.Match, styles.IssueIDMutedStyle),
-			}, " ")
+			}
+			if config.Agent != "" {
+				metaStyled = append(metaStyled, styles.AgentStatusStyle(config.Agent).Render(styles.Glyphs.Agent))
+			}
+			second = indent + strings.Join(append(metaStyled,
+				markMatches(renderhelpers.CompactIssueID(config.Issue.ID, idWidth), config.Match, styles.IssueIDMutedStyle)), " ")
 		}
 	}
 

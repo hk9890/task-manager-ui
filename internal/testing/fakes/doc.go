@@ -5,6 +5,8 @@
 //
 //   - FakeLauncher (launcher.go) — fake for the configurable launcher
 //   - FakeProcessRunner (process_runner.go) — fake for subprocess execution
+//   - FakeRevierClient (revier.go) — fake for the revier client: the project,
+//     the live agents and the focus call
 //   - ErrorInjectingRepository (error_injecting.go) — per-method error injection
 //     and call recording for failure-path tests
 //   - DelayingRepository (delaying.go) — gates one repository method behind a

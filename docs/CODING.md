@@ -41,6 +41,11 @@ mise run ci          # the merge gate; see What the tools enforce
 
 6. **Launchers are thin.** Launchers receive issue context and produce a subprocess. They must not become an orchestration engine.
 
+   The revier client (`internal/revier`, `Services.Revier`) is a read-and-focus seam outside the
+   store path: it lists the live agents and brings one to the front, and starts none. Its poll is
+   a timer under the [Switching stores](#switching-stores) rules: the tick is unscoped, the
+   listing it starts is scoped.
+
    **Shell-launcher security rule:** issue fields are operator-untrusted input, and a
    launcher template MUST NOT place one where it is re-parsed as a command line.
    `launcher.ValidateDefinitions` (`internal/launcher/service.go`) rejects such a

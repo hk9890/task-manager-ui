@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/colorprofile"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -133,16 +134,18 @@ func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
 
 		for _, issue := range issues {
 			for width := 2; width <= 100; width++ {
-				lines := RenderCompact(RenderConfig{Issue: issue, Selected: true, Styled: true, Width: width})
-				if len(lines) != Height {
-					t.Fatalf("%s, width %d: expected %d lines, got %d", set, width, Height, len(lines))
-				}
-				for i, line := range plainLines(lines) {
-					if got := lipgloss.Width(line); got != width {
-						t.Errorf("%s, %s, width %d: line %d is %d cells wide: %q", set, issue.ID, width, i, got, line)
+				for _, agent := range []string{"", revier.StatusRunning} {
+					lines := RenderCompact(RenderConfig{Issue: issue, Selected: true, Styled: true, Width: width, Agent: agent})
+					if len(lines) != Height {
+						t.Fatalf("%s, width %d: expected %d lines, got %d", set, width, Height, len(lines))
 					}
-					if !strings.HasPrefix(line, cursor) {
-						t.Errorf("%s, %s, width %d: line %d does not carry the selection bar: %q", set, issue.ID, width, i, line)
+					for i, line := range plainLines(lines) {
+						if got := lipgloss.Width(line); got != width {
+							t.Errorf("%s, %s, agent %q, width %d: line %d is %d cells wide: %q", set, issue.ID, agent, width, i, got, line)
+						}
+						if !strings.HasPrefix(line, cursor) {
+							t.Errorf("%s, %s, agent %q, width %d: line %d does not carry the selection bar: %q", set, issue.ID, agent, width, i, line)
+						}
 					}
 				}
 			}
@@ -554,5 +557,40 @@ func TestRenderCompactGivesTheTitleEveryCellAfterTheType(t *testing.T) {
 		if got := titleLine(chrome, "zzzz"); strings.Contains(got, "z") || lipgloss.Width(got) > chrome {
 			t.Errorf("styled %v, width %d: expected no title and no overflow, got %q", styled, chrome, got)
 		}
+	}
+}
+
+// A row whose issue a live agent works on draws the agent mark after the
+// status, in the colour of the agent's status; the ID gives up the cells. A
+// status revier does not document draws as idle.
+func TestRenderCompactDrawsTheAgentMarkInTheColourOfItsStatus(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	issue := domain.IssueSummary{ID: "TM-1", Title: "Agent row", Type: "task", Status: "in_progress", Priority: 1}
+	marks := map[string]string{}
+	for _, status := range []string{revier.StatusRunning, revier.StatusIdle, revier.StatusAttention, "starting"} {
+		lines := RenderCompact(RenderConfig{Issue: issue, Width: 40, Styled: true, Agent: status})
+
+		if got, want := strings.TrimRight(plainLines(lines)[1], " "), "    P1 IP ● TM-1"; got != want {
+			t.Errorf("%s: second line = %q, want %q", status, got, want)
+		}
+		mark := styles.AgentStatusStyle(status).Render(styles.Glyphs.Agent)
+		if !strings.Contains(lines[1], mark) {
+			t.Errorf("%s: second line %q does not carry the mark %q", status, lines[1], mark)
+		}
+		marks[status] = mark
+	}
+
+	if marks[revier.StatusRunning] == marks[revier.StatusIdle] ||
+		marks[revier.StatusRunning] == marks[revier.StatusAttention] ||
+		marks[revier.StatusIdle] == marks[revier.StatusAttention] {
+		t.Errorf("two statuses share a colour: %q", marks)
+	}
+	if marks["starting"] != marks[revier.StatusIdle] {
+		t.Errorf("an undocumented status draws %q, want the idle mark %q", marks["starting"], marks[revier.StatusIdle])
+	}
+
+	if got := RenderCompact(RenderConfig{Issue: issue, Width: 40})[1]; strings.Contains(got, styles.Glyphs.Agent) {
+		t.Errorf("a row with no agent draws the mark: %q", got)
 	}
 }

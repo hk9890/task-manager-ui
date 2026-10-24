@@ -91,6 +91,36 @@ func defaultLauncherDefinitions() []LauncherDefinition {
 			},
 			WorkDir: "{{project.root}}",
 		},
+		{
+			// Adds an agent tab to the project's open revier workspace without
+			// taking the focus, waits until its harness is idle, and prompts it
+			// to talk about the issue before it does anything.
+			// Outside a project revier status resolves to the focused window's
+			// project instead of failing, so the resolved path is checked
+			// against the project root. revier agent wait fails until the
+			// harness in the new tab has started, hence the retry. Its exit
+			// status 2 is a timeout: the agent is there and not idle, which
+			// no retry changes.
+			Action:  "agent",
+			Command: "sh",
+			Args: []string{
+				"-c",
+				`status=$(revier status) || exit 1
+[ "$(printf '%s\n' "$status" | sed -n 's/^path  *//p')" = "$PWD" ] || exit 1
+project=$(printf '%s\n' "$status" | sed -n 's/^project  *//p')
+a=$(revier agent new --no-focus -p "$project") || exit 1
+i=0
+until revier agent wait "$a" --until idle --timeout 60; do
+	[ $? -eq 2 ] && exit 1
+	i=$((i + 1))
+	[ "$i" -ge 30 ] && exit 1
+	sleep 2
+done
+exec revier agent prompt "$a" -- "lets start working on tasks $0 do not do anything just talk"`,
+				"{{issue.id}}",
+			},
+			WorkDir: "{{project.root}}",
+		},
 	}
 }
 

@@ -35,8 +35,12 @@ type ParentGroupBrowserContext struct {
 
 // IssueComment is a normalized issue comment representation.
 type IssueComment struct {
-	ID        string
-	Author    string
+	ID     string
+	Author string
+	// Agent and Session name the coding agent that wrote the comment and
+	// that agent's session; both are empty for a comment a person wrote.
+	Agent     string
+	Session   string
 	Body      string
 	CreatedAt time.Time
 }

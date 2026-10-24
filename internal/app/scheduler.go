@@ -13,6 +13,12 @@ const (
 	defaultViewportWidth  = 120
 	defaultViewportHeight = 34
 	refreshTickInterval   = 60 * time.Second
+	// agentPollInterval is how often revier is asked for the live agents: an
+	// agent's status changes within seconds.
+	agentPollInterval = 3 * time.Second
+	// projectRetryTicks is the agent poll ticks a failed project lookup waits
+	// before it runs again: about a minute.
+	projectRetryTicks = int(time.Minute / agentPollInterval)
 )
 
 // modelNow is the package-level clock used by refresh-state computations. Tests
@@ -26,6 +32,14 @@ var modelNow = time.Now
 func defaultScheduleRefreshTick() tea.Cmd {
 	return tea.Tick(refreshTickInterval, func(_ time.Time) tea.Msg {
 		return refreshTickMsg{}
+	})
+}
+
+// defaultScheduleAgentPoll is the production agent poll timer. Stored
+// per-Model for the same reason as defaultScheduleRefreshTick.
+func defaultScheduleAgentPoll() tea.Cmd {
+	return tea.Tick(agentPollInterval, func(_ time.Time) tea.Msg {
+		return agentPollTickMsg{}
 	})
 }
 

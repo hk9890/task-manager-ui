@@ -8,6 +8,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/launcher"
 	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
@@ -21,7 +22,9 @@ import (
 // caching and pub/sub. The one watch it holds is the store's own change
 // signal, which it takes from Repo when Repo is a repository.ChangeWatcher.
 // Launcher integration stays shell-owned so browse/detail modes can emit intent
-// while launch execution stays centralized and reusable.
+// while launch execution stays centralized and reusable. Revier is a read and
+// focus query on the agents revier already runs, not orchestration: it starts
+// no agent.
 type Services struct {
 	Repo     repository.Repository
 	Launcher launcher.Service
@@ -49,6 +52,11 @@ type Services struct {
 	// the launcher for another project root and reuses it, so a test that
 	// injects a fake keeps it across a store switch.
 	ProcessRunner launcher.ProcessRunner
+	// Revier lists the live agents of the project and brings one to the
+	// front. Nil turns that off: no poll, no open button, no board glyph.
+	// Like StoreCatalog it is injected after construction, so a test that
+	// builds services never runs the real revier, which starts real agents.
+	Revier revier.Client
 	// Logger is the optional root runtime logger. It must NOT carry a
 	// "component" attribute; NewModelWithOptions derives per-mode loggers
 	// (component=board, component=search, …) via logging.WithComponent. When
@@ -64,6 +72,7 @@ const (
 	LaunchActionNvim         = "nvim"
 	LaunchActionOpencode     = "opencode"
 	LaunchActionShellCommand = "shell-command"
+	LaunchActionAgent        = "agent"
 )
 
 // LaunchableActions is that set as a list. The keybinding action set is fixed
@@ -73,6 +82,7 @@ var LaunchableActions = []string{
 	LaunchActionNvim,
 	LaunchActionOpencode,
 	LaunchActionShellCommand,
+	LaunchActionAgent,
 }
 
 // LauncherDefinitions converts the configured launcher definitions into the
@@ -143,8 +153,8 @@ func NewServices(repo repository.Repository, cfg config.Model, projectRoot strin
 
 // ForStore returns a copy of s bound to another store. The repository and the
 // launcher that interpolates the store's project root are rebuilt; everything
-// that is not a property of the store — config, logger, catalog — carries
-// over.
+// that is not a property of the store — config, logger, catalog, the revier
+// client — carries over.
 func (s Services) ForStore(opened storecatalog.Opened) (Services, error) {
 	if opened.Repo == nil {
 		return Services{}, errors.New("repo is required")

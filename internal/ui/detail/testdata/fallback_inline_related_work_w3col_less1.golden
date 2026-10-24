@@ -1,5 +1,5 @@
 ╭─ Dependencies ──────────── 3 ─╮  ╭─ Content ───────────────────────────────────────────── 0 comments ─╮  ╭─ Metadata ───────────────────╮
-│Blocked by (1)                 │  │T P2 OPN tm-fallback                                         edit e │  │  Core                        │
+│Blocked by (1)                 │  │T P2 OPN tm-fallback                             agent i  ·  edit e │  │  Core                        │
 │  ? P0 - tm-11 Dependency A    │  │Fallback inline related work                                        │  │  Type    : task              │
 │                               │  │────────────────────────────────────────────────────────────────────│  │  Status  : open              │
 │Blocks (1)                     │  │Description                                                         │  │  Priority: P2                │

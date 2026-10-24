@@ -29,7 +29,7 @@ func TestLoad_MissingConfigUsesDefaults(t *testing.T) {
 	if len(result.Warnings) != 0 {
 		t.Fatalf("expected no warnings, got %#v", result.Warnings)
 	}
-	if len(result.Config.Launcher.Definitions) != 3 {
+	if len(result.Config.Launcher.Definitions) != 4 {
 		t.Fatalf("expected default launchers, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
@@ -123,8 +123,8 @@ ui:
 	if launchers["custom"].Command != "custom-tool" {
 		t.Fatalf("expected custom launcher to be appended, got %#v", launchers["custom"])
 	}
-	if len(result.Config.Launcher.Definitions) != 4 {
-		t.Fatalf("expected 4 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	if len(result.Config.Launcher.Definitions) != 5 {
+		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
 
@@ -630,7 +630,7 @@ launcher:
 	}
 
 	// All built-ins must still be present.
-	for _, builtIn := range []string{"nvim", "opencode", "shell-command"} {
+	for _, builtIn := range []string{"nvim", "opencode", "shell-command", "agent"} {
 		if _, ok := launchers[builtIn]; !ok {
 			t.Fatalf("expected built-in launcher %q to still be present after appending new action", builtIn)
 		}
@@ -644,9 +644,9 @@ launcher:
 	if custom.Command != "my-tool" {
 		t.Fatalf("expected my-custom-tool command to be my-tool, got %q", custom.Command)
 	}
-	// Total count: 3 built-ins + 1 new.
-	if len(result.Config.Launcher.Definitions) != 4 {
-		t.Fatalf("expected 4 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	// Total count: 4 built-ins + 1 new.
+	if len(result.Config.Launcher.Definitions) != 5 {
+		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
 

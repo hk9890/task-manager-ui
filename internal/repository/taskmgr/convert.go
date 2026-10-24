@@ -57,6 +57,8 @@ func toComment(c tasks.Comment) domain.IssueComment {
 	return domain.IssueComment{
 		ID:        c.ID,
 		Author:    c.Author,
+		Agent:     c.Agent,
+		Session:   c.Session,
 		Body:      c.Body,
 		CreatedAt: c.Created,
 	}

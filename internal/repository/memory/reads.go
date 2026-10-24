@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"sort"
 
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -38,6 +39,7 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 	var inProgress []domain.IssueSummary
 	var closed []domain.IssueSummary
 	var blocked []domain.IssueSummary
+	var inProgressSessions map[string][]string
 
 	for _, si := range r.issues {
 		sum := r.toSummaryLocked(si)
@@ -47,6 +49,12 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 			closed = append(closed, sum)
 		case "in_progress":
 			inProgress = append(inProgress, sum)
+			if sessions := commentSessions(si.comments); len(sessions) > 0 {
+				if inProgressSessions == nil {
+					inProgressSessions = map[string][]string{}
+				}
+				inProgressSessions[si.id] = sessions
+			}
 		case "blocked", "deferred":
 			// The Blocked slot feeds the board's Not Ready column. "deferred" is an
 			// active, non-closed status (consciously postponed) that is neither
@@ -157,12 +165,25 @@ func (r *Repository) Dashboard(ctx context.Context, opts repository.DashboardOpt
 	}
 
 	return repository.DashboardData{
-		ReadyExplain: re,
-		InProgress:   inProgress,
-		Closed:       closed,
-		ClosedTotal:  closedTotal,
-		Blocked:      blocked,
+		ReadyExplain:       re,
+		InProgress:         inProgress,
+		Closed:             closed,
+		ClosedTotal:        closedTotal,
+		Blocked:            blocked,
+		InProgressSessions: inProgressSessions,
 	}, nil
+}
+
+// commentSessions returns the distinct non-empty sessions of comments, in
+// comment order.
+func commentSessions(comments []storedComment) []string {
+	var sessions []string
+	for _, c := range comments {
+		if c.session != "" && !slices.Contains(sessions, c.session) {
+			sessions = append(sessions, c.session)
+		}
+	}
+	return sessions
 }
 
 // Issue implements repository.Repository. Unknown IDs return

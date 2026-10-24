@@ -14,6 +14,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/revier"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -29,8 +30,10 @@ const (
 	// queryPlaceholder is what the query line says while nothing is typed.
 	queryPlaceholder = "filter issues"
 
-	// doneColumnIndex is the fixed index of the Done column in m.columns.
-	doneColumnIndex = 3
+	// inProgressColumnIndex and doneColumnIndex are the fixed indices of the
+	// In Progress and the Done column in m.columns.
+	inProgressColumnIndex = 2
+	doneColumnIndex       = 3
 
 	// loadMoreThreshold is the number of remaining loaded items below which
 	// the model dispatches a background load-more when the cursor approaches
@@ -167,6 +170,17 @@ type Model struct {
 	// the issue can be below the depth the refresh read. An auto refresh that
 	// starts meanwhile looks for the same issue (captureRefreshAnchor).
 	anchorSearch *anchorSearch
+
+	// --- live revier agents ---
+
+	// inProgressSessions is the comment sessions of each In Progress issue,
+	// from the last dashboard that loaded. liveAgents is the status of each
+	// live agent by its session, from the shell's last poll. agentStatus is
+	// what the two give the In Progress column: the status of the agent that
+	// needs the operator most, by issue ID.
+	inProgressSessions map[string][]string
+	liveAgents         map[string]string
+	agentStatus        map[string]string
 }
 
 // NewModel creates a board mode controller.
@@ -332,6 +346,10 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 	if col.err != nil {
 		errStr = col.err.Error()
 	}
+	var agents map[string]string
+	if colIdx == inProgressColumnIndex {
+		agents = m.agentStatus
+	}
 	return uiboard.Column{
 		Title:        col.title,
 		Rows:         col.shown,
@@ -343,6 +361,36 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 		Loading:      col.loading,
 		Error:        errStr,
 		AgeMarkers:   colIdx != doneColumnIndex,
+		Agents:       agents,
+	}
+}
+
+// SetLiveAgents replaces the live agents of the store's revier project: the
+// status of each, by the session it holds. An In Progress card whose issue
+// one of them commented on draws the agent mark.
+func (m *Model) SetLiveAgents(statusBySession map[string]string) {
+	m.liveAgents = statusBySession
+	m.linkAgents()
+}
+
+// linkAgents gives each In Progress issue the status of the live agent that
+// needs the operator most among those that commented on it.
+func (m *Model) linkAgents() {
+	m.agentStatus = nil
+	for id, sessions := range m.inProgressSessions {
+		for _, session := range sessions {
+			status, live := m.liveAgents[session]
+			if !live {
+				continue
+			}
+			if current, linked := m.agentStatus[id]; linked && revier.Rank(current) <= revier.Rank(status) {
+				continue
+			}
+			if m.agentStatus == nil {
+				m.agentStatus = map[string]string{}
+			}
+			m.agentStatus[id] = status
+		}
 	}
 }
 
@@ -520,6 +568,8 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	// (authoritative after dedup); doneClosedTotal = DB count from response.
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 	m.doneClosedTotal = data.ClosedTotal
+	m.inProgressSessions = data.InProgressSessions
+	m.linkAgents()
 
 	m.settleAfterRefreshLoad(anchor)
 	// Composition complete — clear the in-flight flag so future reload requests

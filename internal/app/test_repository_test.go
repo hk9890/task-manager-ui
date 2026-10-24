@@ -156,6 +156,7 @@ func mustNewModel(t *testing.T, services Services) Model {
 	m.scheduleRefreshTick = func() tea.Cmd { return nil }
 	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
 	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
+	m.scheduleAgentPoll = func() tea.Cmd { return nil }
 	m.awaitStoreChange = func(<-chan struct{}) tea.Cmd { return nil }
 	m.search.SetEditPause(0)
 	return m
@@ -176,6 +177,7 @@ func mustNewModelWithOptions(t *testing.T, services Services, runtime RuntimeOpt
 	m.scheduleRefreshTick = func() tea.Cmd { return nil }
 	m.scheduleToastDismiss = func(_ time.Duration, _ int) tea.Cmd { return nil }
 	m.scheduleSpinnerTick = func() tea.Cmd { return nil }
+	m.scheduleAgentPoll = func() tea.Cmd { return nil }
 	m.awaitStoreChange = func(<-chan struct{}) tea.Cmd { return nil }
 	m.search.SetEditPause(0)
 	return m

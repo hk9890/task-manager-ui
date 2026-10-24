@@ -158,8 +158,16 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 - **Comments** — in detail, `right` from Content reaches the comments; `enter` edits the selected
   one, `alt+d` asks before it deletes, and the `add`, `edit` and `delete` buttons do the same on a
   click.
-- **External tools** — `alt+v`, `alt+p` and `alt+l` from detail leave the app alive with the
-  expected toast.
+- **External tools** — `alt+v`, `alt+p`, `alt+l` and `alt+i` from detail leave the app alive with the
+  expected toast. Drive `alt+i` with a fake `revier` first on `PATH`, such as `fakeRevier` in
+  `internal/config/agent_launcher_integration_test.go`: against this project's own store, a real
+  one starts a real agent on the issue.
+- **Live agents** — the app runs `revier` itself every few seconds, so put a fake `revier` first on
+  `PATH` for every run, never the real one: `alt+o` would focus a real agent and `alt+i` start one.
+  Make its `status` print `project` and `path` lines for the project root and its
+  `list --json --conversations` print an agent whose `.state.session` wrote a comment on an In
+  Progress issue, as `fakeRevier` in `internal/revier/revier_integration_test.go` does. The card
+  carries the agent mark, Detail lists the agent under `Agents` and draws `open alt+o`.
 
 ## Behaviours that need a real terminal
 

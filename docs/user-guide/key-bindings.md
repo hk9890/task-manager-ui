@@ -29,8 +29,10 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
+- `alt+i` — launch `agent` action in detail mode: a new revier agent is prompted to talk about the issue; it is linked to the issue once it comments on it
+- `alt+o` — in detail mode, bring the live revier agent that works on the issue to the front: the one that needs you first, then a running one, then an idle one
 
-`alt+v`, `alt+p` and `alt+l` run in the store's project directory. When that
+`alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
 message, and the detail footer reads `launchers off`.
 
@@ -148,12 +150,23 @@ comments focused, the selected comment carries the selection bar:
 
 An edited comment gets a new time and your name, so it moves to the top.
 
-Four buttons stand in the Content pane, each with the key that does the same,
-and a click presses it: `edit` on the first line, the line of the issue's ID
-(`alt+u`), `add` on the `Comments` heading (`alt+a`), and `edit` (`enter`) and
-`delete` (`alt+d`) on the first line of the selected comment. Each stands at the
-right end of its line. A pane too narrow for a button leaves it out; the key
+The buttons in the Content pane each show the key that does the same, and a
+click presses it: `open` (`alt+o`), `agent` (`alt+i`) and `edit` (`alt+u`) on
+the first line, the line of the issue's ID, `add` on the `Comments` heading
+(`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the first line of the
+selected comment. Each stands at the right end of its line. `open` is there only
+while a live agent works on the issue. A pane too narrow for a button leaves it
+out; an ID line too narrow for all of its buttons keeps `open` and `edit`, and
+narrower still `edit` alone, so `agent` never takes the place of `open`. The key
 still works.
+
+A live agent works on an issue when its revier session wrote a comment on it.
+taskmgr-ui asks `revier` for the live agents every few seconds. The Metadata
+pane lists them in an `Agents` group, one line each: `Tab <panel>` and its
+status, `running`, `idle` or `needs you`. On the board, the card of an In
+Progress issue that a live agent works on carries the agent mark after its
+status, green while the agent runs, grey while it is idle and orange while it
+needs you. Without `revier` on the `PATH` none of this shows.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
 
@@ -305,8 +318,8 @@ instead.
   opens the store picker. `reload` reloads the view on screen. `config` opens the configuration
   screen, which takes keys only.
 - **Click the Dependencies or the Content pane** in detail mode to focus it. **Click a comment** to select it.
-- **Click a button** in the detail Content pane — `edit`, `add`, and `edit` and `delete` on the
-  selected comment — to do what the key shown beside it does.
+- **Click a button** in the detail Content pane — `open`, `agent` and `edit` on the ID line, `add`,
+  and `edit` and `delete` on the selected comment — to do what the key shown beside it does.
 - In the issue editor, **click a field** to put the cursor in it and **click `Save` or `Cancel`**
   to press it. The wheel over the text moves its cursor three lines a notch.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
