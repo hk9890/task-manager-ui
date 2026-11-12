@@ -28,7 +28,7 @@ func commentsState(t *testing.T) State {
 				{ID: "c-3", Author: "carol", Body: "Third chronologically", CreatedAt: mustTime(t, "2026-04-05T14:00:00Z")},
 			},
 		},
-		ButtonKeys: ButtonKeys{EditIssue: "alt+u", AddComment: "alt+a", EditComment: "enter", DeleteComment: "alt+d", LaunchAgent: "alt+i", FocusAgent: "alt+o"},
+		ButtonKeys: ButtonKeys{EditIssue: "alt+u", AddComment: "alt+a", EditComment: "enter", DeleteComment: "alt+d", LaunchAgent: "alt+i", FocusAgent: "alt+o", AgentMenu: "alt+g"},
 		Width:      100,
 		Height:     30,
 	}
@@ -162,6 +162,7 @@ func TestHitTestFindsTheButtonsAndTheCommentsWhereRenderDrewThem(t *testing.T) {
 		for text, want := range map[string]Hit{
 			"agent alt+i":  {Pane: FocusPaneContent, Button: ButtonLaunchAgent},
 			"open alt+o":   {Pane: FocusPaneContent, Button: ButtonFocusAgent},
+			"agents alt+g": {Pane: FocusPaneContent, Button: ButtonAgentMenu},
 			"edit alt+u":   {Pane: FocusPaneContent, Button: ButtonEdit},
 			"add alt+a":    {Pane: FocusPaneContent, Button: ButtonAddComment},
 			"edit enter":   {Pane: FocusPaneComments, Comment: 1, Button: ButtonEditComment},
@@ -273,9 +274,10 @@ func TestAnIDLineWithoutRoomDrawsNoEditButton(t *testing.T) {
 	}
 }
 
-// The open button stands left of agent and edit only while an agent is
-// linked to the issue. agent and edit keep their cells when it comes or goes,
-// and edit still ends in the column of add.
+// The open and agents buttons stand left of agent and edit only while an
+// agent is linked to the issue: agents for any, open for a live one. agent
+// and edit keep their cells when they come or go, and edit still ends in the
+// column of add.
 func TestTheOpenButtonIsDrawnOnlyWithALinkedAgent(t *testing.T) {
 	t.Parallel()
 
@@ -289,8 +291,8 @@ func TestTheOpenButtonIsDrawnOnlyWithALinkedAgent(t *testing.T) {
 
 	state.Agents = []agent.Agent{{Label: "Tab 3", Status: agent.Idle, Session: "s-3"}}
 	view = Render(state)
-	if !strings.Contains(testui.Downsample(view), "open alt+o  ·  agent alt+i  ·  edit alt+u") {
-		t.Errorf("with a linked agent the ID line is not open, agent and edit:\n%s", testui.Downsample(view))
+	if !strings.Contains(testui.Downsample(view), "open alt+o  ·  agents alt+g  ·  agent alt+i  ·  edit alt+u") {
+		t.Errorf("with a linked agent the ID line is not open, agents, agent and edit:\n%s", testui.Downsample(view))
 	}
 	if x, y := testui.FindCell(t, view, "agent alt+i"); x != agentX || y != agentY {
 		t.Errorf("agent moved from (%d,%d) to (%d,%d) when open came", agentX, agentY, x, y)
@@ -301,6 +303,17 @@ func TestTheOpenButtonIsDrawnOnlyWithALinkedAgent(t *testing.T) {
 	addX, _ := testui.FindCell(t, view, "add alt+a")
 	if editX+len("edit alt+u") != addX+len("add alt+a") {
 		t.Errorf("edit ends in column %d, add in column %d", editX+len("edit alt+u"), addX+len("add alt+a"))
+	}
+	agentsX, _ := testui.FindCell(t, view, "agents alt+g")
+
+	// A gone agent is resumed from the agent menu, so agents stays; open goes.
+	state.Agents = []agent.Agent{{Label: "Session s-3", Status: agent.Gone, Session: "s-3"}}
+	view = Render(state)
+	if plain := testui.Downsample(view); strings.Contains(plain, "open alt+o") || !strings.Contains(plain, "agents alt+g  ·  agent alt+i  ·  edit alt+u") {
+		t.Errorf("with a gone agent alone the ID line is not agents, agent and edit:\n%s", plain)
+	}
+	if x, _ := testui.FindCell(t, view, "agents alt+g"); x != agentsX {
+		t.Errorf("agents moved from column %d to %d when open went", agentsX, x)
 	}
 }
 
@@ -347,6 +360,7 @@ func TestTheButtonUnderThePointerIsLit(t *testing.T) {
 	for button, drawn := range map[Button][2]string{
 		ButtonLaunchAgent:   {"agent", "alt+i"},
 		ButtonFocusAgent:    {"open", "alt+o"},
+		ButtonAgentMenu:     {"agents", "alt+g"},
 		ButtonEdit:          {"edit", "alt+u"},
 		ButtonAddComment:    {"add", "alt+a"},
 		ButtonEditComment:   {"edit", "enter"},

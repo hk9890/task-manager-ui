@@ -28,24 +28,22 @@ type agentsListedMsg struct {
 // agentFocusedMsg carries the result of bringing an agent to the front.
 type agentFocusedMsg struct{ err error }
 
-// agentStartedMsg carries the result of starting an agent on the issue
-// issueID: err when the host started none, linkErr when the agent started and
-// the label that links it to the issue was not written.
-type agentStartedMsg struct {
+// agentStart is the result of starting an agent on the issue issueID: err
+// when a step of the start failed, linkErr when the label that links the
+// agent to the issue was not written. An agent with a session started even
+// when err is set, and is linked.
+type agentStart struct {
 	issueID string
 	agent   agent.Agent
 	err     error
 	linkErr error
 }
 
-// agentAskStartedMsg carries the result of starting an agent in the
-// background on the issue issueID, as agentStartedMsg does for one in front.
-type agentAskStartedMsg struct {
-	issueID string
-	agent   agent.Agent
-	err     error
-	linkErr error
-}
+// agentStartedMsg carries the start of an agent in front.
+type agentStartedMsg agentStart
+
+// agentAskStartedMsg carries the start of an agent asked in the background.
+type agentAskStartedMsg agentStart
 
 // agentAnsweredMsg carries the last thing an agent asked in the background
 // said once its turn ended: err when the wait or the read failed.

@@ -18,7 +18,9 @@ type AgentHostCall struct {
 }
 
 // FakeAgentHost is a deterministic seam for agent.Host. Start returns
-// Started, and adds it to Agents so a later List sees it.
+// Started, and adds it to Agents so a later List sees it; with StartErr set
+// it returns Started with the error and adds nothing, as a start that failed
+// after the agent opened does.
 type FakeAgentHost struct {
 	mu sync.Mutex
 
@@ -44,13 +46,13 @@ func (f *FakeAgentHost) record(call AgentHostCall) {
 	f.calls = append(f.calls, call)
 }
 
-// Start records the call and returns Started, or StartErr.
+// Start records the call and returns Started, with StartErr when it is set.
 func (f *FakeAgentHost) Start(_ context.Context, spec agent.Spec) (agent.Agent, error) {
 	f.record(AgentHostCall{Method: "Start", Arg: spec.Root, Spec: spec})
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.StartErr != nil {
-		return agent.Agent{}, f.StartErr
+		return f.Started, f.StartErr
 	}
 	f.Agents = append(f.Agents, f.Started)
 	return f.Started, nil

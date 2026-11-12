@@ -20,6 +20,7 @@ const (
 	ButtonDeleteComment
 	ButtonLaunchAgent
 	ButtonFocusAgent
+	ButtonAgentMenu
 )
 
 const (

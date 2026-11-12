@@ -16,17 +16,18 @@ import (
 
 // fakeRevier logs every call and the physical directory it ran in to
 // $REVIER_LOG. `status` resolves to $REVIER_PROJECT_PATH; `list` prints one
-// local agent in panel 7; `agent new` prints the address of panel 7, or of
-// panel 8 with --resume. The first `agent wait --until idle` fails, as it does
-// before the harness of a new tab has started; with $REVIER_WAIT_TIMES_OUT
-// set every wait exits 2. `agent read` prints what the agent said, `agent
-// close` refuses without --force, and an unknown address fails as revier
-// does.
+// local agent in panel 7 of target home, and first another in panel 7 of
+// target work; `agent new` prints the address of demo:home:7, or of
+// demo:home:8 with --resume. The first `agent wait --until idle` fails, as it
+// does before the harness of a new tab has started; with
+// $REVIER_WAIT_TIMES_OUT set every wait exits 2. `agent read` prints what the
+// agent said, `agent close` refuses without --force, and an unknown address
+// fails as revier does: demo:home:8 is known once a harness wait succeeded.
 const fakeRevier = `#!/bin/sh
 printf '%s | %s\n' "$*" "$(pwd -P)" >> "$REVIER_LOG"
 case "$1" in
 status) printf 'project   demo\npath      %s\nruntime   kitty\n' "$REVIER_PROJECT_PATH" ;;
-list) printf '[{"project":{"name":"demo"},"agents":[{"panel":"7","target":"home","ref":{"host":"kitty","id":"1"},"state":{"status":"idle","session":"s-7"}}]}]\n' ;;
+list) printf '[{"project":{"name":"demo"},"agents":[{"panel":"7","target":"work","ref":{"host":"kitty","id":"2"},"state":{"status":"running","session":"s-work"}},{"panel":"7","target":"home","ref":{"host":"kitty","id":"1"},"state":{"status":"idle","session":"s-7"}}]}]\n' ;;
 agent)
 	case "$2" in
 	new)
@@ -41,9 +42,10 @@ agent)
 			echo "no agent at $3" >&2
 			exit 1
 		fi
+		[ "$5" != idle ] || : > "$REVIER_LOG.harness"
 		echo idle ;;
 	*)
-		[ "$3" = "demo:home:7" ] || { echo "no agent at $3" >&2; exit 1; }
+		[ "$3" = "demo:home:7" ] || { [ "$3" = "demo:home:8" ] && [ -e "$REVIER_LOG.harness" ]; } || { echo "no agent at $3" >&2; exit 1; }
 		case "$2" in
 		read) echo 'all done' ;;
 		close) [ "$4" = "--force" ] || { echo "the agent is running" >&2; exit 1; } ;;
@@ -86,7 +88,10 @@ func readCalls(t *testing.T, log string) []string {
 	return calls
 }
 
-var tab7 = agent.Agent{Ref: "demo:home:7", Session: "s-7", Label: "Tab 7", Status: agent.Idle}
+var (
+	tab7     = agent.Agent{Ref: "demo:home:7", Session: "s-7", Label: "Tab 7", Status: agent.Idle}
+	workTab7 = agent.Agent{Ref: "demo:work:7", Session: "s-work", Label: "Tab 7", Status: agent.Running}
+)
 
 // List asks revier status in the root once, and revier list on every call.
 func TestListResolvesTheProjectInTheRootOnce(t *testing.T) {
@@ -98,7 +103,7 @@ func TestListResolvesTheProjectInTheRootOnce(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if want := []agent.Agent{tab7}; !reflect.DeepEqual(agents, want) {
+		if want := []agent.Agent{workTab7, tab7}; !reflect.DeepEqual(agents, want) {
 			t.Errorf("agents = %+v, want %+v", agents, want)
 		}
 	}
@@ -192,7 +197,8 @@ func TestStartFailsOnAHarnessWaitThatTimesOut(t *testing.T) {
 		t.Fatalf("expected a not-idle error, got %v", err)
 	}
 	waits := 0
-	for _, call := range readCalls(t, log) {
+	calls := readCalls(t, log)
+	for _, call := range calls {
 		if strings.HasPrefix(call, "agent wait") {
 			waits++
 		}
@@ -202,6 +208,10 @@ func TestStartFailsOnAHarnessWaitThatTimesOut(t *testing.T) {
 	}
 	if waits != 1 {
 		t.Errorf("a timed-out wait ran %d waits, want 1", waits)
+	}
+	// The tab is closed again: no label links it, so nothing could reach it.
+	if last := calls[len(calls)-1]; last != "agent close demo:home:7 --force" {
+		t.Errorf("last revier call = %q, want the force close of the new tab", last)
 	}
 }
 
@@ -216,8 +226,18 @@ func TestResumeOpensTheConversationWithoutTheFocus(t *testing.T) {
 	if want := (agent.Agent{Ref: "demo:home:8", Session: "s-8", Label: "Tab 8", Status: agent.Idle}); resumed != want {
 		t.Errorf("resumed = %+v, want %+v", resumed, want)
 	}
-	if calls := readCalls(t, log); !reflect.DeepEqual(calls, []string{"status", "agent new --no-focus -p demo --resume s-8"}) {
-		t.Errorf("revier calls = %q", calls)
+	want := []string{
+		"status",
+		"agent new --no-focus -p demo --resume s-8",
+		"agent wait demo:home:8 --until idle --timeout 60",
+		"agent wait demo:home:8 --until idle --timeout 60",
+	}
+	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {
+		t.Errorf("revier calls = %q\nwant %q", calls, want)
+	}
+	// revier focuses a panel only once its harness has started.
+	if err := h.Focus(context.Background(), resumed); err != nil {
+		t.Errorf("focus after Resume = %v, want nil", err)
 	}
 }
 

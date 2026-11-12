@@ -64,6 +64,7 @@ var buttonActions = map[detail.Button]mode.Action{
 	detail.ButtonDeleteComment: mode.ActionDeleteComment,
 	detail.ButtonLaunchAgent:   mode.ActionLaunchAgent,
 	detail.ButtonFocusAgent:    mode.ActionFocusAgent,
+	detail.ButtonAgentMenu:     mode.ActionAgentMenu,
 }
 
 // commentClick is what the click tracker holds after a click on a comment.

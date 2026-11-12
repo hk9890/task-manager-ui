@@ -12,6 +12,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/launcher"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
@@ -71,37 +72,56 @@ func (m *Model) startAgent(issue domain.IssueDetail, intent config.Intent) tea.C
 	// Not the store's context: a store switch must not stop an agent half
 	// started. The host bounds every call itself.
 	start := m.scoped(func() tea.Msg {
-		started, err := host.Start(context.Background(), spec)
-		if err != nil {
-			return agentStartedMsg{issueID: issueID, err: err}
-		}
-		if started.Session == "" {
-			return agentStartedMsg{issueID: issueID, agent: started, linkErr: errors.New("the agent host reported no session")}
-		}
-		linkErr := repo.UpdateIssue(context.Background(), issueID, domain.UpdateIssueInput{
-			AddLabels: []string{agent.LinkLabel(started.Session)},
-		})
-		return agentStartedMsg{issueID: issueID, agent: started, linkErr: linkErr}
+		return agentStartedMsg(startAndLink(host, repo, issueID, spec))
 	})
 	return batchCmds(starting, start)
 }
 
-// handleAgentStarted reports the start to the operator and, on a store that
-// is not watched, reloads the issue the label was written to.
+// startAndLink starts an agent on spec and writes the label of its session on
+// the issue. It runs on no store's context: a store switch must not stop an
+// agent half started, and the host bounds every call itself. An agent the
+// host returns with a session is linked even when a later step of its start
+// failed: it is open and may work on the issue.
+func startAndLink(host agent.Host, repo repository.Repository, issueID string, spec agent.Spec) agentStart {
+	started, err := host.Start(context.Background(), spec)
+	result := agentStart{issueID: issueID, agent: started, err: err}
+	if started.Session == "" {
+		if err == nil {
+			result.linkErr = errors.New("the agent host reported no session")
+		}
+		return result
+	}
+	result.linkErr = repo.UpdateIssue(context.Background(), issueID, domain.UpdateIssueInput{
+		AddLabels: []string{agent.LinkLabel(started.Session)},
+	})
+	return result
+}
+
+// handleAgentStarted reports the start to the operator and reloads the issue
+// the label was written to.
 func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 	issueID := displaytext.OneLine(msg.issueID)
-	if msg.err != nil {
+	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not start an agent on %s: %v", issueID, msg.err), toaster.StyleError)
 	}
 	label := displaytext.OneLine(msg.agent.Label)
 	if msg.linkErr != nil {
 		return m.showToast(fmt.Sprintf("Started %s, but could not link it to %s: %v", label, issueID, msg.linkErr), toaster.StyleError)
 	}
-	done := m.showToast(fmt.Sprintf("Started %s on %s", label, issueID), toaster.StyleSuccess)
-	// On a watched store the watch reloads after a write.
+	report := m.showToast(fmt.Sprintf("Started %s on %s", label, issueID), toaster.StyleSuccess)
+	if msg.err != nil {
+		report = m.showToast(fmt.Sprintf("Started %s on %s, but: %v", label, issueID, msg.err), toaster.StyleError)
+	}
+	return batchCmds(m.reloadAfterLink(msg.issueID), report)
+}
+
+// reloadAfterLink reloads the issue a link label was written to, and the
+// browse surfaces, on a store that is not watched: on a watched one the
+// watch reloads after a write.
+func (m *Model) reloadAfterLink(issueID string) tea.Cmd {
 	if m.storeWatched() {
-		return done
+		return nil
 	}
 	m.markBrowseSurfacesDirty()
-	return batchCmds(m.reloadDetailAfterMutationCmd(msg.issueID), m.maybeAutoRefreshActiveSurfaceCmd(), done)
+	return batchCmds(m.reloadDetailAfterMutationCmd(issueID), m.maybeAutoRefreshActiveSurfaceCmd())
 }

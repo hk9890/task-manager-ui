@@ -357,6 +357,7 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 			DeleteComment: m.Keys.DisplayLabel(config.DetailContext, config.DetailActionDeleteComment),
 			LaunchAgent:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchAgent),
 			FocusAgent:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionFocusAgent),
+			AgentMenu:     m.Keys.DisplayLabel(config.ShellContext, config.ShellActionAgentMenu),
 		},
 		Agents: linkedAgents(m.liveAgents, d),
 		BrowserItems: func() []domain.IssueReference {

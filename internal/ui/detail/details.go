@@ -105,6 +105,7 @@ type ButtonKeys struct {
 	DeleteComment string
 	LaunchAgent   string
 	FocusAgent    string
+	AgentMenu     string
 }
 
 // Render renders standalone issue detail metadata and content.
@@ -690,17 +691,20 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 	return out
 }
 
-// placeIDLineButtons puts open (only with a live linked agent), agent and edit at
-// the right end of the ID line. The ID is not cut to make room for them.
+// placeIDLineButtons puts open (only with a live linked agent), agents (only
+// with a linked agent), agent and edit at the right end of the ID line. The
+// ID is not cut to make room for them.
 //
-// The width alone picks the set: open, agent and edit; else open and edit;
-// else edit; else none. A set fits by the room it takes with open drawn, so a
-// linked agent coming or going adds or removes open and moves no other
-// button: a click aimed at open never lands on agent. Each key still does
-// what its button does.
+// The width alone picks the set: open, agents, agent and edit; else open,
+// agent and edit; else open and edit; else edit; else none. A set fits by
+// the room it takes with open and agents drawn, so a linked agent coming or
+// going adds or removes them and moves no other button: a click aimed at
+// open never lands on agent. Each key still does what its button does.
 func placeIDLineButtons(idLine string, width int, pane ContentPaneState, keys ButtonKeys) (string, []placedButton) {
 	textRoom := max(lipgloss.Width(idLine)+1, buttonTextFloor)
+	_, live := agent.FirstLive(pane.Agents)
 	for _, set := range [][]Button{
+		{ButtonFocusAgent, ButtonAgentMenu, ButtonLaunchAgent, ButtonEdit},
 		{ButtonFocusAgent, ButtonLaunchAgent, ButtonEdit},
 		{ButtonFocusAgent, ButtonEdit},
 		{ButtonEdit},
@@ -708,9 +712,9 @@ func placeIDLineButtons(idLine string, width int, pane ContentPaneState, keys Bu
 		if width-buttonsWidth(set, keys) < textRoom {
 			continue
 		}
-		if _, live := agent.FirstLive(pane.Agents); set[0] == ButtonFocusAgent && !live {
-			set = set[1:]
-		}
+		set = slices.DeleteFunc(slices.Clone(set), func(button Button) bool {
+			return button == ButtonFocusAgent && !live || button == ButtonAgentMenu && len(pane.Agents) == 0
+		})
 		drawn := make([]string, len(set))
 		for idx, button := range set {
 			drawn[idx] = idLineButton(button, keys, pane.Hover == button)
@@ -742,6 +746,8 @@ func idLineButton(button Button, keys ButtonKeys, lit bool) string {
 		return paneButton("agent", keys.LaunchAgent, lit)
 	case ButtonFocusAgent:
 		return paneButton("open", keys.FocusAgent, lit)
+	case ButtonAgentMenu:
+		return paneButton("agents", keys.AgentMenu, lit)
 	default:
 		return paneButton("edit", keys.EditIssue, lit)
 	}

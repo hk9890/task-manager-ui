@@ -74,13 +74,15 @@ var ErrNoProject = errors.New("not a project of the agent host")
 // context, and a Host sets its own timeout on top.
 type Host interface {
 	// Start opens an agent on spec and returns once its session is known.
+	// When a later step, such as the prompt or the focus, fails, it returns
+	// the agent it opened with the error.
 	Start(ctx context.Context, spec Spec) (Agent, error)
 	// List returns the live agents of the project at root on this machine.
 	List(ctx context.Context, root string) ([]Agent, error)
 	// Focus brings the agent to the front.
 	Focus(ctx context.Context, a Agent) error
 	// Resume opens an agent in the project at root on the conversation
-	// session, without the focus.
+	// session, without the focus, and returns once it can be focused.
 	Resume(ctx context.Context, root, session string) (Agent, error)
 	// Wait returns once the agent's current turn has ended.
 	Wait(ctx context.Context, a Agent) error

@@ -176,9 +176,10 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 ### A button in a pane
 
 A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
-has them all in the Content pane: `open`, `agent` and `edit` on the ID line, the first line of the
-pane, `add` on the Comments heading, and `edit` and `delete` on the header line of the selected
-comment. `open` is drawn only while a live agent is linked to the issue (`State.Agents`).
+has them all in the Content pane: `open`, `agents`, `agent` and `edit` on the ID line, the first
+line of the pane, `add` on the Comments heading, and `edit` and `delete` on the header line of the
+selected comment. `open` is drawn only while a live agent is linked to the issue, `agents` only
+while any agent is (`State.Agents`).
 
 - Draw it with `paneButton` (`internal/ui/detail/buttons.go`): the two runs and the roles of a
   menu-bar button, `" label "` in `ShellActionColor` and `"key "` in `ShellFooterHelpColor`.
@@ -190,10 +191,11 @@ comment. `open` is drawn only while a live agent is linked to the issue (`State.
   the last cell of every button line is the same column: `edit` on the ID line ends where `add`
   ends (`TestTheEditButtonEndsInTheColumnOfTheAddButton`, `internal/ui/detail/comments_test.go`).
   It draws none when fewer than `buttonTextFloor` cells would stay for the text. The ID is never
-  cut for a button. The width alone picks the ID line's set — `open`, `agent` and `edit`; else
-  `open` and `edit`; else `edit`; else none — measured with `open` drawn, so a linked agent coming
-  or going adds or removes `open` and moves no other button: a click aimed at `open` never lands
-  on `agent` (`placeIDLineButtons`). Place the buttons of one line with one `placeButtons` call.
+  cut for a button. The width alone picks the ID line's set — `open`, `agents`, `agent` and
+  `edit`; else `open`, `agent` and `edit`; else `open` and `edit`; else `edit`; else none —
+  measured with `open` and `agents` drawn, so a linked agent coming or going adds or removes them
+  and moves no other button: a click aimed at `open` never lands on `agent`
+  (`placeIDLineButtons`). Place the buttons of one line with one `placeButtons` call.
 - `HitTest` reads the cells `placeButtons` returned, through `renderContentPaneLines`, so a click
   lands on the button that is drawn.
 - A pane border holds no button.
@@ -561,8 +563,8 @@ open until the store is created, so a rejected name or prefix is corrected in pl
 - The Metadata pane of Detail only shows. It is no focus stop (`focusStops`,
   `internal/mode/detail/model.go`), so its border never takes the focus colour; `HitTest` reports
   nothing on it; it has no cursor and no scroll offset. A pane too short for its lines ends on
-  `… (N more)` (`RenderMetadataPane`). Its `Agents` group, drawn only with a linked live agent
-  and right after `Core` so a short pane keeps it, only shows too: `open` on the ID line acts on the agents. Every action on the issue is a key and a button of the
+  `… (N more)` (`RenderMetadataPane`). Its `Agents` group, drawn only with a linked agent
+  and right after `Core` so a short pane keeps it, only shows too: `open` and `agents` on the ID line act on the agents. Every action on the issue is a key and a button of the
   Content pane ([A button in a pane](#a-button-in-a-pane)).
 - A move of the comment cursor scrolls the Content pane with two calls, the last line of the
   comment and then its first: a comment that fits is drawn whole and a taller one starts at its
@@ -661,7 +663,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
     its glyphs; the clipboard keeps the box as drawn. The search runs once, at once
     (`search.Model.SetQuery`). Quote, ask and search are off on the picker, the configuration
     screen, the issue editor, help and under a dialog, where each would leave the surface with work
-    on it, and for a box of chrome alone. Ask is off without an agent host.
+    on it, and for a box of chrome alone. Ask is off without an agent host; a host that is there
+    but fails, such as revier missing from the `PATH`, fails the start with an error toast.
   - Ask opens the ask question in the action modal: one line for the instruction, and `Ask`
     (`Model.openAgentAsk`, `internal/app/askagent.go`). An empty line asks nothing. The agent
     starts without the focus and is linked as an intent's agent is. An info toast says it works in
@@ -690,16 +693,18 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   Close, and takes keys and the mouse as the selection menu does. The issue is taken when it
   opens. An intent starts the agent through the agent host and raises an info toast at once,
   because a start takes as long as the agent takes to start; a start that fails, and a label
-  that is not written, raise an error toast (`Model.handleAgentStarted`). Without an agent host,
+  that is not written, raise an error toast (`Model.handleAgentStarted`). A start that fails
+  after the agent has its session, at the prompt or the focus, still links the agent. Without an agent host,
   an intent or the project path, the key raises a warning toast instead of the menu.
 - The agent menu is the same overlay again: `agent_menu` opens it in Detail
   (`Model.openAgentMenu`, `internal/app/agents.go`), centred, titled `Agents on <id>`, with
   `Focus <label>` and `Close <label>` for each live linked agent, `Resume <label>` for each gone
-  one, and Close. It has no button. A close of an agent that is running or needs you asks first
+  one, and Close. The `agents` button of the ID line opens it too. A close of an agent that is running or needs you asks first
   and then forces the close; an idle one closes at once. A resume reopens the conversation and
   brings it to the front. Without a linked agent the key raises a warning toast.
 - The Agents group of the Metadata pane is each linked agent's label, then its status word —
-  `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. The
+  `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. A
+  link label no live agent holds is `gone`, a failed poll included (`agent.Linked`). The
   Labels group leaves the link labels out.
 - The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
   the yes or no before a comment is deleted (`Model.confirmCommentDelete`), the yes or no

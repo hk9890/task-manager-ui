@@ -65,7 +65,8 @@ func NewHost() *Host {
 // Start opens an agent tab without the focus, waits for its harness, reads
 // its session from the list, then prompts and focuses it as spec asks.
 // revier has no command that prints the session of a new agent, hence the
-// list.
+// list. A tab whose session Start could not read is closed again: nothing
+// could reach it. A failed prompt or focus returns the agent with the error.
 func (h *Host) Start(ctx context.Context, spec agent.Spec) (agent.Agent, error) {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -77,11 +78,9 @@ func (h *Host) Start(ctx context.Context, spec agent.Spec) (agent.Agent, error) 
 	if err != nil {
 		return agent.Agent{}, err
 	}
-	if err := h.awaitHarness(ctx, addr); err != nil {
-		return agent.Agent{}, err
-	}
-	started, err := h.awaitSession(ctx, project, addr)
+	started, err := h.awaitStarted(ctx, project, addr)
 	if err != nil {
+		closeOrphan(ctx, addr)
 		return agent.Agent{}, err
 	}
 	if spec.Prompt != "" {
@@ -114,15 +113,20 @@ func (h *Host) Focus(ctx context.Context, a agent.Agent) error {
 	return err
 }
 
-// Resume opens an agent tab on the conversation session, without the focus.
-// It returns at once: the harness in the tab may not have started yet.
+// Resume opens an agent tab on the conversation session, without the focus,
+// and returns once its harness is idle: revier focuses no agent before that.
 func (h *Host) Resume(ctx context.Context, root, session string) (agent.Agent, error) {
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
 	project, err := h.project(ctx, root)
 	if err != nil {
 		return agent.Agent{}, err
 	}
 	addr, err := newAgent(ctx, project, "--resume", session)
 	if err != nil {
+		return agent.Agent{}, err
+	}
+	if err := h.awaitHarness(ctx, addr); err != nil {
 		return agent.Agent{}, err
 	}
 	return agent.Agent{Ref: addr, Session: session, Label: label(panelOf(addr)), Status: agent.Idle}, nil
@@ -175,6 +179,15 @@ func (h *Host) project(ctx context.Context, root string) (string, error) {
 	return project, nil
 }
 
+// awaitStarted waits for the harness of the new agent at addr, then for its
+// session.
+func (h *Host) awaitStarted(ctx context.Context, project, addr string) (agent.Agent, error) {
+	if err := h.awaitHarness(ctx, addr); err != nil {
+		return agent.Agent{}, err
+	}
+	return h.awaitSession(ctx, project, addr)
+}
+
 // awaitHarness waits until the agent at addr is idle. A wait fails at once
 // until the harness in the new tab has started, so a failed wait is tried
 // again, harnessAttempts times at most; a wait that ran out of time is not.
@@ -196,17 +209,16 @@ func (h *Host) awaitHarness(ctx context.Context, addr string) error {
 }
 
 // awaitSession lists the agents of project until the one at addr names its
-// session, sessionAttempts times at most.
+// session, sessionAttempts times at most. The whole address is compared: two
+// targets of a project number their panels each on their own.
 func (h *Host) awaitSession(ctx context.Context, project, addr string) (agent.Agent, error) {
-	panel := panelOf(addr)
 	for range sessionAttempts {
 		agents, err := listAgents(ctx, project)
 		if err != nil {
 			return agent.Agent{}, err
 		}
 		for _, a := range agents {
-			if panelOf(a.Ref) == panel && a.Session != "" {
-				a.Ref = addr
+			if a.Ref == addr && a.Session != "" {
 				return a, nil
 			}
 		}
@@ -224,6 +236,13 @@ func (h *Host) sleep(ctx context.Context) error {
 	case <-time.After(h.pause):
 		return nil
 	}
+}
+
+// closeOrphan force-closes the tab at addr that Start opened and gives up on,
+// best effort. The tab holds no prompt yet, so the force loses no work. It
+// runs on its own timeout: ctx may be the one that ran out.
+func closeOrphan(ctx context.Context, addr string) {
+	_, _ = run(context.WithoutCancel(ctx), callTimeout, "", "agent", "close", addr, "--force")
 }
 
 // newAgent opens an agent tab of project without the focus and returns its

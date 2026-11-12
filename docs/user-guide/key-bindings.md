@@ -160,22 +160,28 @@ comments focused, the selected comment carries the selection bar:
 An edited comment gets a new time and your name, so it moves to the top.
 
 The buttons in the Content pane each show the key that does the same, and a
-click presses it: `open` (`alt+o`), `agent` (`alt+i`) and `edit` (`alt+u`) on
-the first line, the line of the issue's ID, `add` on the `Comments` heading
-(`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the first line of the
-selected comment. Each stands at the right end of its line. `open` is there only
-while a live agent works on the issue. A pane too narrow for a button leaves it
-out; an ID line too narrow for all of its buttons keeps `open` and `edit`, and
-narrower still `edit` alone, so `agent` never takes the place of `open`. The key
-still works.
+click presses it: `open` (`alt+o`), `agents` (`alt+g`), `agent` (`alt+i`) and
+`edit` (`alt+u`) on the first line, the line of the issue's ID, `add` on the
+`Comments` heading (`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the
+first line of the selected comment. Each stands at the right end of its line.
+`open` is there only while a live agent works on the issue, and `agents` only
+while an agent is linked to it. A pane too narrow for a button leaves it out; an
+ID line too narrow for all of its buttons drops `agents` first, then `agent`,
+then `open`, so no button takes the place of another. The key still works.
 
-A live agent works on an issue when its revier session wrote a comment on it.
+An agent is linked to an issue by an `agent:<session>` label, which starting it
+from the intent menu or the selection menu writes. In the In Progress column an
+agent whose revier session wrote a comment on the issue is linked too.
 taskmgr-ui asks `revier` for the live agents every few seconds. The Metadata
-pane lists them in an `Agents` group, one line each: `Tab <panel>` and its
-status, `running`, `idle` or `needs you`. On the board, the card of an In
-Progress issue that a live agent works on carries the agent mark after its
-status, green while the agent runs, grey while it is idle and orange while it
-needs you. Without `revier` on the `PATH` none of this shows.
+pane lists the linked agents in an `Agents` group, one line each: its name, its
+status — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier
+does not list — and what it does, when revier says. On the board, a card of any
+column that a live agent is linked to carries the agent mark after its status,
+green while the agent runs, grey while it is idle and orange while it needs you.
+
+When revier is not on the `PATH`, or the project is no revier project, no agent
+is live: every labelled agent shows as `gone` and no card carries the mark. The
+intent menu and Ask still open, and a start fails with an error toast.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
 
@@ -350,9 +356,8 @@ instead.
 - The menu offers to quote the text in a new comment on the selected issue, to
   ask an agent about it, to search the store for it, and to close. `up`/`down` and
   `enter` or a click choose; `esc` or a click outside closes it, and the click
-  outside does nothing else. Quote and search are off on screens where they
-  would drop work in progress, such as the issue editor. Ask is off too when
-  revier is not there.
+  outside does nothing else. Quote, ask and search are off on screens where
+  they would drop work in progress, such as the issue editor.
 - Ask an agent opens one line for your instruction. The agent starts in the
   background, out of view, and changes the issue with taskmgr. When its turn
   ends the issue is read again and a toast shows its summary. When the agent

@@ -6,6 +6,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -147,6 +148,38 @@ func TestTheEndOfTheTurnReloadsTheIssue(t *testing.T) {
 	m.services.Agents = writingHost{FakeAgentHost: client, repo: m.services.Repo}
 	m = askOnTitle(t, m, "rename it")
 	testui.AssertContainsAll(t, plainShell(m), "Renamed by the agent")
+}
+
+// An asked agent that opened but did not take the prompt is linked, and not
+// waited on: it has no turn.
+func TestAnAskedAgentThatTookNoPromptIsLinkedAndNotWaitedOn(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	client.StartErr = errors.New("the prompt was refused")
+	m = askOnTitle(t, m, "make the title shorter")
+
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	}
+	if got := hostCalls(client, "Wait", "Read"); len(got) != 0 {
+		t.Fatalf("calls = %+v, want no wait and no read", got)
+	}
+	if view := m.toast.View(); !strings.Contains(view, "Started Tab 9 on tm-1, but could not ask it: the prompt was refused") {
+		t.Fatalf("toast = %q, want the partial failure", view)
+	}
+}
+
+// On a store that is not watched the link of an asked agent reloads the
+// issue at once, so the agent shows on it before its turn ends.
+func TestTheLinkOfAnAskedAgentReloadsTheIssue(t *testing.T) {
+	m, _, _, _ := agentShell(t)
+	if m.storeWatched() {
+		t.Fatal("fixture store is watched")
+	}
+	m.handleAgentAskStarted(agentAskStartedMsg{issueID: "tm-1", agent: startedOnTab9()})
+	if !m.detail.IsLoading() {
+		t.Fatal("the link of an asked agent did not reload the issue")
+	}
 }
 
 func TestParseAskReportReadsTheLastStatusLine(t *testing.T) {

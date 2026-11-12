@@ -47,7 +47,9 @@ mise run ci          # the merge gate; see What the tools enforce
    Its poll is a timer under the [Switching stores](#switching-stores) rules: the tick is
    unscoped, the listing it starts is scoped. An agent started on an issue is linked to it by the
    label `agent.LinkLabel(session)`, written with `UpdateIssueInput.AddLabels`, which keeps every
-   other label (`Model.startAgent`, `internal/app/intentmenu.go`).
+   other label (`startAndLink`, `internal/app/intentmenu.go`). An agent the host returns with a
+   session is linked even when its start failed at a later step: it is open and may work on the
+   issue.
 
    - An agent asked from the selection menu runs in the background (`Model.askAgent`,
      `internal/app/askagent.go`): `Host.Start` without the focus, the link label, then

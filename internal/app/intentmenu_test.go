@@ -143,3 +143,21 @@ func TestTheIntentMenuNeedsAnAgentHost(t *testing.T) {
 		t.Fatalf("toast = %q, want the reason", view)
 	}
 }
+
+// A start that fails after the agent opened with its session, at the prompt
+// or the focus, still links the agent: it is open and may work on the issue.
+func TestAStartThatFailsAfterTheSessionIsKnownStillLinksTheAgent(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	client.StartErr = errors.New("the focus was refused")
+
+	m = pressKey(t, m, "alt+i")
+	m = pressKey(t, m, "enter")
+
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	}
+	if view := m.toast.View(); !strings.Contains(view, "Started Tab 9 on tm-1, but: the focus was refused") {
+		t.Fatalf("toast = %q, want the partial failure", view)
+	}
+}

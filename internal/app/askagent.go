@@ -1,9 +1,7 @@
 package app
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 
@@ -84,20 +82,8 @@ func (m *Model) askAgent(ask agentAsk, instruction string) tea.Cmd {
 	issueID := ask.issue.ID
 	spec := agent.Spec{Root: root, Prompt: askPrompt(issueID, ask.text, instruction)}
 	asking := m.showToast("Asking an agent on "+displaytext.OneLine(issueID)+"…", toaster.StyleInfo)
-	// Not the store's context: a store switch must not stop an agent half
-	// started. The host bounds every call itself.
 	start := m.scoped(func() tea.Msg {
-		started, err := host.Start(context.Background(), spec)
-		if err != nil {
-			return agentAskStartedMsg{issueID: issueID, err: err}
-		}
-		if started.Session == "" {
-			return agentAskStartedMsg{issueID: issueID, agent: started, linkErr: errors.New("the agent host reported no session")}
-		}
-		linkErr := repo.UpdateIssue(context.Background(), issueID, domain.UpdateIssueInput{
-			AddLabels: []string{agent.LinkLabel(started.Session)},
-		})
-		return agentAskStartedMsg{issueID: issueID, agent: started, linkErr: linkErr}
+		return agentAskStartedMsg(startAndLink(host, repo, issueID, spec))
 	})
 	return batchCmds(asking, start)
 }
@@ -112,19 +98,28 @@ func askPrompt(issueID, text, instruction string) string {
 		issueID, selection, instruction)
 }
 
-// handleAgentAskStarted reports a start that failed, or waits in the
-// background for the turn of the agent that started.
+// handleAgentAskStarted reports a start that failed, or reloads the issue the
+// label was written to and waits in the background for the turn of the agent
+// that started. An agent that opened but did not take the prompt is linked
+// and not waited on: it has no turn.
 func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
 	issueID := displaytext.OneLine(msg.issueID)
-	if msg.err != nil {
+	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not ask an agent on %s: %v", issueID, msg.err), toaster.StyleError)
 	}
 	label := displaytext.OneLine(msg.agent.Label)
+	var reload tea.Cmd
+	if msg.linkErr == nil {
+		reload = m.reloadAfterLink(msg.issueID)
+	}
+	if msg.err != nil {
+		return batchCmds(reload, m.showToast(fmt.Sprintf("Started %s on %s, but could not ask it: %v", label, issueID, msg.err), toaster.StyleError))
+	}
 	report := m.showToast(fmt.Sprintf("%s works on %s in the background", label, issueID), toaster.StyleInfo)
 	if msg.linkErr != nil {
 		report = m.showToast(fmt.Sprintf("%s works on %s, but could not be linked to it: %v", label, issueID, msg.linkErr), toaster.StyleError)
 	}
-	return batchCmds(report, m.waitForAnswer(msg.issueID, msg.agent))
+	return batchCmds(reload, report, m.waitForAnswer(msg.issueID, msg.agent))
 }
 
 // waitForAnswer waits for the turn of the asked agent to end and reads what

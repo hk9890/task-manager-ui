@@ -168,7 +168,7 @@ func TestTheOpenKeyFocusesTheLinkedAgent(t *testing.T) {
 	})
 }
 
-// The agent and open buttons do what alt+i and alt+o do.
+// The agent, open and agents buttons do what alt+i, alt+o and alt+g do.
 func TestClicksOnTheAgentButtonsDoWhatTheirKeysDo(t *testing.T) {
 	click := func(t *testing.T, m Model, text string) Model {
 		t.Helper()
@@ -189,6 +189,14 @@ func TestClicksOnTheAgentButtonsDoWhatTheirKeysDo(t *testing.T) {
 		click(t, m, "open alt+o")
 		if got := callsOf(client, "Focus"); !reflect.DeepEqual(got, []string{"demo:home:3"}) {
 			t.Errorf("Focus calls = %v, want demo:home:3", got)
+		}
+	})
+
+	t.Run("agents", func(t *testing.T) {
+		m, _, _, _ := agentShell(t, runningOnTab3())
+		m = click(t, m, "agents alt+g")
+		if m.selMenu == nil || !strings.Contains(plainShell(m), "Agents on tm-1") {
+			t.Errorf("the agents button opened no agent menu:\n%s", plainShell(m))
 		}
 	})
 }

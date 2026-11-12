@@ -872,6 +872,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.openIntentMenu())
 		case mode.ActionFocusAgent:
 			return m, batchCmds(modeCmd, m.focusAgent())
+		case mode.ActionAgentMenu:
+			return m, batchCmds(modeCmd, m.openAgentMenu())
 		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
