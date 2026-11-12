@@ -220,7 +220,7 @@ Supported actions by context:
   - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `open_config`,
     `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `create_issue`,
     `update_issue`, `close_issue`, `comment_issue`, `save_edit`, `launch_nvim`,
-    `launch_opencode`, `launch_shell_command`, `launch_agent`, `focus_agent`
+    `launch_opencode`, `launch_shell_command`, `launch_agent`, `focus_agent`, `agent_menu`
   - `save_edit` acts in the issue editor only. The keys that move between the fields there —
     `tab`, `shift+tab`, the arrows, `enter`, `pgup`, `pgdown` — are built in and follow no
     binding. Of the other `shell` actions only `quit`, `toggle_help` and `escape` act there.

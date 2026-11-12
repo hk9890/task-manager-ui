@@ -11,6 +11,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -161,13 +162,15 @@ type Model struct {
 	showHelp   bool
 	helpOffset int
 
-	// The action modal carries the store form or the comment delete question.
-	// commentDelete is the comment the question is about, and empty while the
-	// store form is open.
+	// The action modal carries the store form, the comment delete question or
+	// the agent close question. commentDelete is the comment the delete
+	// question is about, and empty while another is open. agentClose is the
+	// agent the close question is about, and nil while another is open.
 	actionModal     modal.Model
 	showActionModal bool
 	storeForm       storeForm
 	commentDelete   commentDelete
+	agentClose      *agent.Agent
 
 	focusKnown      bool
 	terminalFocused bool
@@ -331,6 +334,7 @@ func (m *Model) bindStore(services Services) {
 	m.showActionModal = false
 	m.storeForm = storeForm{}
 	m.commentDelete = commentDelete{}
+	m.agentClose = nil
 	m.fatalErrTitle, m.fatalErrBody = "", ""
 	// Board is initialised eagerly — by Init at startup, by switchStore after a
 	// switch — so it starts marked done and a later switch back to it does not
@@ -691,6 +695,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, modeCmd
 	case agentStartedMsg:
 		return m, batchCmds(modeCmd, m.handleAgentStarted(msg))
+	case agentResumedMsg:
+		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.err))
+	case agentClosedMsg:
+		return m, batchCmds(modeCmd, m.reportAgentAction("close", "Closed", msg.agent, msg.err))
 	case agentFocusedMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Could not bring the agent to the front: %v", msg.err), toaster.StyleError))
@@ -1192,6 +1200,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 			return m, modeCmd
 		}
 		return m, batchCmds(modeCmd, m.focusAgent())
+	case m.keys.Match(config.ShellContext, config.ShellActionAgentMenu, msg):
+		if m.active != mode.Detail {
+			return m, modeCmd
+		}
+		return m, batchCmds(modeCmd, m.openAgentMenu())
 	}
 
 	return m, modeCmd
@@ -1230,10 +1243,14 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 			m.showActionModal = false
 			m.storeForm = storeForm{}
 			m.commentDelete = commentDelete{}
+			m.agentClose = nil
 			return m, modeCmd
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
+			if m.agentClose != nil {
+				return m, batchCmds(modeCmd, m.confirmAgentClose())
+			}
 			// No store form is open: the modal is the comment delete question.
 			if m.storeForm.kind == 0 {
 				return m, batchCmds(modeCmd, m.deleteComment())

@@ -169,7 +169,9 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   Make its `status` print `project` and `path` lines for the project root and its
   `list --json --conversations` print an agent whose `.state.session` wrote a comment on an In
   Progress issue, as `fakeRevier` in `internal/agent/revier/revier_integration_test.go` does. The card
-  carries the agent mark, Detail lists the agent under `Agents` and draws `open alt+o`.
+  carries the agent mark, Detail lists the agent under `Agents` and draws `open alt+o`. `alt+g`
+  opens the agent menu; its Close and Resume entries run `revier agent close` and
+  `revier agent new --resume`, so the fake must answer both.
 
 ## Behaviours that need a real terminal
 

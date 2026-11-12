@@ -104,7 +104,7 @@ column below shows the `unicode` set:
 | `❯` | the prompt in front of a query line | `Prompt` |
 | `‹ ›` | either side of a value the operator steps through, on the configuration screen and the issue editor | `StepPrev`, `StepNext` |
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
-| `●` | a live revier agent works on the issue, in the colour of the agent's status; after the status token of an In Progress card, drawn only with an agent | `Agent` |
+| `●` | a live revier agent works on the issue, in the colour of the agent's status; after the status token of a card whose link label names the agent, in any column, and of an In Progress card the agent commented on; drawn only with an agent | `Agent` |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
 - A new marker is a field of `GlyphSet` with a value in all three sets. A row marker that is not a
@@ -673,7 +673,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   helpers corrupt already-rendered colour, so they are not an alternative here.
 - A modal is centred (`overlay.Center`); a toast is bottom-centred with `PadY: 1`
   (`overlay.Bottom`). Both are placed on the screen, so the margin stays blank around them.
-- The action modal, the toast, the selection menu and the intent menu are the only overlays. Help
+- The action modal, the toast, the selection menu, the intent menu and the agent menu are the
+  only overlays. Help
   is a full screen ([Surfaces above the shell](#surfaces-above-the-shell)).
 - The intent menu is the selection menu's overlay (`selectionMenu`, drawn by
   `internal/ui/selectmenu`) with other entries: `launch_agent` and the `agent` button open it in
@@ -684,10 +685,20 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   because a start takes as long as the agent takes to start; a start that fails, and a label
   that is not written, raise an error toast (`Model.handleAgentStarted`). Without an agent host,
   an intent or the project path, the key raises a warning toast instead of the menu.
-- The action modal carries two things: the store form of the picker (`Model.openStoreForm`) and
-  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), which has no input,
-  a `modal.ButtonDanger` confirm, and takes `y` and `n`. `handleOverlayMessage` tells them apart
-  by `storeForm.kind`. A new field of an issue is a row of the issue editor, never a modal.
+- The agent menu is the same overlay again: `agent_menu` opens it in Detail
+  (`Model.openAgentMenu`, `internal/app/agents.go`), centred, titled `Agents on <id>`, with
+  `Focus <label>` and `Close <label>` for each live linked agent, `Resume <label>` for each gone
+  one, and Close. It has no button. A close of an agent that is running or needs you asks first
+  and then forces the close; an idle one closes at once. A resume reopens the conversation and
+  brings it to the front. Without a linked agent the key raises a warning toast.
+- The Agents group of the Metadata pane is each linked agent's label, then its status word —
+  `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. The
+  Labels group leaves the link labels out.
+- The action modal carries three things: the store form of the picker (`Model.openStoreForm`),
+  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), and the yes or no
+  before a busy agent is closed (`Model.requestAgentClose`). Both questions have no input, a
+  `modal.ButtonDanger` confirm, and take `y` and `n`. `handleOverlayMessage` tells them apart by
+  `agentClose` and `storeForm.kind`. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

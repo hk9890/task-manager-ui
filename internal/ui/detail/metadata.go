@@ -135,7 +135,8 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 		groups = append(groups, closeGroup)
 	}
 
-	if labels := renderLabelLines(summary.Labels); len(labels) > 0 {
+	// The link labels are hidden: the Agents group shows what they link.
+	if labels := renderLabelLines(agent.VisibleLabels(summary.Labels)); len(labels) > 0 {
 		groups = append(groups, metadataGroup{title: "Labels", labels: labels})
 	}
 
@@ -162,9 +163,10 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 	return groups
 }
 
-// agentsGroup is the live agents linked to the issue, one field each, and
-// false when there is none. The agent host writes every value, so each is
-// cleaned before the label width is measured.
+// agentsGroup is the agents linked to the issue, one field each, and false
+// when there is none. A field is the status and, when the host says, what the
+// agent does. The agent host writes every value, so each is cleaned before the
+// label width is measured.
 func agentsGroup(agents []agent.Agent) (metadataGroup, bool) {
 	if len(agents) == 0 {
 		return metadataGroup{}, false
@@ -173,10 +175,18 @@ func agentsGroup(agents []agent.Agent) (metadataGroup, bool) {
 	for _, a := range agents {
 		group.fields = append(group.fields, metadataField{
 			label: displaytext.OneLine(a.Label),
-			value: displaytext.OneLine(agentStatusWord(a.Status)),
+			value: displaytext.OneLine(agentValue(a)),
 		})
 	}
 	return group, true
+}
+
+// agentValue is the status of a and what it does, when the host says.
+func agentValue(a agent.Agent) string {
+	if activity := strings.TrimSpace(a.Activity); activity != "" {
+		return agentStatusWord(a.Status) + " · " + activity
+	}
+	return agentStatusWord(a.Status)
 }
 
 // agentStatusWord is what the Agents group says for an agent status.

@@ -85,6 +85,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionLaunchShell), Desc: "launch the shell command on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchAgent), Desc: "choose an intent and start an agent on the issue, in front"},
 			{Key: shell(config.ShellActionFocusAgent), Desc: "bring the agent that works on the issue to the front"},
+			{Key: shell(config.ShellActionAgentMenu), Desc: "list the agents of the issue: focus or close a live one, resume a gone one"},
 		}},
 		{Title: "Menu bar and stores", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionStorePicker), Desc: "list the task stores on this machine and open one"},
@@ -116,7 +117,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
 		}},
-		{Title: "Selection and intent menus", Entries: []helpscreen.Entry{
+		{Title: "Selection, intent and agent menus", Entries: []helpscreen.Entry{
 			{Key: "up/down", Desc: "the entry above / below"},
 			{Key: "enter", Desc: "run the entry"},
 			{Key: "click", Desc: "run the entry under it"},

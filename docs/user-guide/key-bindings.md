@@ -31,13 +31,19 @@ chords and on keys that print nothing.
 - `alt+l` — launch `shell-command` action in detail mode
 - `alt+i` — in detail mode, open the intent menu: `implement`, `review` and the intents of your config. Choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent:<session>`. A start that fails shows the error
 - `alt+o` — in detail mode, bring the live revier agent that works on the issue to the front: the one that needs you first, then a running one, then an idle one
+- `alt+g` — in detail mode, open the agent menu: every agent linked to the issue. Focus or close a live one, or resume a gone one. A close of an agent that is running or waits for you asks first, then closes it with force
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
 message, and the detail footer reads `launchers off`.
 
-In the intent menu `up` and `down` move, `enter` or a click starts the intent, and
-`esc` or a click outside closes the menu.
+The `agent:<session>` labels are not shown, in Detail or in the issue editor,
+and a save in the editor keeps them. Detail lists each linked agent under
+`Agents` with its status and what it does: `running`, `idle`, `needs you`, or
+`gone` for a labelled agent that no longer runs.
+
+In the intent menu and the agent menu `up` and `down` move, `enter` or a click
+runs the entry, and `esc` or a click outside closes the menu.
 
 A terminal must send `alt` as an escape prefix for the `alt+` keys to arrive.
 Most do; on macOS, turn on "Use Option as Meta key" (Terminal) or set the Option

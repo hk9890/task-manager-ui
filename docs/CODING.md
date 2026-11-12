@@ -49,6 +49,15 @@ mise run ci          # the merge gate; see What the tools enforce
    label `agent.LinkLabel(session)`, written with `UpdateIssueInput.AddLabels`, which keeps every
    other label (`Model.startAgent`, `internal/app/intentmenu.go`).
 
+   - The agents of an issue are `agent.Linked`: its link labels and its comment sessions, merged
+     with the last poll. A link label no live agent holds is `agent.Gone`.
+   - A link label stays in the store and off the screen: draw labels through
+     `agent.VisibleLabels`.
+   - No write replaces the label set of an issue. The issue editor shows the visible labels only
+     and writes what changed as `AddLabels` and `RemoveLabels` (`issueUpdate`,
+     `internal/app/issue_editor.go`); a set would drop every link label, and every label written
+     since the editor opened.
+
    **Shell-launcher security rule:** issue fields are operator-untrusted input, and a
    launcher template MUST NOT place one where it is re-parsed as a command line.
    `launcher.ValidateDefinitions` (`internal/launcher/service.go`) rejects such a

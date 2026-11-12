@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -908,6 +909,36 @@ func TestAddLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
 		}
 		if got := detail.Summary.Labels; !equalStrings(got, []string{"agent:s-1", "alpha"}) && !equalStrings(got, []string{"alpha", "agent:s-1"}) {
 			t.Errorf("%s: labels after the add = %v, want alpha and agent:s-1", b.name, got)
+		}
+	}
+}
+
+// TestRemoveLabelsKeepsTheOtherLabelsConformance pins the label write the
+// issue editor takes: a removed label leaves the set, and a label the write
+// does not name stays, an agent link among them.
+func TestRemoveLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+			Title:  "edited",
+			Labels: []string{"alpha", "beta", "agent:s-1"},
+		})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{
+			AddLabels:    []string{"gamma"},
+			RemoveLabels: []string{"alpha"},
+		}); err != nil {
+			t.Fatalf("%s: UpdateIssue: %v", b.name, err)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		got := slices.Sorted(slices.Values(detail.Summary.Labels))
+		if want := []string{"agent:s-1", "beta", "gamma"}; !equalStrings(got, want) {
+			t.Errorf("%s: labels after the edit = %v, want %v", b.name, got, want)
 		}
 	}
 }

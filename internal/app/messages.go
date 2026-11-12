@@ -38,6 +38,19 @@ type agentStartedMsg struct {
 	linkErr error
 }
 
+// agentResumedMsg carries the result of reopening a gone agent's
+// conversation and bringing it to the front: err when either failed.
+type agentResumedMsg struct {
+	agent agent.Agent
+	err   error
+}
+
+// agentClosedMsg carries the result of closing an agent.
+type agentClosedMsg struct {
+	agent agent.Agent
+	err   error
+}
+
 // storeChangedMsg reports that the active store changed on disk.
 type storeChangedMsg struct{}
 

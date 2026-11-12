@@ -33,6 +33,7 @@ const (
 	ShellActionLaunchShell    = "launch_shell_command"
 	ShellActionLaunchAgent    = "launch_agent"
 	ShellActionFocusAgent     = "focus_agent"
+	ShellActionAgentMenu      = "agent_menu"
 	ShellActionStorePicker    = "open_store_picker"
 	ShellActionOpenSearch     = "open_search"
 	ShellActionOpenConfig     = "open_config"
@@ -114,6 +115,7 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionLaunchShell:    {"alt+l"},
 			ShellActionLaunchAgent:    {"alt+i"},
 			ShellActionFocusAgent:     {"alt+o"},
+			ShellActionAgentMenu:      {"alt+g"},
 			ShellActionStorePicker:    {"alt+s"},
 			ShellActionOpenSearch:     {"alt+f"},
 			ShellActionOpenConfig:     {"alt+c"},
@@ -421,6 +423,7 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionLaunchShell,
 			ShellActionLaunchAgent,
 			ShellActionFocusAgent,
+			ShellActionAgentMenu,
 			ShellActionStorePicker,
 			ShellActionOpenSearch,
 			ShellActionOpenConfig,

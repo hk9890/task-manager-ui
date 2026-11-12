@@ -49,10 +49,15 @@ func (m *Model) openIntentMenu() tea.Cmd {
 		})
 	}
 	menu.entries = append(menu.entries, m.closeMenuAction())
+	m.openCentredMenu(menu)
+	return nil
+}
+
+// openCentredMenu puts menu on screen, in the middle of it.
+func (m *Model) openCentredMenu(menu *selectionMenu) {
 	width, height := selectmenu.Size(menu.state())
 	menu.at.x, menu.at.y = max((m.width-width)/2, 0), max((m.height-height)/2, 0)
 	m.selMenu = menu
-	return nil
 }
 
 // startAgent starts an agent in front on the issue, prompted for intent, and

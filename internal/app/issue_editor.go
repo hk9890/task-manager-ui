@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
@@ -262,7 +263,7 @@ func (m *Model) handleEditorLoaded(msg editorLoadedMsg) tea.Cmd {
 			Type:     issue.Type,
 			Priority: issue.Priority,
 			Assignee: issue.Assignee,
-			Labels:   strings.Join(issue.Labels, ", "),
+			Labels:   strings.Join(agent.VisibleLabels(issue.Labels), ", "),
 			Reason:   msg.issue.CloseReason,
 			Text:     msg.issue.Description,
 		}
@@ -409,13 +410,21 @@ func issueUpdate(before, after issueeditmode.Values) (input domain.UpdateIssueIn
 		changed = true
 	}
 
-	labels := parseCommaList(after.Labels)
-	if !slices.Equal(labelSet(labels), labelSet(parseCommaList(before.Labels))) {
-		if len(labels) == 0 {
-			input.ClearLabels = true
-		} else {
-			input.Labels = labels
+	// The labels are written as what was added and what was removed, never as
+	// a new set: the editor does not show the link labels, and a set would
+	// drop them, and drop a label written since the editor opened.
+	was, is := labelSet(parseCommaList(before.Labels)), labelSet(parseCommaList(after.Labels))
+	for _, label := range is {
+		if !slices.Contains(was, label) {
+			input.AddLabels = append(input.AddLabels, label)
 		}
+	}
+	for _, label := range was {
+		if !slices.Contains(is, label) {
+			input.RemoveLabels = append(input.RemoveLabels, label)
+		}
+	}
+	if len(input.AddLabels) > 0 || len(input.RemoveLabels) > 0 {
 		changed = true
 	}
 	return input, changed, closing

@@ -175,31 +175,19 @@ func (m *Model) SetLiveAgents(agents map[string]agent.Agent) {
 	m.liveAgents = agents
 }
 
-// LinkedAgents is the live agents linked to the issue open in Detail: those
-// whose session wrote one of its comments. The first is the one that needs
-// the operator most: needs you, then running, then idle, then by label.
+// LinkedAgents is the agents linked to the issue open in Detail, by its link
+// labels and its comment sessions (agent.Linked). The first is the one that
+// needs the operator most; the gone ones are last.
 func (m *Model) LinkedAgents() []agent.Agent {
-	return linkedAgents(m.liveAgents, m.Detail.Comments)
+	return linkedAgents(m.liveAgents, m.Detail)
 }
 
-func linkedAgents(live map[string]agent.Agent, comments []domain.IssueComment) []agent.Agent {
-	var linked []agent.Agent
-	seen := make(map[string]bool)
-	for _, comment := range comments {
-		agent, ok := live[comment.Session]
-		if comment.Session == "" || !ok || seen[comment.Session] {
-			continue
-		}
-		seen[comment.Session] = true
-		linked = append(linked, agent)
+func linkedAgents(live map[string]agent.Agent, d domain.IssueDetail) []agent.Agent {
+	sessions := make([]string, 0, len(d.Comments))
+	for _, comment := range d.Comments {
+		sessions = append(sessions, comment.Session)
 	}
-	slices.SortFunc(linked, func(a, b agent.Agent) int {
-		if rank := agent.Rank(a.Status) - agent.Rank(b.Status); rank != 0 {
-			return rank
-		}
-		return strings.Compare(a.Label, b.Label)
-	})
-	return linked
+	return agent.Linked(live, d.Summary.Labels, sessions)
 }
 
 // SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation
@@ -370,7 +358,7 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 			LaunchAgent:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchAgent),
 			FocusAgent:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionFocusAgent),
 		},
-		Agents: linkedAgents(m.liveAgents, d.Comments),
+		Agents: linkedAgents(m.liveAgents, d),
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),

@@ -63,8 +63,8 @@ type State struct {
 	// pointer is elsewhere. Its reference row draws the hover band, and its
 	// button is lit.
 	Hover *Hit
-	// Agents is the live agents linked to the issue, the one the open button
-	// acts on first. The Metadata pane lists them.
+	// Agents is the agents linked to the issue; the open button acts on the
+	// first live one. The Metadata pane lists them.
 	Agents []agent.Agent
 }
 
@@ -416,7 +416,7 @@ type ContentPaneState struct {
 	CommentIndex    int
 	// Hover is the button under the pointer.
 	Hover Button
-	// Agents is the live agents linked to the issue: with one, the ID line
+	// Agents is the agents linked to the issue: with a live one, the ID line
 	// draws the open button.
 	Agents []agent.Agent
 }
@@ -480,7 +480,7 @@ type MetadataPaneState struct {
 	// Skeleton renders the Counts group as placeholder glyphs instead of real
 	// numeric values, matching the Content pane's loading-state treatment.
 	Skeleton bool
-	// Agents is the live agents linked to the issue, drawn as a group of
+	// Agents is the agents linked to the issue, drawn as a group of
 	// their own right after Core, so a short pane keeps it.
 	Agents []agent.Agent
 }
@@ -690,7 +690,7 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 	return out
 }
 
-// placeIDLineButtons puts open (only with a linked agent), agent and edit at
+// placeIDLineButtons puts open (only with a live linked agent), agent and edit at
 // the right end of the ID line. The ID is not cut to make room for them.
 //
 // The width alone picks the set: open, agent and edit; else open and edit;
@@ -708,7 +708,7 @@ func placeIDLineButtons(idLine string, width int, pane ContentPaneState, keys Bu
 		if width-buttonsWidth(set, keys) < textRoom {
 			continue
 		}
-		if set[0] == ButtonFocusAgent && len(pane.Agents) == 0 {
+		if _, live := agent.FirstLive(pane.Agents); set[0] == ButtonFocusAgent && !live {
 			set = set[1:]
 		}
 		drawn := make([]string, len(set))

@@ -366,3 +366,31 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 		t.Errorf("a short pane cuts the Agents group:\n%s", view)
 	}
 }
+
+// A field of the Agents group says what the agent does when the host says it,
+// and a gone agent says gone. The link labels stay off the Labels group.
+func TestTheAgentsGroupSaysTheActivityAndHidesTheLinkLabels(t *testing.T) {
+	t.Parallel()
+
+	state := MetadataPaneState{
+		Detail: domain.IssueDetail{Summary: domain.IssueSummary{
+			ID: "tm-1", Type: "task", Status: "open",
+			Labels: []string{"backend", "agent:s-1", "agent:s-2"},
+		}},
+		Width:  metadataRailWidth,
+		Height: 40,
+		Agents: []agent.Agent{
+			{Label: "Tab 1", Status: agent.Running, Session: "s-1", Activity: "tests"},
+			{Label: "Session s-2", Status: agent.Gone, Session: "s-2"},
+		},
+	}
+	view := testui.Downsample(RenderMetadataPane(state))
+	for _, want := range []string{"Tab 1      : running · tests", "Session s-2: gone", "• backend"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the pane does not draw %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "agent:") {
+		t.Errorf("the pane draws a link label:\n%s", view)
+	}
+}

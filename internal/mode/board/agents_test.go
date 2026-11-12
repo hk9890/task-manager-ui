@@ -97,6 +97,28 @@ func TestLiveAgentsMarkOnlyTheInProgressCardsTheyCommentedOn(t *testing.T) {
 	}
 }
 
+// A live agent that the link label of an issue names marks its card in any
+// column, In Progress or not; a label whose agent is not live draws no mark.
+func TestALinkLabelMarksTheCardInAnyColumn(t *testing.T) {
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
+	m.SetSize(200, 30)
+	feedDashboardData(m, repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{Ready: []domain.IssueSummary{
+			{ID: "TM-1", Title: "Started", Type: "task", Status: "open", Priority: 2, Labels: []string{"backend", agent.LinkLabel("s-1")}},
+			{ID: "TM-2", Title: "Ended", Type: "task", Status: "open", Priority: 2, Labels: []string{agent.LinkLabel("s-gone")}},
+		}},
+	})
+	m.SetLiveAgents(map[string]agent.Status{"s-1": agent.NeedsYou})
+
+	mark := styles.Glyphs.Agent
+	if got := cardMeta(t, m, "TM-1"); got != "P2 OPN "+mark+" TM-1" {
+		t.Errorf("card TM-1 reads %q, want the mark", got)
+	}
+	if got := cardMeta(t, m, "TM-2"); got != "P2 OPN TM-2" {
+		t.Errorf("card TM-2 reads %q, want no mark", got)
+	}
+}
+
 // A poll that finds no agent clears the marks, and the next one sets them
 // again. A reload keeps the live agents and links them to the sessions it
 // read.

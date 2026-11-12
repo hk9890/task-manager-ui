@@ -7,6 +7,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 )
 
 // Status is how much an agent needs the operator. A host may pass a status it
@@ -96,4 +98,78 @@ const linkLabelPrefix = "agent:"
 // LinkLabel is the issue label that links the agent on session to the issue.
 func LinkLabel(session string) string {
 	return linkLabelPrefix + session
+}
+
+// IsLinkLabel reports whether label links an agent's session to its issue.
+// A link label is kept in the store and hidden from the operator.
+func IsLinkLabel(label string) bool {
+	return strings.HasPrefix(label, linkLabelPrefix)
+}
+
+// VisibleLabels is labels without the link labels: the ones the operator
+// reads and edits.
+func VisibleLabels(labels []string) []string {
+	return slices.DeleteFunc(slices.Clone(labels), IsLinkLabel)
+}
+
+// LinkSessions is the sessions the link labels among labels name.
+func LinkSessions(labels []string) []string {
+	var sessions []string
+	for _, label := range labels {
+		if session, ok := strings.CutPrefix(label, linkLabelPrefix); ok && session != "" {
+			sessions = append(sessions, session)
+		}
+	}
+	return sessions
+}
+
+// FirstLive is the first agent of agents that is not Gone.
+func FirstLive(agents []Agent) (Agent, bool) {
+	for _, a := range agents {
+		if a.Status != Gone {
+			return a, true
+		}
+	}
+	return Agent{}, false
+}
+
+// goneLabelLength is how much of its session the label of a gone agent shows.
+const goneLabelLength = 8
+
+// Linked is the agents linked to an issue: those whose session a link label
+// among labels names, and those whose session wrote one of its comments,
+// merged by session with the live agents of the project. A session a link
+// label names that no live agent holds is Gone. A comment session no live
+// agent holds is left out: every past session that commented would show. The
+// one that needs the operator most is first: by Rank, then by Label.
+func Linked(live map[string]Agent, labels, commentSessions []string) []Agent {
+	var linked []Agent
+	seen := make(map[string]bool)
+	add := func(session string, keepGone bool) {
+		if session == "" || seen[session] {
+			return
+		}
+		a, ok := live[session]
+		if !ok && !keepGone {
+			return
+		}
+		if !ok {
+			a = Agent{Session: session, Label: "Session " + session[:min(len(session), goneLabelLength)], Status: Gone}
+		}
+		seen[session] = true
+		linked = append(linked, a)
+	}
+	for _, session := range LinkSessions(labels) {
+		add(session, true)
+	}
+	for _, session := range commentSessions {
+		add(session, false)
+	}
+	slices.SortFunc(linked, func(a, b Agent) int {
+		if rank := Rank(a.Status) - Rank(b.Status); rank != 0 {
+			return rank
+		}
+		return strings.Compare(a.Label, b.Label)
+	})
+	return linked
 }

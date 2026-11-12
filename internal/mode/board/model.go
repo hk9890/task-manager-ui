@@ -175,12 +175,10 @@ type Model struct {
 
 	// inProgressSessions is the comment sessions of each In Progress issue,
 	// from the last dashboard that loaded. liveAgents is the status of each
-	// live agent by its session, from the shell's last poll. agentStatus is
-	// what the two give the In Progress column: the status of the agent that
-	// needs the operator most, by issue ID.
+	// live agent by its session, from the shell's last poll. With the link
+	// labels of each card they give the agent mark (columnAgents).
 	inProgressSessions map[string][]string
 	liveAgents         map[string]agent.Status
-	agentStatus        map[string]agent.Status
 }
 
 // NewModel creates a board mode controller.
@@ -346,10 +344,6 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 	if col.err != nil {
 		errStr = col.err.Error()
 	}
-	var agents map[string]agent.Status
-	if colIdx == inProgressColumnIndex {
-		agents = m.agentStatus
-	}
 	return uiboard.Column{
 		Title:        col.title,
 		Rows:         col.shown,
@@ -361,37 +355,45 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 		Loading:      col.loading,
 		Error:        errStr,
 		AgeMarkers:   colIdx != doneColumnIndex,
-		Agents:       agents,
+		Agents:       m.columnAgents(colIdx),
 	}
 }
 
 // SetLiveAgents replaces the live agents of the store's project: the
-// status of each, by the session it holds. An In Progress card whose issue
-// one of them commented on draws the agent mark.
+// status of each, by the session it holds. A card whose issue links one of
+// them draws the agent mark.
 func (m *Model) SetLiveAgents(statusBySession map[string]agent.Status) {
 	m.liveAgents = statusBySession
-	m.linkAgents()
 }
 
-// linkAgents gives each In Progress issue the status of the live agent that
-// needs the operator most among those that commented on it.
-func (m *Model) linkAgents() {
-	m.agentStatus = nil
-	for id, sessions := range m.inProgressSessions {
+// columnAgents gives each card of column colIdx that links a live agent the
+// status of the one that needs the operator most: the agents its link labels
+// name, and in the In Progress column those that commented on it.
+func (m *Model) columnAgents(colIdx int) map[string]agent.Status {
+	if len(m.liveAgents) == 0 {
+		return nil
+	}
+	var statuses map[string]agent.Status
+	for _, issue := range m.columns[colIdx].shown {
+		sessions := agent.LinkSessions(issue.Labels)
+		if colIdx == inProgressColumnIndex {
+			sessions = append(sessions, m.inProgressSessions[issue.ID]...)
+		}
 		for _, session := range sessions {
 			status, live := m.liveAgents[session]
 			if !live {
 				continue
 			}
-			if current, linked := m.agentStatus[id]; linked && agent.Rank(current) <= agent.Rank(status) {
+			if current, linked := statuses[issue.ID]; linked && agent.Rank(current) <= agent.Rank(status) {
 				continue
 			}
-			if m.agentStatus == nil {
-				m.agentStatus = map[string]agent.Status{}
+			if statuses == nil {
+				statuses = map[string]agent.Status{}
 			}
-			m.agentStatus[id] = status
+			statuses[issue.ID] = status
 		}
 	}
+	return statuses
 }
 
 // SetSize updates render dimensions.
@@ -569,7 +571,6 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 	m.doneClosedTotal = data.ClosedTotal
 	m.inProgressSessions = data.InProgressSessions
-	m.linkAgents()
 
 	m.settleAfterRefreshLoad(anchor)
 	// Composition complete — clear the in-flight flag so future reload requests
