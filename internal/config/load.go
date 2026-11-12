@@ -219,12 +219,21 @@ func validateOverride(override overrideModel) error {
 	return nil
 }
 
+// removedAgentAction is the action of the built-in agent launcher, which the
+// agent intents replaced. An override of it that only set some fields kept
+// the built-in command and has none now.
+const removedAgentAction = "agent"
+
 func validateResolved(cfg Model) (ResolvedKeyBindings, error) {
 	seen := make(map[string]struct{}, len(cfg.Launcher.Definitions))
 	for i, definition := range cfg.Launcher.Definitions {
 		action := strings.TrimSpace(definition.Action)
 		if action == "" {
 			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].action is required", i)
+		}
+		if strings.TrimSpace(definition.Command) == "" && action == removedAgentAction {
+			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].command is required for action %q: "+
+				"the built-in agent launcher was removed; delete this override and set the agent prompts in agent.intents", i, action)
 		}
 		if strings.TrimSpace(definition.Command) == "" {
 			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].command is required for action %q", i, action)

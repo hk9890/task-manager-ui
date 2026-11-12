@@ -95,10 +95,12 @@ func TestParseAgentsRefusesOutputThatIsNotTheList(t *testing.T) {
 	}
 }
 
-func TestPanelOfIsTheLastSegmentOfTheAddress(t *testing.T) {
-	for addr, want := range map[string]string{"demo:home:7": "7", "demo:7": "7", "7": "7"} {
-		if got := panelOf(addr); got != want {
-			t.Errorf("panelOf(%q) = %q, want %q", addr, got, want)
+// A tab outside the home window names its target: each target numbers its
+// panels on its own.
+func TestLabelOfNamesTheTargetOutsideTheHomeWindow(t *testing.T) {
+	for addr, want := range map[string]string{"demo:home:7": "Tab 7", "demo:7": "Tab 7", "demo:work:7": "Tab work/7"} {
+		if got := labelOf(addr); got != want {
+			t.Errorf("labelOf(%q) = %q, want %q", addr, got, want)
 		}
 	}
 }

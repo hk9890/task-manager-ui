@@ -46,12 +46,14 @@ type agentStartedMsg agentStart
 type agentAskStartedMsg agentStart
 
 // agentAnsweredMsg carries the last thing an agent asked in the background
-// said once its turn ended: err when the wait or the read failed.
+// said once its turn ended, and the status it ended on: err when the wait or
+// the read failed. An agent that waits for the operator is not read.
 type agentAnsweredMsg struct {
-	issueID string
-	agent   agent.Agent
-	reply   string
-	err     error
+	issueID   string
+	agent     agent.Agent
+	stoppedOn agent.Status
+	reply     string
+	err       error
 }
 
 // agentResumedMsg carries the result of reopening a gone agent's

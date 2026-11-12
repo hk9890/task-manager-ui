@@ -2,6 +2,7 @@ package agent
 
 import (
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -19,7 +20,7 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 		"s-comment": {Ref: "p:t:2", Session: "s-comment", Label: "Tab 2", Status: Running},
 		"s-other":   {Ref: "p:t:3", Session: "s-other", Label: "Tab 3", Status: NeedsYou},
 	}
-	labels := []string{"backend", LinkLabel("s-label"), LinkLabel("0123456789abcdef")}
+	labels := []string{"backend", "agent:s-label", "agent:0123456789abcdef"}
 	comments := []string{"s-comment", "s-label", "s-old", ""}
 
 	got := Linked(live, labels, comments)
@@ -30,6 +31,34 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("Linked = %+v, want %+v", got, want)
+	}
+}
+
+// A nil live list is not known, so a link label no live agent holds is not
+// Gone; a known list with no agent makes it Gone.
+func TestLinkedReportsNoGoneAgentWhileTheLiveListIsNotKnown(t *testing.T) {
+	labels := []string{"agent:s-1"}
+	if got := Linked(nil, labels, nil); len(got) != 0 {
+		t.Fatalf("Linked(nil) = %+v, want no agent", got)
+	}
+	got := Linked(map[string]Agent{}, labels, nil)
+	if len(got) != 1 || got[0].Status != Gone {
+		t.Fatalf("Linked(empty) = %+v, want s-1 gone", got)
+	}
+}
+
+// A session the store would refuse in a label makes no link label.
+func TestLinkLabelRefusesASessionTheStoreRefuses(t *testing.T) {
+	if got, err := LinkLabel("0f3c-9a.b_c/d:e"); err != nil || got != "agent:0f3c-9a.b_c/d:e" {
+		t.Fatalf("LinkLabel = %q, %v; want agent:0f3c-9a.b_c/d:e", got, err)
+	}
+	for _, session := range []string{"", "Upper", "with space", strings.Repeat("a", 59)} {
+		if got, err := LinkLabel(session); err == nil {
+			t.Errorf("LinkLabel(%q) = %q, want an error", session, got)
+		}
+	}
+	if _, err := LinkLabel(strings.Repeat("a", 58)); err != nil {
+		t.Errorf("LinkLabel of a 64-character label = %v, want nil", err)
 	}
 }
 

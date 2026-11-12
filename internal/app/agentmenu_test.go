@@ -5,6 +5,7 @@ package app
 // and resumes them.
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -19,7 +20,7 @@ import (
 // again, as a start on a store that is not watched does.
 func withLinkLabel(t *testing.T, m Model, session string) Model {
 	t.Helper()
-	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{agent.LinkLabel(session)}}); err != nil {
+	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent:" + session}}); err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
 	return pressKey(t, m, "alt+r")
@@ -81,6 +82,24 @@ func TestTheAgentMenuResumesAGoneAgent(t *testing.T) {
 	}
 	if !strings.Contains(m.toast.View(), "Resumed Session s-gone-0") {
 		t.Errorf("toast = %q, want the resume reported", m.toast.View())
+	}
+}
+
+// After a failed poll the live agents are not known: a linked session is not
+// drawn gone and the agent menu offers no resume.
+func TestAFailedPollReportsNoLinkedAgentGone(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	m = withLinkLabel(t, m, "s-gone-0123")
+	testui.AssertContainsAll(t, plainShell(m), "Session s-gone-0: gone")
+	client.ListErr = errors.New("revier is down")
+	m = send(t, m, agentPollTickMsg{})
+
+	if strings.Contains(plainShell(m), "gone") {
+		t.Errorf("Detail draws a gone agent after a failed poll:\n%s", plainShell(m))
+	}
+	m = pressKey(t, m, "alt+g")
+	if strings.Contains(plainShell(m), "Resume") || !strings.Contains(m.toast.View(), "No agent on this issue") {
+		t.Errorf("the agent menu after a failed poll: toast %q\n%s", m.toast.View(), plainShell(m))
 	}
 }
 

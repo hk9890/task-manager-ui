@@ -7,6 +7,8 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 )
@@ -84,8 +86,9 @@ type Host interface {
 	// Resume opens an agent in the project at root on the conversation
 	// session, without the focus, and returns once it can be focused.
 	Resume(ctx context.Context, root, session string) (Agent, error)
-	// Wait returns once the agent's current turn has ended.
-	Wait(ctx context.Context, a Agent) error
+	// Wait returns once the agent's current turn has ended, with the status
+	// it ended on: Idle, or NeedsYou when the agent waits for the operator.
+	Wait(ctx context.Context, a Agent) (Status, error)
 	// Read returns the last thing the agent said.
 	Read(ctx context.Context, a Agent) (string, error)
 	// Close ends the agent. Without force a host may refuse an agent that is
@@ -97,9 +100,22 @@ type Host interface {
 // issue it was started on.
 const linkLabelPrefix = "agent:"
 
+// linkSessionPattern and maxLabelLength are what the store takes of a label
+// after linkLabelPrefix: the rest of its grammar, ^[a-z0-9][a-z0-9:._/-]*$,
+// and its length.
+var linkSessionPattern = regexp.MustCompile(`^[a-z0-9:._/-]+$`)
+
+const maxLabelLength = 64
+
 // LinkLabel is the issue label that links the agent on session to the issue.
-func LinkLabel(session string) string {
-	return linkLabelPrefix + session
+// It fails for a session the store would refuse in a label.
+func LinkLabel(session string) (string, error) {
+	label := linkLabelPrefix + session
+	if !linkSessionPattern.MatchString(session) || len(label) > maxLabelLength {
+		return "", fmt.Errorf("the agent session %q makes no valid issue label "+
+			"(at most %d characters of a-z, 0-9 and :._/-)", session, maxLabelLength-len(linkLabelPrefix))
+	}
+	return label, nil
 }
 
 // IsLinkLabel reports whether label links an agent's session to its issue.
@@ -140,11 +156,15 @@ const goneLabelLength = 8
 
 // Linked is the agents linked to an issue: those whose session a link label
 // among labels names, and those whose session wrote one of its comments,
-// merged by session with the live agents of the project. A session a link
-// label names that no live agent holds is Gone. A comment session no live
-// agent holds is left out: every past session that commented would show. The
-// one that needs the operator most is first: by Rank, then by Label.
+// merged by session with the live agents of the project. live is nil when
+// the live agents are not known: no poll answered yet, or the last one
+// failed. A session a link label names that no live agent holds is Gone, but
+// only when live is known: an unknown list must not report a live agent gone.
+// A comment session no live agent holds is left out: every past session that
+// commented would show. The one that needs the operator most is first: by
+// Rank, then by Label.
 func Linked(live map[string]Agent, labels, commentSessions []string) []Agent {
+	known := live != nil
 	var linked []Agent
 	seen := make(map[string]bool)
 	add := func(session string, keepGone bool) {
@@ -162,7 +182,7 @@ func Linked(live map[string]Agent, labels, commentSessions []string) []Agent {
 		linked = append(linked, a)
 	}
 	for _, session := range LinkSessions(labels) {
-		add(session, true)
+		add(session, known)
 	}
 	for _, session := range commentSessions {
 		add(session, false)

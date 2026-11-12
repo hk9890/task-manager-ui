@@ -179,9 +179,10 @@ does not list — and what it does, when revier says. On the board, a card of an
 column that a live agent is linked to carries the agent mark after its status,
 green while the agent runs, grey while it is idle and orange while it needs you.
 
-When revier is not on the `PATH`, or the project is no revier project, no agent
-is live: every labelled agent shows as `gone` and no card carries the mark. The
-intent menu and Ask still open, and a start fails with an error toast.
+When revier is not on the `PATH`, or the project is no revier project, the live
+agents are not known: no labelled agent is listed, none is offered for resume,
+and no card carries the mark. The intent menu and Ask still open, and a start
+fails with an error toast.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
 

@@ -91,37 +91,49 @@ func startAndLink(host agent.Host, repo repository.Repository, issueID string, s
 		}
 		return result
 	}
+	label, err := agent.LinkLabel(started.Session)
+	if err != nil {
+		result.linkErr = err
+		return result
+	}
 	result.linkErr = repo.UpdateIssue(context.Background(), issueID, domain.UpdateIssueInput{
-		AddLabels: []string{agent.LinkLabel(started.Session)},
+		AddLabels: []string{label},
 	})
 	return result
 }
 
-// handleAgentStarted reports the start to the operator and reloads the issue
-// the label was written to.
+// handleAgentStarted reports the start to the operator in one toast, a
+// failed start and a failed link both, and reloads the issue the label was
+// written to.
 func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 	issueID := displaytext.OneLine(msg.issueID)
 	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not start an agent on %s: %v", issueID, msg.err), toaster.StyleError)
 	}
 	label := displaytext.OneLine(msg.agent.Label)
-	if msg.linkErr != nil {
+	switch {
+	case msg.linkErr != nil && msg.err != nil:
+		return m.showToast(fmt.Sprintf("Started %s on %s, but: %v; and could not link it: %v", label, issueID, msg.err, msg.linkErr), toaster.StyleError)
+	case msg.linkErr != nil:
 		return m.showToast(fmt.Sprintf("Started %s, but could not link it to %s: %v", label, issueID, msg.linkErr), toaster.StyleError)
+	case msg.err != nil:
+		return batchCmds(m.reloadAfterLink(msg.issueID), m.showToast(fmt.Sprintf("Started %s on %s, but: %v", label, issueID, msg.err), toaster.StyleError))
+	default:
+		return batchCmds(m.reloadAfterLink(msg.issueID), m.showToast(fmt.Sprintf("Started %s on %s", label, issueID), toaster.StyleSuccess))
 	}
-	report := m.showToast(fmt.Sprintf("Started %s on %s", label, issueID), toaster.StyleSuccess)
-	if msg.err != nil {
-		report = m.showToast(fmt.Sprintf("Started %s on %s, but: %v", label, issueID, msg.err), toaster.StyleError)
-	}
-	return batchCmds(m.reloadAfterLink(msg.issueID), report)
 }
 
-// reloadAfterLink reloads the issue a link label was written to, and the
-// browse surfaces, on a store that is not watched: on a watched one the
-// watch reloads after a write.
+// reloadAfterLink reloads the browse surfaces, and Detail when it shows the
+// issue a link label was written to, on a store that is not watched: on a
+// watched one the watch reloads after a write.
 func (m *Model) reloadAfterLink(issueID string) tea.Cmd {
 	if m.storeWatched() {
 		return nil
 	}
 	m.markBrowseSurfacesDirty()
-	return batchCmds(m.reloadDetailAfterMutationCmd(issueID), m.maybeAutoRefreshActiveSurfaceCmd())
+	reload := m.maybeAutoRefreshActiveSurfaceCmd()
+	if m.detail.Detail.Summary.ID == issueID {
+		reload = batchCmds(reload, m.reloadDetailAfterMutationCmd(issueID))
+	}
+	return reload
 }

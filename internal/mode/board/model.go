@@ -176,9 +176,11 @@ type Model struct {
 	// inProgressSessions is the comment sessions of each In Progress issue,
 	// from the last dashboard that loaded. liveAgents is the status of each
 	// live agent by its session, from the shell's last poll. With the link
-	// labels of each card they give the agent mark (columnAgents).
+	// labels of each card they give agentMarks: the agent mark of each card,
+	// by column, worked out when one of them changes (markAgents).
 	inProgressSessions map[string][]string
 	liveAgents         map[string]agent.Status
+	agentMarks         []map[string]agent.Status
 }
 
 // NewModel creates a board mode controller.
@@ -355,7 +357,7 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 		Loading:      col.loading,
 		Error:        errStr,
 		AgeMarkers:   colIdx != doneColumnIndex,
-		Agents:       m.columnAgents(colIdx),
+		Agents:       m.agentMarksOf(colIdx),
 	}
 }
 
@@ -364,17 +366,34 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 // them draws the agent mark.
 func (m *Model) SetLiveAgents(statusBySession map[string]agent.Status) {
 	m.liveAgents = statusBySession
+	m.markAgents()
+}
+
+func (m *Model) agentMarksOf(colIdx int) map[string]agent.Status {
+	if colIdx >= len(m.agentMarks) {
+		return nil
+	}
+	return m.agentMarks[colIdx]
+}
+
+// markAgents works out the agent mark of every loaded card, by column.
+func (m *Model) markAgents() {
+	m.agentMarks = nil
+	if len(m.liveAgents) == 0 {
+		return
+	}
+	m.agentMarks = make([]map[string]agent.Status, len(m.columns))
+	for colIdx := range m.columns {
+		m.agentMarks[colIdx] = m.columnAgents(colIdx)
+	}
 }
 
 // columnAgents gives each card of column colIdx that links a live agent the
 // status of the one that needs the operator most: the agents its link labels
 // name, and in the In Progress column those that commented on it.
 func (m *Model) columnAgents(colIdx int) map[string]agent.Status {
-	if len(m.liveAgents) == 0 {
-		return nil
-	}
 	var statuses map[string]agent.Status
-	for _, issue := range m.columns[colIdx].shown {
+	for _, issue := range m.columns[colIdx].issues {
 		sessions := agent.LinkSessions(issue.Labels)
 		if colIdx == inProgressColumnIndex {
 			sessions = append(sessions, m.inProgressSessions[issue.ID]...)
@@ -571,6 +590,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 	m.doneClosedTotal = data.ClosedTotal
 	m.inProgressSessions = data.InProgressSessions
+	m.markAgents()
 
 	m.settleAfterRefreshLoad(anchor)
 	// Composition complete — clear the in-flight flag so future reload requests
@@ -626,6 +646,9 @@ func (m *Model) filterColumns() {
 		m.columns[i].shown = m.query.Filter(m.columns[i].issues)
 	}
 }
+
+// HasQuery reports whether the query holds text.
+func (m *Model) HasQuery() bool { return !m.query.Empty() }
 
 // ClearQuery empties the query, which the shell asks for on Escape. cleared is
 // false when there was no text, and Escape is then the shell's.
@@ -1080,6 +1103,7 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 			exact:  cols.Done.TotalIsExact,
 		}
 		m.filterColumns()
+		m.markAgents()
 	}
 
 	// The merged slice may have shifted the issue under the cursor (dedup/replace

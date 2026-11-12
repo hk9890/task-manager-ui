@@ -46,7 +46,9 @@ const (
 )
 
 // Host is the agent.Host that runs revier. It remembers the revier project
-// of each root it resolved, so a poll runs one revier call, not two.
+// of each root it resolved, so a poll runs one revier call, not two. A failed
+// call on a project forgets it, so a project renamed or removed in revier is
+// resolved again.
 type Host struct {
 	// pause is the time between two attempts of a retried call.
 	pause time.Duration
@@ -67,18 +69,19 @@ func NewHost() *Host {
 // revier has no command that prints the session of a new agent, hence the
 // list. A tab whose session Start could not read is closed again: nothing
 // could reach it. A failed prompt or focus returns the agent with the error.
-func (h *Host) Start(ctx context.Context, spec agent.Spec) (agent.Agent, error) {
+func (h *Host) Start(ctx context.Context, spec agent.Spec) (started agent.Agent, err error) {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	project, err := h.project(ctx, spec.Root)
 	if err != nil {
 		return agent.Agent{}, err
 	}
+	defer h.forgetOnError(spec.Root, &err)
 	addr, err := newAgent(ctx, project)
 	if err != nil {
 		return agent.Agent{}, err
 	}
-	started, err := h.awaitStarted(ctx, project, addr)
+	started, err = h.awaitStarted(ctx, project, addr)
 	if err != nil {
 		closeOrphan(ctx, addr)
 		return agent.Agent{}, err
@@ -99,11 +102,12 @@ func (h *Host) Start(ctx context.Context, spec agent.Spec) (agent.Agent, error) 
 
 // List returns the agents of the revier project at root that run on this
 // machine.
-func (h *Host) List(ctx context.Context, root string) ([]agent.Agent, error) {
+func (h *Host) List(ctx context.Context, root string) (_ []agent.Agent, err error) {
 	project, err := h.project(ctx, root)
 	if err != nil {
 		return nil, err
 	}
+	defer h.forgetOnError(root, &err)
 	return listAgents(ctx, project)
 }
 
@@ -115,28 +119,34 @@ func (h *Host) Focus(ctx context.Context, a agent.Agent) error {
 
 // Resume opens an agent tab on the conversation session, without the focus,
 // and returns once its harness is idle: revier focuses no agent before that.
-func (h *Host) Resume(ctx context.Context, root, session string) (agent.Agent, error) {
+// A tab whose harness does not come up is closed again, as Start does.
+func (h *Host) Resume(ctx context.Context, root, session string) (_ agent.Agent, err error) {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
 	project, err := h.project(ctx, root)
 	if err != nil {
 		return agent.Agent{}, err
 	}
+	defer h.forgetOnError(root, &err)
 	addr, err := newAgent(ctx, project, "--resume", session)
 	if err != nil {
 		return agent.Agent{}, err
 	}
 	if err := h.awaitHarness(ctx, addr); err != nil {
+		closeOrphan(ctx, addr)
 		return agent.Agent{}, err
 	}
-	return agent.Agent{Ref: addr, Session: session, Label: label(panelOf(addr)), Status: agent.Idle}, nil
+	return agent.Agent{Ref: addr, Session: session, Label: labelOf(addr), Status: agent.Idle}, nil
 }
 
-// Wait returns once the agent is idle or waits for the operator, or with an
-// error after turnWait seconds.
-func (h *Host) Wait(ctx context.Context, a agent.Agent) error {
-	_, err := wait(ctx, a.Ref, "stopped", turnWait)
-	return err
+// Wait returns the status the agent stopped on: idle, or waiting for the
+// operator. It fails after turnWait seconds.
+func (h *Host) Wait(ctx context.Context, a agent.Agent) (agent.Status, error) {
+	out, err := wait(ctx, a.Ref, "stopped", turnWait)
+	if err != nil {
+		return "", err
+	}
+	return status(out), nil
 }
 
 // Read returns the last thing the agent said.
@@ -177,6 +187,16 @@ func (h *Host) project(ctx context.Context, root string) (string, error) {
 	h.projects[root] = project
 	h.mu.Unlock()
 	return project, nil
+}
+
+// forgetOnError forgets the project of root when *err is set.
+func (h *Host) forgetOnError(root string, err *error) {
+	if *err == nil {
+		return
+	}
+	h.mu.Lock()
+	delete(h.projects, root)
+	h.mu.Unlock()
 }
 
 // awaitStarted waits for the harness of the new agent at addr, then for its
@@ -364,7 +384,7 @@ func parseAgents(out []byte) ([]agent.Agent, error) {
 			agents = append(agents, agent.Agent{
 				Ref:      address(p.Project.Name, a.Target, a.Panel),
 				Session:  a.State.Session,
-				Label:    label(a.Panel),
+				Label:    label(a.Target, a.Panel),
 				Status:   status(a.State.Status),
 				Activity: a.State.Activity,
 			})
@@ -382,14 +402,28 @@ func address(project, target, panel string) string {
 	return project + ":" + target + ":" + panel
 }
 
-// panelOf returns the panel of an agent address, its last segment.
-func panelOf(addr string) string {
-	return addr[strings.LastIndex(addr, ":")+1:]
+// labelOf returns the label of the agent at address addr.
+func labelOf(addr string) string {
+	segments := strings.Split(addr, ":")
+	panel, target := segments[len(segments)-1], ""
+	if len(segments) > 2 {
+		target = segments[len(segments)-2]
+	}
+	return label(target, panel)
 }
 
-// label is what the operator calls the agent in a panel: the tab it is in.
-func label(panel string) string {
-	return "Tab " + panel
+// homeTarget is the target of the project's home window, where revier agent
+// new opens a tab.
+const homeTarget = "home"
+
+// label is what the operator calls the agent in a panel of target: the tab
+// it is in. Each target numbers its panels on its own, so a tab outside the
+// home window names its target too.
+func label(target, panel string) string {
+	if target == "" || target == homeTarget {
+		return "Tab " + panel
+	}
+	return "Tab " + target + "/" + panel
 }
 
 // status maps a revier status onto agent.Status. One revier does not document

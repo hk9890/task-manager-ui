@@ -86,6 +86,10 @@ type Browse interface {
 	// empty, and Escape then does what it does without a query.
 	ClearQuery() (cleared bool, cmd tea.Cmd)
 
+	// HasQuery reports whether the tab's filter query holds text: the
+	// operator is typing into it.
+	HasQuery() bool
+
 	// TakesKey reports whether the tab takes this key for itself before any
 	// binding. The shell asks the tab on screen, and runs no action on a key
 	// it takes.

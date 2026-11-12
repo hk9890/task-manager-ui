@@ -395,6 +395,9 @@ func (m *Model) apply(msg loadedMsg) tea.Cmd {
 	return tea.Batch(m.selectionChangedCmd(), mode.RequestOpenDetailCmd(mode.Search, selection))
 }
 
+// HasQuery reports whether the query holds text.
+func (m *Model) HasQuery() bool { return !m.query.Empty() }
+
 // ClearQuery empties the query and searches again, which the shell asks for
 // on Escape. cleared is false when there was no text, and Escape is then the
 // shell's.

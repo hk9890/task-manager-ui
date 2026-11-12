@@ -53,6 +53,9 @@ The model is intentionally small and only covers app-shell concerns:
       leaves the field nil in the override struct, so the built-in value is
       preserved; writing `args: []` produces a non-nil empty slice that
       **replaces** the built-in args (use this to explicitly clear defaults)
+  - The built-in `agent` launcher was removed: agents start from `agent.intents`. An override of
+    action `agent` without a `command` fails startup and `--check-config` with an error that says
+    so; delete the override and move its prompt to an intent.
   - Only the three built-in action names can be launched — there is no keybinding
     action for any other. Startup warns by name for a definition nothing can
     start; override a built-in instead of appending a new action.

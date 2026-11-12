@@ -31,6 +31,8 @@ type FakeAgentHost struct {
 	FocusErr  error
 	Resumed   agent.Agent
 	ResumeErr error
+	// StoppedOn is the status Wait returns; Idle when it is empty.
+	StoppedOn agent.Status
 	WaitErr   error
 	Said      string
 	ReadErr   error
@@ -84,10 +86,16 @@ func (f *FakeAgentHost) Resume(_ context.Context, _, session string) (agent.Agen
 	return f.Resumed, nil
 }
 
-// Wait records the call and returns WaitErr.
-func (f *FakeAgentHost) Wait(_ context.Context, a agent.Agent) error {
+// Wait records the call and returns StoppedOn, or WaitErr.
+func (f *FakeAgentHost) Wait(_ context.Context, a agent.Agent) (agent.Status, error) {
 	f.record(AgentHostCall{Method: "Wait", Arg: a.Ref})
-	return f.WaitErr
+	if f.WaitErr != nil {
+		return "", f.WaitErr
+	}
+	if f.StoppedOn == "" {
+		return agent.Idle, nil
+	}
+	return f.StoppedOn, nil
 }
 
 // Read records the call and returns Said, or ReadErr.

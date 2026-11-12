@@ -112,14 +112,18 @@ func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
 	if msg.linkErr == nil {
 		reload = m.reloadAfterLink(msg.issueID)
 	}
-	if msg.err != nil {
+	switch {
+	case msg.err != nil && msg.linkErr != nil:
+		return m.showToast(fmt.Sprintf("Started %s on %s, but could not ask it: %v; and could not link it: %v", label, issueID, msg.err, msg.linkErr), toaster.StyleError)
+	case msg.err != nil:
 		return batchCmds(reload, m.showToast(fmt.Sprintf("Started %s on %s, but could not ask it: %v", label, issueID, msg.err), toaster.StyleError))
+	case msg.linkErr != nil:
+		report := m.showToast(fmt.Sprintf("%s works on %s, but could not be linked to it: %v", label, issueID, msg.linkErr), toaster.StyleError)
+		return batchCmds(report, m.waitForAnswer(msg.issueID, msg.agent))
+	default:
+		report := m.showToast(fmt.Sprintf("%s works on %s in the background", label, issueID), toaster.StyleInfo)
+		return batchCmds(reload, report, m.waitForAnswer(msg.issueID, msg.agent))
 	}
-	report := m.showToast(fmt.Sprintf("%s works on %s in the background", label, issueID), toaster.StyleInfo)
-	if msg.linkErr != nil {
-		report = m.showToast(fmt.Sprintf("%s works on %s, but could not be linked to it: %v", label, issueID, msg.linkErr), toaster.StyleError)
-	}
-	return batchCmds(reload, report, m.waitForAnswer(msg.issueID, msg.agent))
 }
 
 // waitForAnswer waits for the turn of the asked agent to end and reads what
@@ -128,18 +132,20 @@ func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
 func (m *Model) waitForAnswer(issueID string, a agent.Agent) tea.Cmd {
 	ctx, host := m.ctx, m.services.Agents
 	return m.scoped(func() tea.Msg {
-		if err := host.Wait(ctx, a); err != nil {
-			return agentAnsweredMsg{issueID: issueID, agent: a, err: err}
+		stoppedOn, err := host.Wait(ctx, a)
+		if err != nil || stoppedOn == agent.NeedsYou {
+			return agentAnsweredMsg{issueID: issueID, agent: a, stoppedOn: stoppedOn, err: err}
 		}
 		reply, err := host.Read(ctx, a)
-		return agentAnsweredMsg{issueID: issueID, agent: a, reply: reply, err: err}
+		return agentAnsweredMsg{issueID: issueID, agent: a, stoppedOn: stoppedOn, reply: reply, err: err}
 	})
 }
 
 // handleAgentAnswered reloads what the agent may have written at once, then
-// reports the status line of its reply. A question offers to bring the agent
-// to the front. A reply without a status line is reported as finished: the
-// reload shows what it did.
+// reports the status line of its reply. An agent that stopped to wait for the
+// operator, and a question, offer to bring the agent to the front. A reply
+// without a status line is reported as finished: the reload shows what it
+// did.
 func (m *Model) handleAgentAnswered(msg agentAnsweredMsg) tea.Cmd {
 	m.markBrowseSurfacesDirty()
 	reload := []tea.Cmd{m.maybeAutoRefreshActiveSurfaceCmd(), m.pollAgentsCmd()}
@@ -151,6 +157,10 @@ func (m *Model) handleAgentAnswered(msg agentAnsweredMsg) tea.Cmd {
 	var report tea.Cmd
 	if msg.err != nil {
 		report = m.showToast(fmt.Sprintf("%s on %s did not report back: %v", label, issueID, msg.err), toaster.StyleError)
+		return batchCmds(append(reload, report)...)
+	}
+	if msg.stoppedOn == agent.NeedsYou {
+		report = m.offerAgentFocus(msg.agent, fmt.Sprintf("%s on %s waits for you", label, issueID))
 		return batchCmds(append(reload, report)...)
 	}
 	parsed, ok := parseAskReport(msg.reply)
@@ -176,10 +186,12 @@ func withSummary(head, summary string) string {
 
 // offerAgentFocus asks whether to bring the agent to the front, in the action
 // modal. Where a question would take keys from work on screen — another
-// question, a menu, help, a drag, a surface above the shell — a warning toast
-// points to the agent menu instead.
+// question, a menu, help, a drag, a query being typed, a surface above the
+// shell — a warning toast points to the agent menu instead.
 func (m *Model) offerAgentFocus(a agent.Agent, question string) tea.Cmd {
+	tab := m.browseController(m.active)
 	busy := m.overlayOpen() || m.selMenu != nil || m.press != nil ||
+		(tab != nil && tab.HasQuery()) ||
 		m.active == mode.IssueEdit || m.active == mode.Config || m.active == mode.StorePicker
 	if busy {
 		return m.showToast(question+" (answer it from the agent menu)", toaster.StyleWarn)

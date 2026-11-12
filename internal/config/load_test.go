@@ -755,6 +755,21 @@ func TestLoad_RejectsAnIntentItCannotStart(t *testing.T) {
 	}
 }
 
+// A partial override of the removed agent launcher kept its command from the
+// built-in, so it fails with the reason and where the agent prompts went.
+func TestLoad_APartialAgentLauncherOverrideNamesTheRemovedLauncher(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, "launcher:\n  definitions:\n    - action: agent\n      workdir: /tmp\n")
+	_, err := Load()
+	for _, part := range []string{"command is required", "built-in agent launcher was removed", "agent.intents"} {
+		if err == nil || !strings.Contains(err.Error(), part) {
+			t.Fatalf("Load error = %v, want one naming %q", err, part)
+		}
+	}
+}
+
 func TestLoad_WarnsOnAnUnknownIntentKey(t *testing.T) {
 	configHome := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", configHome)

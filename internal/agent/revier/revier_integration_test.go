@@ -17,17 +17,19 @@ import (
 // fakeRevier logs every call and the physical directory it ran in to
 // $REVIER_LOG. `status` resolves to $REVIER_PROJECT_PATH; `list` prints one
 // local agent in panel 7 of target home, and first another in panel 7 of
-// target work; `agent new` prints the address of demo:home:7, or of
+// target work; with $REVIER_LIST_FAILS set it fails. `agent new` prints the address of demo:home:7, or of
 // demo:home:8 with --resume. The first `agent wait --until idle` fails, as it
 // does before the harness of a new tab has started; with
-// $REVIER_WAIT_TIMES_OUT set every wait exits 2. `agent read` prints what the
+// $REVIER_WAIT_TIMES_OUT set every wait exits 2. A wait until stopped prints
+// $REVIER_STOPPED_ON, idle when it is not set. `agent read` prints what the
 // agent said, `agent close` refuses without --force, and an unknown address
 // fails as revier does: demo:home:8 is known once a harness wait succeeded.
 const fakeRevier = `#!/bin/sh
 printf '%s | %s\n' "$*" "$(pwd -P)" >> "$REVIER_LOG"
 case "$1" in
 status) printf 'project   demo\npath      %s\nruntime   kitty\n' "$REVIER_PROJECT_PATH" ;;
-list) printf '[{"project":{"name":"demo"},"agents":[{"panel":"7","target":"work","ref":{"host":"kitty","id":"2"},"state":{"status":"running","session":"s-work"}},{"panel":"7","target":"home","ref":{"host":"kitty","id":"1"},"state":{"status":"idle","session":"s-7"}}]}]\n' ;;
+list) [ -z "$REVIER_LIST_FAILS" ] || { echo "no project demo" >&2; exit 1; }
+	printf '[{"project":{"name":"demo"},"agents":[{"panel":"7","target":"work","ref":{"host":"kitty","id":"2"},"state":{"status":"running","session":"s-work"}},{"panel":"7","target":"home","ref":{"host":"kitty","id":"1"},"state":{"status":"idle","session":"s-7"}}]}]\n' ;;
 agent)
 	case "$2" in
 	new)
@@ -43,6 +45,7 @@ agent)
 			exit 1
 		fi
 		[ "$5" != idle ] || : > "$REVIER_LOG.harness"
+		[ "$5" != stopped ] || { echo "${REVIER_STOPPED_ON:-idle}"; exit 0; }
 		echo idle ;;
 	*)
 		[ "$3" = "demo:home:7" ] || { [ "$3" = "demo:home:8" ] && [ -e "$REVIER_LOG.harness" ]; } || { echo "no agent at $3" >&2; exit 1; }
@@ -90,7 +93,7 @@ func readCalls(t *testing.T, log string) []string {
 
 var (
 	tab7     = agent.Agent{Ref: "demo:home:7", Session: "s-7", Label: "Tab 7", Status: agent.Idle}
-	workTab7 = agent.Agent{Ref: "demo:work:7", Session: "s-work", Label: "Tab 7", Status: agent.Running}
+	workTab7 = agent.Agent{Ref: "demo:work:7", Session: "s-work", Label: "Tab work/7", Status: agent.Running}
 )
 
 // List asks revier status in the root once, and revier list on every call.
@@ -120,6 +123,24 @@ func TestListResolvesTheProjectInTheRootOnce(t *testing.T) {
 	data, _ := os.ReadFile(log)
 	if first, _, _ := strings.Cut(string(data), "\n"); first != "status | "+physical {
 		t.Errorf("first call = %q, want status in %s", first, physical)
+	}
+}
+
+// A failed list forgets the project of the root, so the next call resolves
+// it again: the project may have been renamed or removed in revier.
+func TestAFailedListResolvesTheProjectAgain(t *testing.T) {
+	root := t.TempDir()
+	h, log := withFakeRevier(t, root)
+	t.Setenv("REVIER_LIST_FAILS", "1")
+
+	for range 2 {
+		if _, err := h.List(context.Background(), root); err == nil {
+			t.Fatal("expected the failed list to fail")
+		}
+	}
+	want := []string{"status", "list --json --conversations demo", "status", "list --json --conversations demo"}
+	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {
+		t.Errorf("revier calls = %q, want %q", calls, want)
 	}
 }
 
@@ -241,14 +262,39 @@ func TestResumeOpensTheConversationWithoutTheFocus(t *testing.T) {
 	}
 }
 
-func TestWaitWaitsUntilTheAgentStopped(t *testing.T) {
+// The harness of a resumed tab that does not come up closes the tab again,
+// as Start does.
+func TestResumeClosesATabWhoseHarnessDoesNotComeUp(t *testing.T) {
+	root := t.TempDir()
+	h, log := withFakeRevier(t, root)
+	t.Setenv("REVIER_WAIT_TIMES_OUT", "1")
+
+	if _, err := h.Resume(context.Background(), root, "s-8"); err == nil {
+		t.Fatal("expected the resume to fail")
+	}
+	calls := readCalls(t, log)
+	if last := calls[len(calls)-1]; last != "agent close demo:home:8 --force" {
+		t.Errorf("last revier call = %q, want the force close of the new tab", last)
+	}
+}
+
+func TestWaitReportsTheStatusTheAgentStoppedOn(t *testing.T) {
 	h, log := withFakeRevier(t, "")
 
-	if err := h.Wait(context.Background(), tab7); err != nil {
-		t.Fatal(err)
+	for revierStatus, want := range map[string]agent.Status{"idle": agent.Idle, "attention": agent.NeedsYou} {
+		t.Setenv("REVIER_STOPPED_ON", revierStatus)
+		got, err := h.Wait(context.Background(), tab7)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != want {
+			t.Errorf("Wait on %s = %q, want %q", revierStatus, got, want)
+		}
 	}
-	if calls := readCalls(t, log); !reflect.DeepEqual(calls, []string{"agent wait demo:home:7 --until stopped --timeout 1800"}) {
-		t.Errorf("revier calls = %q", calls)
+	for _, call := range readCalls(t, log) {
+		if call != "agent wait demo:home:7 --until stopped --timeout 1800" {
+			t.Errorf("revier call = %q", call)
+		}
 	}
 }
 

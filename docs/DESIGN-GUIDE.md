@@ -671,7 +671,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
     the background; when its turn ends the shell reloads the issue at once and reports the status
     line its reply ends with (`Model.handleAgentAnswered`): `done` a success toast, `failed` an
     error toast, `question` the focus offer, and a reply without one an info toast that it
-    finished. The agent stays open.
+    finished. A turn that ends with the agent waiting for the operator is the focus offer too,
+    whatever the reply says. The agent stays open.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
     outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
     dropped while it is up, and a resize that changes the screen's size closes it.
@@ -704,8 +705,9 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   brings it to the front. Without a linked agent the key raises a warning toast.
 - The Agents group of the Metadata pane is each linked agent's label, then its status word —
   `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. A
-  link label no live agent holds is `gone`, a failed poll included (`agent.Linked`). The
-  Labels group leaves the link labels out.
+  link label no live agent holds is `gone` after a poll that answered. Before the first answer
+  and after a failed poll the live agents are not known, so such a label draws no row and the
+  agent menu offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
 - The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
   the yes or no before a comment is deleted (`Model.confirmCommentDelete`), the yes or no
   before a busy agent is closed (`Model.requestAgentClose`), the ask question of the selection
@@ -713,8 +715,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   (`Model.offerAgentFocus`). The delete and close questions have no input, a
   `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
   `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
-  `storeForm.kind`. The focus offer opens only where it takes no keys from work on screen; there
-  a warning toast names the agent menu instead. A new field of an issue is a row of the issue editor, never a modal.
+  `storeForm.kind`. The focus offer opens only where it takes no keys from work on screen, a
+  query with text in it included; there a warning toast names the agent menu instead. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

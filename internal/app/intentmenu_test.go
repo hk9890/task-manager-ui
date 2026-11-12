@@ -131,6 +131,37 @@ func TestAFailedStartIsShownToTheOperator(t *testing.T) {
 	})
 }
 
+// A session the store refuses in a label is not written: the toast says why.
+// With the start failed too, one toast carries both errors.
+func TestASessionTheStoreRefusesIsReportedWithTheStartError(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = agent.Agent{Ref: "demo:home:9", Session: "Not A Label", Label: "Tab 9"}
+	client.StartErr = errors.New("the focus was refused")
+
+	m = pressKey(t, m, "alt+i")
+	m = pressKey(t, m, "enter")
+
+	if labels := labelsOf(t, m, "tm-1"); len(labels) != 0 {
+		t.Fatalf("labels of tm-1 = %v, want none", labels)
+	}
+	view := m.toast.View()
+	for _, part := range []string{"the focus was refused", "could not link it", "makes no valid issue label"} {
+		if !strings.Contains(view, part) {
+			t.Errorf("toast = %q, want it to hold %q", view, part)
+		}
+	}
+}
+
+// A link written to an issue Detail does not show reloads the board, not
+// Detail.
+func TestALinkOnAnotherIssueDoesNotReloadDetail(t *testing.T) {
+	m, _, _, _ := agentShell(t)
+	m.handleAgentStarted(agentStartedMsg{issueID: "tm-other", agent: startedOnTab9()})
+	if m.detail.IsLoading() {
+		t.Fatal("a link on another issue reloaded Detail")
+	}
+}
+
 func TestTheIntentMenuNeedsAnAgentHost(t *testing.T) {
 	m, _, _, _ := agentShell(t)
 	m.services.Agents = nil

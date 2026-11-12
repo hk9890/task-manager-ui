@@ -15,6 +15,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -117,6 +118,43 @@ func TestAnAgentThatAsksIsOfferedToTheFront(t *testing.T) {
 	}
 }
 
+// An agent whose turn stopped to wait for the operator is offered to the
+// front and not read: it has not finished.
+func TestAnAgentThatWaitsForYouIsOfferedToTheFront(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	client.StoppedOn = agent.NeedsYou
+	client.Said = `{"status":"done","summary":"stale"}`
+	m = askOnTitle(t, m, "make the title shorter")
+
+	if !m.showActionModal || m.agentFocusOffer == nil {
+		t.Fatalf("an agent that waits for you offered no focus; toast %q", m.toast.View())
+	}
+	testui.AssertContainsAll(t, plainShell(m), "The agent asks", "Tab 9 on tm-1 waits for you")
+	if got := hostCalls(client, "Read"); len(got) != 0 {
+		t.Fatalf("Read calls = %+v, want none", got)
+	}
+}
+
+// While the operator types a query, the offer would take the next key: a
+// warning toast points to the agent menu instead.
+func TestAQuestionWhileAQueryIsTypedIsAToast(t *testing.T) {
+	m, _, _, _ := agentShell(t)
+	m = pressKey(t, m, "esc")
+	m = updateOnly(m, testui.Runes("rea"))
+	if m.active != mode.Board || !m.board.HasQuery() {
+		t.Fatalf("fixture is on %q with query %v, want Board with a query", m.active, m.board.HasQuery())
+	}
+	m = send(t, m, agentAnsweredMsg{issueID: "tm-1", agent: startedOnTab9(), stoppedOn: agent.Idle, reply: `{"status":"question","summary":"Which?"}`})
+
+	if m.showActionModal {
+		t.Fatal("a question while a query is typed opened the offer")
+	}
+	if view := m.toast.View(); !strings.Contains(view, "answer it from the agent menu") {
+		t.Fatalf("toast = %q, want the pointer to the agent menu", view)
+	}
+}
+
 func TestAReplyWithoutAStatusLineIsReportedAsFinished(t *testing.T) {
 	m, _ := askedShell(t, `Done. {"status": maybe}`)
 	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 finished") {
@@ -132,10 +170,10 @@ type writingHost struct {
 	}
 }
 
-func (h writingHost) Wait(ctx context.Context, a agent.Agent) error {
+func (h writingHost) Wait(ctx context.Context, a agent.Agent) (agent.Status, error) {
 	title := "Renamed by the agent"
 	if err := h.repo.UpdateIssue(ctx, "tm-1", domain.UpdateIssueInput{Title: &title}); err != nil {
-		return err
+		return "", err
 	}
 	return h.FakeAgentHost.Wait(ctx, a)
 }

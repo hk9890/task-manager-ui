@@ -170,7 +170,7 @@ func (m *Model) Error() string { return m.errText }
 func (m *Model) Reset() { *m = Model{Keys: m.Keys, liveAgents: m.liveAgents} }
 
 // SetLiveAgents replaces the live agents of the store's project, keyed
-// by the session each holds.
+// by the session each holds. A nil map is a list not known (agent.Linked).
 func (m *Model) SetLiveAgents(agents map[string]agent.Agent) {
 	m.liveAgents = agents
 }
