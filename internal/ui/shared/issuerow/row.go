@@ -11,6 +11,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/renderhelpers"
@@ -131,9 +132,9 @@ type RenderConfig struct {
 	// Match is the words of the query that chose this row. A styled row draws
 	// every occurrence of one in its title and its ID as matched text.
 	Match []string
-	// Agent is the status of the live revier agent that works on the issue,
-	// "" for none. A row with one draws the agent mark after the status.
-	Agent string
+	// Agent is the status of the live agent that works on the issue, "" for
+	// none. A row with one draws the agent mark after the status.
+	Agent agent.Status
 
 	// Dim, when true, applies a SkeletonShades foreground tint to the rendered
 	// row text — used to signal that the surface is refreshing stale data.

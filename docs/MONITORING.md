@@ -153,8 +153,8 @@ suppressed for the interactive session.
   `Model.watchStore` starts on the active store (`internal/app/storewatch.go`) is off: the
   operating system refused it, or the store directory was removed or renamed. No toast. The views
   refresh on the one-minute tick, on focus regain and on the reload key until another store is opened.
-- `revier agent listing failed; agent status not shown` (WARN, with `project` and `error`) —
-  `revier list` failed for a resolved project (`Model.applyAgentList`,
+- `revier agent listing failed; agent status not shown` (WARN, with `project_root` and
+  `error`) — `revier list` failed for a resolved project (`Model.applyAgentList`,
   `internal/app/agents.go`). The agents leave Detail and the board. No toast. Logged once per
   failure: the next record comes after a poll succeeds and another one fails.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page

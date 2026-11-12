@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
@@ -337,14 +337,14 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 		t.Errorf("a pane with no linked agent draws an Agents group:\n%s", view)
 	}
 
-	state.Agents = []revier.Agent{
-		{Panel: "2", Status: revier.StatusAttention, Session: "s-2"},
-		{Panel: "1\x1b", Status: revier.StatusRunning, Session: "s-1"},
-		{Panel: "10", Status: revier.StatusIdle, Session: "s-10"},
+	state.Agents = []agent.Agent{
+		{Label: "Tab 2", Status: agent.NeedsYou, Session: "s-2"},
+		{Label: "Tab 1\x1b", Status: agent.Running, Session: "s-1"},
+		{Label: "Tab 10", Status: agent.Idle, Session: "s-10"},
 	}
 	view := RenderMetadataPane(state)
 	if strings.Contains(view, "Tab 1\x1b") {
-		t.Errorf("a revier value reaches the screen uncleaned:\n%q", view)
+		t.Errorf("an agent host value reaches the screen uncleaned:\n%q", view)
 	}
 	view = testui.Downsample(view)
 	_, priorityY := testui.FindCell(t, view, "Priority")

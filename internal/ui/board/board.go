@@ -7,6 +7,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
@@ -59,9 +60,9 @@ type Column struct {
 	// a column ordered by UpdatedAt descending; the Done column, ordered by
 	// close date, leaves it false.
 	AgeMarkers bool
-	// Agents maps the ID of an issue that a live revier agent works on to that
+	// Agents maps the ID of an issue that a live agent works on to that
 	// agent's status. The row of such an issue draws the agent mark.
-	Agents map[string]string
+	Agents map[string]agent.Status
 }
 
 // State is the full board renderer input.

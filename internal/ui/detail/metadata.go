@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
@@ -163,28 +163,28 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 }
 
 // agentsGroup is the live agents linked to the issue, one field each, and
-// false when there is none. revier writes every value, so each is cleaned
-// before the label width is measured.
-func agentsGroup(agents []revier.Agent) (metadataGroup, bool) {
+// false when there is none. The agent host writes every value, so each is
+// cleaned before the label width is measured.
+func agentsGroup(agents []agent.Agent) (metadataGroup, bool) {
 	if len(agents) == 0 {
 		return metadataGroup{}, false
 	}
 	group := metadataGroup{title: "Agents"}
-	for _, agent := range agents {
+	for _, a := range agents {
 		group.fields = append(group.fields, metadataField{
-			label: "Tab " + displaytext.OneLine(agent.Panel),
-			value: agentStatusWord(displaytext.OneLine(agent.Status)),
+			label: displaytext.OneLine(a.Label),
+			value: displaytext.OneLine(agentStatusWord(a.Status)),
 		})
 	}
 	return group, true
 }
 
-// agentStatusWord is what the Agents group says for a revier status.
-func agentStatusWord(status string) string {
-	if status == revier.StatusAttention {
+// agentStatusWord is what the Agents group says for an agent status.
+func agentStatusWord(status agent.Status) string {
+	if status == agent.NeedsYou {
 		return "needs you"
 	}
-	return status
+	return string(status)
 }
 
 func renderLabelLines(labels []string) []string {

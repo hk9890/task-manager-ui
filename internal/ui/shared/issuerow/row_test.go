@@ -8,8 +8,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/colorprofile"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -134,17 +134,17 @@ func TestRenderCompactStyledSelectedRowFillsItsWidth(t *testing.T) {
 
 		for _, issue := range issues {
 			for width := 2; width <= 100; width++ {
-				for _, agent := range []string{"", revier.StatusRunning} {
-					lines := RenderCompact(RenderConfig{Issue: issue, Selected: true, Styled: true, Width: width, Agent: agent})
+				for _, status := range []agent.Status{"", agent.Running} {
+					lines := RenderCompact(RenderConfig{Issue: issue, Selected: true, Styled: true, Width: width, Agent: status})
 					if len(lines) != Height {
 						t.Fatalf("%s, width %d: expected %d lines, got %d", set, width, Height, len(lines))
 					}
 					for i, line := range plainLines(lines) {
 						if got := lipgloss.Width(line); got != width {
-							t.Errorf("%s, %s, agent %q, width %d: line %d is %d cells wide: %q", set, issue.ID, agent, width, i, got, line)
+							t.Errorf("%s, %s, agent %q, width %d: line %d is %d cells wide: %q", set, issue.ID, status, width, i, got, line)
 						}
 						if !strings.HasPrefix(line, cursor) {
-							t.Errorf("%s, %s, agent %q, width %d: line %d does not carry the selection bar: %q", set, issue.ID, agent, width, i, line)
+							t.Errorf("%s, %s, agent %q, width %d: line %d does not carry the selection bar: %q", set, issue.ID, status, width, i, line)
 						}
 					}
 				}
@@ -562,13 +562,13 @@ func TestRenderCompactGivesTheTitleEveryCellAfterTheType(t *testing.T) {
 
 // A row whose issue a live agent works on draws the agent mark after the
 // status, in the colour of the agent's status; the ID gives up the cells. A
-// status revier does not document draws as idle.
+// status the agent host does not map draws as idle.
 func TestRenderCompactDrawsTheAgentMarkInTheColourOfItsStatus(t *testing.T) {
 	testui.ForceTrueColor(t)
 
 	issue := domain.IssueSummary{ID: "TM-1", Title: "Agent row", Type: "task", Status: "in_progress", Priority: 1}
-	marks := map[string]string{}
-	for _, status := range []string{revier.StatusRunning, revier.StatusIdle, revier.StatusAttention, "starting"} {
+	marks := map[agent.Status]string{}
+	for _, status := range []agent.Status{agent.Running, agent.Idle, agent.NeedsYou, "starting"} {
 		lines := RenderCompact(RenderConfig{Issue: issue, Width: 40, Styled: true, Agent: status})
 
 		if got, want := strings.TrimRight(plainLines(lines)[1], " "), "    P1 IP ● TM-1"; got != want {
@@ -581,13 +581,13 @@ func TestRenderCompactDrawsTheAgentMarkInTheColourOfItsStatus(t *testing.T) {
 		marks[status] = mark
 	}
 
-	if marks[revier.StatusRunning] == marks[revier.StatusIdle] ||
-		marks[revier.StatusRunning] == marks[revier.StatusAttention] ||
-		marks[revier.StatusIdle] == marks[revier.StatusAttention] {
+	if marks[agent.Running] == marks[agent.Idle] ||
+		marks[agent.Running] == marks[agent.NeedsYou] ||
+		marks[agent.Idle] == marks[agent.NeedsYou] {
 		t.Errorf("two statuses share a colour: %q", marks)
 	}
-	if marks["starting"] != marks[revier.StatusIdle] {
-		t.Errorf("an undocumented status draws %q, want the idle mark %q", marks["starting"], marks[revier.StatusIdle])
+	if marks["starting"] != marks[agent.Idle] {
+		t.Errorf("an undocumented status draws %q, want the idle mark %q", marks["starting"], marks[agent.Idle])
 	}
 
 	if got := RenderCompact(RenderConfig{Issue: issue, Width: 40})[1]; strings.Contains(got, styles.Glyphs.Agent) {

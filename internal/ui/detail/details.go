@@ -7,9 +7,9 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/markdown"
@@ -65,7 +65,7 @@ type State struct {
 	Hover *Hit
 	// Agents is the live agents linked to the issue, the one the open button
 	// acts on first. The Metadata pane lists them.
-	Agents []revier.Agent
+	Agents []agent.Agent
 }
 
 // FocusPane identifies which detail pane is visually focused.
@@ -418,7 +418,7 @@ type ContentPaneState struct {
 	Hover Button
 	// Agents is the live agents linked to the issue: with one, the ID line
 	// draws the open button.
-	Agents []revier.Agent
+	Agents []agent.Agent
 }
 
 // contentPane is the Content pane of state at the size the layout gives it.
@@ -482,7 +482,7 @@ type MetadataPaneState struct {
 	Skeleton bool
 	// Agents is the live agents linked to the issue, drawn as a group of
 	// their own right after Core, so a short pane keeps it.
-	Agents []revier.Agent
+	Agents []agent.Agent
 }
 
 // RenderMetadataPane renders the shared detail Metadata pane section. The pane

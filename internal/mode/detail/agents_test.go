@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
@@ -30,26 +30,26 @@ func TestLinkedAgentsAreTheLiveAgentsThatCommentedInOrderOfNeed(t *testing.T) {
 	t.Parallel()
 
 	m := commentsBySessions(t, "s-idle", "s-run-b", "", "s-gone", "s-run-a", "s-attn", "s-idle")
-	m.SetLiveAgents(map[string]revier.Agent{
-		"s-idle":   {Panel: "1", Status: revier.StatusIdle, Session: "s-idle"},
-		"s-run-b":  {Panel: "5", Status: revier.StatusRunning, Session: "s-run-b"},
-		"s-run-a":  {Panel: "4", Status: revier.StatusRunning, Session: "s-run-a"},
-		"s-attn":   {Panel: "9", Status: revier.StatusAttention, Session: "s-attn"},
-		"s-silent": {Panel: "2", Status: revier.StatusAttention, Session: "s-silent"},
+	m.SetLiveAgents(map[string]agent.Agent{
+		"s-idle":   {Label: "Tab 1", Status: agent.Idle, Session: "s-idle"},
+		"s-run-b":  {Label: "Tab 5", Status: agent.Running, Session: "s-run-b"},
+		"s-run-a":  {Label: "Tab 4", Status: agent.Running, Session: "s-run-a"},
+		"s-attn":   {Label: "Tab 9", Status: agent.NeedsYou, Session: "s-attn"},
+		"s-silent": {Label: "Tab 2", Status: agent.NeedsYou, Session: "s-silent"},
 	})
 
-	var panels []string
-	for _, agent := range m.LinkedAgents() {
-		panels = append(panels, agent.Panel)
+	var labels []string
+	for _, linked := range m.LinkedAgents() {
+		labels = append(labels, linked.Label)
 	}
-	if want := []string{"9", "4", "5", "1"}; !reflect.DeepEqual(panels, want) {
-		t.Errorf("linked panels = %v, want %v", panels, want)
+	if want := []string{"Tab 9", "Tab 4", "Tab 5", "Tab 1"}; !reflect.DeepEqual(labels, want) {
+		t.Errorf("linked labels = %v, want %v", labels, want)
 	}
 
 	m.Reset()
 	m.ApplyLoadedDetail("tm-1", issueWithComments(1))
 	m.Detail.Comments[0].Session = "s-attn"
-	if linked := m.LinkedAgents(); len(linked) != 1 || linked[0].Panel != "9" {
+	if linked := m.LinkedAgents(); len(linked) != 1 || linked[0].Label != "Tab 9" {
 		t.Errorf("after Reset the linked agents are %+v, want the live agents kept", linked)
 	}
 }
@@ -65,7 +65,7 @@ func TestClicksOnTheAgentButtonsSendTheirRequests(t *testing.T) {
 		t.Fatalf("without a live agent the ID line is not agent and edit:\n%s", view)
 	}
 
-	m.SetLiveAgents(map[string]revier.Agent{"s-1": {Panel: "3", Status: revier.StatusRunning, Session: "s-1"}})
+	m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}})
 	click := func(text string) tea.Msg {
 		t.Helper()
 		x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), text)
@@ -86,7 +86,7 @@ func TestAClickWhereOpenWasStartsNoAgent(t *testing.T) {
 
 	for _, width := range []int{commentsWidth, 124, 160} {
 		m := commentsBySessions(t, "s-1")
-		m.SetLiveAgents(map[string]revier.Agent{"s-1": {Panel: "3", Status: revier.StatusRunning, Session: "s-1"}})
+		m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}})
 		x, y := testui.FindCell(t, m.View(width, commentsHeight, false, 0), "open alt+o")
 
 		m.SetLiveAgents(nil)

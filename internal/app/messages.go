@@ -6,23 +6,23 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
 // refreshTickMsg triggers periodic surface auto-refresh.
 type refreshTickMsg struct{}
 
-// agentPollTickMsg asks revier for the live agents of the project again.
+// agentPollTickMsg asks the agent host for the live agents of the project
+// again.
 type agentPollTickMsg struct{}
 
-// agentsListedMsg carries the live agents of the store's revier project.
-// project is "" when the project root resolved to no revier project.
+// agentsListedMsg carries the live agents of the store's project. err wraps
+// agent.ErrNoProject when the project root is no project of the host.
 type agentsListedMsg struct {
-	project string
-	agents  []revier.Agent
-	err     error
+	agents []agent.Agent
+	err    error
 }
 
 // agentFocusedMsg carries the result of bringing an agent to the front.

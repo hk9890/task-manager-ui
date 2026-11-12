@@ -9,12 +9,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/dashboard"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -171,7 +171,7 @@ type Model struct {
 	// starts meanwhile looks for the same issue (captureRefreshAnchor).
 	anchorSearch *anchorSearch
 
-	// --- live revier agents ---
+	// --- live agents ---
 
 	// inProgressSessions is the comment sessions of each In Progress issue,
 	// from the last dashboard that loaded. liveAgents is the status of each
@@ -179,8 +179,8 @@ type Model struct {
 	// what the two give the In Progress column: the status of the agent that
 	// needs the operator most, by issue ID.
 	inProgressSessions map[string][]string
-	liveAgents         map[string]string
-	agentStatus        map[string]string
+	liveAgents         map[string]agent.Status
+	agentStatus        map[string]agent.Status
 }
 
 // NewModel creates a board mode controller.
@@ -346,7 +346,7 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 	if col.err != nil {
 		errStr = col.err.Error()
 	}
-	var agents map[string]string
+	var agents map[string]agent.Status
 	if colIdx == inProgressColumnIndex {
 		agents = m.agentStatus
 	}
@@ -365,10 +365,10 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 	}
 }
 
-// SetLiveAgents replaces the live agents of the store's revier project: the
+// SetLiveAgents replaces the live agents of the store's project: the
 // status of each, by the session it holds. An In Progress card whose issue
 // one of them commented on draws the agent mark.
-func (m *Model) SetLiveAgents(statusBySession map[string]string) {
+func (m *Model) SetLiveAgents(statusBySession map[string]agent.Status) {
 	m.liveAgents = statusBySession
 	m.linkAgents()
 }
@@ -383,11 +383,11 @@ func (m *Model) linkAgents() {
 			if !live {
 				continue
 			}
-			if current, linked := m.agentStatus[id]; linked && revier.Rank(current) <= revier.Rank(status) {
+			if current, linked := m.agentStatus[id]; linked && agent.Rank(current) <= agent.Rank(status) {
 				continue
 			}
 			if m.agentStatus == nil {
-				m.agentStatus = map[string]string{}
+				m.agentStatus = map[string]agent.Status{}
 			}
 			m.agentStatus[id] = status
 		}

@@ -184,14 +184,12 @@ type Model struct {
 	storeChanges   <-chan struct{}
 	storeChangeSeq int
 
-	// revierProject is the revier project of the store's project path, ""
-	// until a poll resolves it. agentPollInFlight is true while a poll runs,
-	// so ticks do not pile polls up behind a slow revier. agentPollFailing is
-	// true from a failed poll to the next one that succeeds: a failure is
-	// logged once, not every tick. projectLookupWait is the ticks left before
-	// a project lookup that failed is tried again: outside a revier project
-	// every lookup fails, and each one runs revier.
-	revierProject     string
+	// agentPollInFlight is true while a poll runs, so ticks do not pile polls
+	// up behind a slow agent host. agentPollFailing is true from a failed poll
+	// to the next one that succeeds: a failure is logged once, not every
+	// tick. projectLookupWait is the ticks left before a poll is tried again
+	// after the host said the project root is no project of its own: outside
+	// one every poll fails, and each one runs the host.
 	agentPollInFlight bool
 	agentPollFailing  bool
 	projectLookupWait int
@@ -316,7 +314,6 @@ func (m *Model) bindStore(services Services) {
 	m.detail = detail.Model{Keys: m.keys}
 	// The agents belong to the previous store's project. The poll a caller
 	// starts after the bind resolves the new one.
-	m.revierProject = ""
 	m.agentPollInFlight = false
 	m.agentPollFailing = false
 	m.projectLookupWait = 0

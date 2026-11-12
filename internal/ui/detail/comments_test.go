@@ -7,8 +7,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -156,7 +156,7 @@ func TestHitTestFindsTheButtonsAndTheCommentsWhereRenderDrewThem(t *testing.T) {
 		state.Width, state.Height = width, 50
 		state.FocusPane = FocusPaneComments
 		state.CommentIndex = 1
-		state.Agents = []revier.Agent{{Panel: "3", Status: revier.StatusRunning, Session: "s-3"}}
+		state.Agents = []agent.Agent{{Label: "Tab 3", Status: agent.Running, Session: "s-3"}}
 		view := Render(state)
 
 		for text, want := range map[string]Hit{
@@ -287,7 +287,7 @@ func TestTheOpenButtonIsDrawnOnlyWithALinkedAgent(t *testing.T) {
 	agentX, agentY := testui.FindCell(t, view, "agent alt+i")
 	editX, _ := testui.FindCell(t, view, "edit alt+u")
 
-	state.Agents = []revier.Agent{{Panel: "3", Status: revier.StatusIdle, Session: "s-3"}}
+	state.Agents = []agent.Agent{{Label: "Tab 3", Status: agent.Idle, Session: "s-3"}}
 	view = Render(state)
 	if !strings.Contains(testui.Downsample(view), "open alt+o  ·  agent alt+i  ·  edit alt+u") {
 		t.Errorf("with a linked agent the ID line is not open, agent and edit:\n%s", testui.Downsample(view))
@@ -313,13 +313,13 @@ func TestAnIDLineWithoutRoomForEveryButtonKeepsOpenAndEdit(t *testing.T) {
 	pane := commentsState(t).contentPane(0, 0)
 	for _, tc := range []struct {
 		width  int
-		agents []revier.Agent
+		agents []agent.Agent
 		want   []Button
 	}{
 		// 50 cells: the Content pane of the three-pane layout at 120 columns.
-		{50, []revier.Agent{{Panel: "3", Status: revier.StatusIdle, Session: "s-3"}}, []Button{ButtonFocusAgent, ButtonEdit}},
+		{50, []agent.Agent{{Label: "Tab 3", Status: agent.Idle, Session: "s-3"}}, []Button{ButtonFocusAgent, ButtonEdit}},
 		{50, nil, []Button{ButtonEdit}},
-		{32, []revier.Agent{{Panel: "3", Status: revier.StatusIdle, Session: "s-3"}}, []Button{ButtonEdit}},
+		{32, []agent.Agent{{Label: "Tab 3", Status: agent.Idle, Session: "s-3"}}, []Button{ButtonEdit}},
 	} {
 		pane.Agents = tc.agents
 		content := renderContentPaneLines(pane, tc.width, 20)
@@ -341,7 +341,7 @@ func TestTheButtonUnderThePointerIsLit(t *testing.T) {
 
 	state := commentsState(t)
 	state.FocusPane = FocusPaneComments
-	state.Agents = []revier.Agent{{Panel: "3", Status: revier.StatusRunning, Session: "s-3"}}
+	state.Agents = []agent.Agent{{Label: "Tab 3", Status: agent.Running, Session: "s-3"}}
 	idle := Render(state)
 
 	for button, drawn := range map[Button][2]string{
