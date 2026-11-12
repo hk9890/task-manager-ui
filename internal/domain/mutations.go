@@ -26,6 +26,10 @@ type UpdateIssueInput struct {
 	Assignee    *string
 	Labels      []string
 	ClearLabels bool
+	// AddLabels are added to the labels the issue has when the write lands,
+	// after Labels replaced them. A write that adds a label alone keeps every
+	// other label, also one added since the issue was read.
+	AddLabels []string
 }
 
 // CloseIssueInput defines close-operation inputs.

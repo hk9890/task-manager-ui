@@ -29,7 +29,7 @@ func TestLoad_MissingConfigUsesDefaults(t *testing.T) {
 	if len(result.Warnings) != 0 {
 		t.Fatalf("expected no warnings, got %#v", result.Warnings)
 	}
-	if len(result.Config.Launcher.Definitions) != 4 {
+	if len(result.Config.Launcher.Definitions) != 3 {
 		t.Fatalf("expected default launchers, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
@@ -123,8 +123,8 @@ ui:
 	if launchers["custom"].Command != "custom-tool" {
 		t.Fatalf("expected custom launcher to be appended, got %#v", launchers["custom"])
 	}
-	if len(result.Config.Launcher.Definitions) != 5 {
-		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	if len(result.Config.Launcher.Definitions) != 4 {
+		t.Fatalf("expected 4 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
 
@@ -630,7 +630,7 @@ launcher:
 	}
 
 	// All built-ins must still be present.
-	for _, builtIn := range []string{"nvim", "opencode", "shell-command", "agent"} {
+	for _, builtIn := range []string{"nvim", "opencode", "shell-command"} {
 		if _, ok := launchers[builtIn]; !ok {
 			t.Fatalf("expected built-in launcher %q to still be present after appending new action", builtIn)
 		}
@@ -645,8 +645,8 @@ launcher:
 		t.Fatalf("expected my-custom-tool command to be my-tool, got %q", custom.Command)
 	}
 	// Total count: 4 built-ins + 1 new.
-	if len(result.Config.Launcher.Definitions) != 5 {
-		t.Fatalf("expected 5 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
+	if len(result.Config.Launcher.Definitions) != 4 {
+		t.Fatalf("expected 4 launcher definitions after append, got %d", len(result.Config.Launcher.Definitions))
 	}
 }
 
@@ -698,4 +698,74 @@ func writeConfig(t *testing.T, _ string, body string) string {
 		t.Fatalf("WriteFile returned error: %v", err)
 	}
 	return path
+}
+
+// An intent the file names takes the file's prompt, a new one is appended, and
+// the defaults it does not name stay, in menu order.
+func TestLoad_ConfigOverridesIntentsByName(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, strings.TrimSpace(`
+agent:
+  intents:
+    - name: review
+      prompt: "Review {{issue.id}} hard."
+    - name: plan
+      prompt: "Plan {{issue.id}}."
+`))
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if len(result.Warnings) != 0 {
+		t.Fatalf("expected no warnings, got %#v", result.Warnings)
+	}
+	want := []Intent{
+		Default().Agent.Intents[0],
+		{Name: "review", Prompt: "Review {{issue.id}} hard."},
+		{Name: "plan", Prompt: "Plan {{issue.id}}."},
+	}
+	if got := result.Config.Agent.Intents; !reflect.DeepEqual(got, want) {
+		t.Fatalf("intents = %#v, want %#v", got, want)
+	}
+}
+
+func TestLoad_RejectsAnIntentItCannotStart(t *testing.T) {
+	cases := map[string]struct {
+		body string
+		want string
+	}{
+		"no name":        {"agent:\n  intents:\n    - prompt: go\n", "agent.intents[0].name is required"},
+		"duplicate name": {"agent:\n  intents:\n    - name: a\n      prompt: x\n    - name: a\n      prompt: y\n", `duplicate name "a"`},
+		"no prompt":      {"agent:\n  intents:\n    - name: plan\n", `agent.intents[2].prompt is required for intent "plan"`},
+		"two lines":      {"agent:\n  intents:\n    - name: plan\n      prompt: |\n        one\n        two\n", `prompt for intent "plan" must be one line`},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			configHome := t.TempDir()
+			t.Setenv("XDG_CONFIG_HOME", configHome)
+			t.Setenv("HOME", configHome)
+			writeConfig(t, configHome, tc.body)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Load error = %v, want one naming %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestLoad_WarnsOnAnUnknownIntentKey(t *testing.T) {
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", configHome)
+	writeConfig(t, configHome, "agent:\n  intents:\n    - name: implement\n      model: big\n")
+
+	result, err := Load()
+	if err != nil {
+		t.Fatalf("Load returned error: %v", err)
+	}
+	if want := []string{`unknown config key "agent.intents[0].model" ignored`}; !reflect.DeepEqual(result.Warnings, want) {
+		t.Fatalf("warnings = %#v, want %#v", result.Warnings, want)
+	}
 }

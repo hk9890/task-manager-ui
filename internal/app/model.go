@@ -689,6 +689,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentsListedMsg:
 		m.applyAgentList(msg)
 		return m, modeCmd
+	case agentStartedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentStarted(msg))
 	case agentFocusedMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Could not bring the agent to the front: %v", msg.err), toaster.StyleError))
@@ -849,7 +851,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case mode.ActionDeleteComment:
 			return m, batchCmds(modeCmd, m.confirmCommentDelete())
 		case mode.ActionLaunchAgent:
-			return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
+			return m, batchCmds(modeCmd, m.openIntentMenu())
 		case mode.ActionFocusAgent:
 			return m, batchCmds(modeCmd, m.focusAgent())
 		}
@@ -1184,7 +1186,7 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
+		return m, batchCmds(modeCmd, m.openIntentMenu())
 	case m.keys.Match(config.ShellContext, config.ShellActionFocusAgent, msg):
 		if m.active != mode.Detail {
 			return m, modeCmd

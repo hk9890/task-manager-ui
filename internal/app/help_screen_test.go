@@ -132,7 +132,7 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 			entries[section.Title+": "+entry.Desc] = entry.Key
 		}
 	}
-	want := "Moving and opening, Filter and search, Tabs, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse, Selection menu"
+	want := "Moving and opening, Filter and search, Tabs, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse, Selection and intent menus"
 	if got := strings.Join(titles, ", "); got != want {
 		t.Errorf("sections:\n got %s\nwant %s", got, want)
 	}

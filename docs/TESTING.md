@@ -262,8 +262,7 @@ itself is tested against a real registry in `internal/storecatalog/taskmgr`, und
 An agent host is one more: a test that polls, starts or focuses an agent takes `FakeAgentHost`
 (`internal/testing/fakes/agent_host.go`), because the real revier starts and focuses real agents.
 The exec path of `revier.NewHost` is Tier 2: `internal/agent/revier/revier_integration_test.go`
-puts a fake `revier` script first on `PATH`, as `internal/config/agent_launcher_integration_test.go`
-does for the agent launcher.
+puts a fake `revier` script first on `PATH`.
 
 The system clipboard is the last: a shell test replaces `Model.copyText` to read the text a
 selection sends. The real one is `tea.SetClipboard`, whose message only a running program writes

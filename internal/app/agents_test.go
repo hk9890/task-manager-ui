@@ -177,11 +177,10 @@ func TestClicksOnTheAgentButtonsDoWhatTheirKeysDo(t *testing.T) {
 	}
 
 	t.Run("agent", func(t *testing.T) {
-		m, _, launcher, _ := agentShell(t)
-		click(t, m, "agent alt+i")
-		calls := launcher.Calls()
-		if len(calls) != 1 || calls[0].Action != LaunchActionAgent || calls[0].Issue.Summary.ID != "tm-1" {
-			t.Errorf("launcher calls = %+v, want the agent launcher on tm-1", calls)
+		m, _, _, _ := agentShell(t)
+		m = click(t, m, "agent alt+i")
+		if m.selMenu == nil || !strings.Contains(plainShell(m), "Start an agent on tm-1") {
+			t.Errorf("the agent button opened no intent menu:\n%s", plainShell(m))
 		}
 	})
 

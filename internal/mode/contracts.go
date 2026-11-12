@@ -170,8 +170,8 @@ const (
 	ActionDeleteComment Action = "delete_comment"
 
 	// ActionLaunchAgent and ActionFocusAgent are the agent and open buttons
-	// of the Content pane's ID line: the first starts the agent launcher on the
-	// issue, the second brings the issue's live agent to the front.
+	// of the Content pane's ID line: the first opens the intent menu that starts
+	// an agent on the issue, the second brings the issue's live agent to the front.
 	ActionLaunchAgent Action = "launch_agent"
 	ActionFocusAgent  Action = "focus_agent"
 )

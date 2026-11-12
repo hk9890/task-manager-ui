@@ -673,8 +673,17 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   helpers corrupt already-rendered colour, so they are not an alternative here.
 - A modal is centred (`overlay.Center`); a toast is bottom-centred with `PadY: 1`
   (`overlay.Bottom`). Both are placed on the screen, so the margin stays blank around them.
-- The action modal, the toast and the selection menu are the only overlays. Help is a full screen
-  ([Surfaces above the shell](#surfaces-above-the-shell)).
+- The action modal, the toast, the selection menu and the intent menu are the only overlays. Help
+  is a full screen ([Surfaces above the shell](#surfaces-above-the-shell)).
+- The intent menu is the selection menu's overlay (`selectionMenu`, drawn by
+  `internal/ui/selectmenu`) with other entries: `launch_agent` and the `agent` button open it in
+  Detail (`Model.openIntentMenu`, `internal/app/intentmenu.go`). It is centred over the screen as
+  it was when it opened, titled `Start an agent on <id>`, with one entry per configured intent and
+  Close, and takes keys and the mouse as the selection menu does. The issue is taken when it
+  opens. An intent starts the agent through the agent host and raises an info toast at once,
+  because a start takes as long as the agent takes to start; a start that fails, and a label
+  that is not written, raise an error toast (`Model.handleAgentStarted`). Without an agent host,
+  an intent or the project path, the key raises a warning toast instead of the menu.
 - The action modal carries two things: the store form of the picker (`Model.openStoreForm`) and
   the yes or no before a comment is deleted (`Model.confirmCommentDelete`), which has no input,
   a `modal.ButtonDanger` confirm, and takes `y` and `n`. `handleOverlayMessage` tells them apart

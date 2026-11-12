@@ -138,6 +138,10 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 		// production backend would have collapsed.
 		updated.labels = dedupeLabels(input.Labels)
 	}
+	// The SDK adds nothing to a set it clears (applyLabels).
+	if !input.ClearLabels && len(input.AddLabels) > 0 {
+		updated.labels = dedupeLabels(append(slices.Clone(updated.labels), input.AddLabels...))
+	}
 	if input.Status != nil {
 		applyStatusTransition(&updated, *input.Status, now)
 	}

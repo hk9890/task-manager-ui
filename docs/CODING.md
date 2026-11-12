@@ -45,7 +45,9 @@ mise run ci          # the merge gate; see What the tools enforce
    store path: each method is one bounded request to the program that runs the agents. revier is
    its one implementation (`internal/agent/revier`); the core reads `agent.Agent.Ref` as opaque.
    Its poll is a timer under the [Switching stores](#switching-stores) rules: the tick is
-   unscoped, the listing it starts is scoped.
+   unscoped, the listing it starts is scoped. An agent started on an issue is linked to it by the
+   label `agent.LinkLabel(session)`, written with `UpdateIssueInput.AddLabels`, which keeps every
+   other label (`Model.startAgent`, `internal/app/intentmenu.go`).
 
    **Shell-launcher security rule:** issue fields are operator-untrusted input, and a
    launcher template MUST NOT place one where it is re-parsed as a command line.

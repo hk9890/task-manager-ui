@@ -885,6 +885,33 @@ func TestUpdateDedupesLabelsConformance(t *testing.T) {
 	}
 }
 
+// TestAddLabelsKeepsTheOtherLabelsConformance pins the add-label write the
+// agent link takes: the label joins the set the issue has, which no write
+// replaces, and adding a label it has already writes no second one.
+func TestAddLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "linked", Labels: []string{"alpha"}})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		for range 2 {
+			if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{
+				AddLabels: []string{"agent:s-1"},
+			}); err != nil {
+				t.Fatalf("%s: UpdateIssue: %v", b.name, err)
+			}
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if got := detail.Summary.Labels; !equalStrings(got, []string{"agent:s-1", "alpha"}) && !equalStrings(got, []string{"alpha", "agent:s-1"}) {
+			t.Errorf("%s: labels after the add = %v, want alpha and agent:s-1", b.name, got)
+		}
+	}
+}
+
 // TestSearchPagingConformance pins what a paged search reports about the
 // matches it did not return: the window holds what Limit and Offset leave, and
 // Total counts every match. The rule belongs to both backends or the parity

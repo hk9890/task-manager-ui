@@ -29,12 +29,15 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
-- `alt+i` — launch `agent` action in detail mode: a new revier agent is prompted to talk about the issue; it is linked to the issue once it comments on it
+- `alt+i` — in detail mode, open the intent menu: `implement`, `review` and the intents of your config. Choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent:<session>`. A start that fails shows the error
 - `alt+o` — in detail mode, bring the live revier agent that works on the issue to the front: the one that needs you first, then a running one, then an idle one
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
 message, and the detail footer reads `launchers off`.
+
+In the intent menu `up` and `down` move, `enter` or a click starts the intent, and
+`esc` or a click outside closes the menu.
 
 A terminal must send `alt` as an escape prefix for the `alt+` keys to arrive.
 Most do; on macOS, turn on "Use Option as Meta key" (Terminal) or set the Option

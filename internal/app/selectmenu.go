@@ -19,10 +19,11 @@ import (
 // The release has already sent the text to the clipboard; the menu offers
 // what else to do with it. It stands over the screen the drag froze, box
 // included, and holds every key and mouse event until it closes: each would
-// change the screen it stands over.
+// change the screen it stands over. The intent menu (intentmenu.go) is the
+// same menu over the screen as it was when the menu opened.
 type selectionMenu struct {
-	text     string
 	title    string
+	hint     string
 	backdrop string
 	at       screenCell
 	// screenWidth is the width the menu is cut to.
@@ -34,14 +35,14 @@ type selectionMenu struct {
 
 type selectionAction struct {
 	entry selectmenu.Entry
-	run   func(m *Model, text string) tea.Cmd
+	run   func(m *Model) tea.Cmd
 }
 
 // openSelectionMenu opens the menu for a selection the release just sent.
 func (m *Model) openSelectionMenu(selected textSelection, text string, release screenCell) {
 	menu := &selectionMenu{
-		text:     text,
 		title:    fmt.Sprintf("Sent %d characters to the clipboard", sentCount(text)),
+		hint:     "shift+drag if not copied",
 		backdrop: selected.view(),
 		entries:  m.selectionActions(text),
 	}
@@ -73,22 +74,30 @@ func (m *Model) selectionActions(text string) []selectionAction {
 		quote = "Quote in a comment on " + displaytext.OneLine(issue.ID)
 	}
 	return []selectionAction{
-		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: func(m *Model, text string) tea.Cmd {
+		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: func(m *Model) tea.Cmd {
 			m.quoteInComment(issue, text)
 			return nil
 		}},
-		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: (*Model).searchSelection},
-		{
-			entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
-			run:   func(*Model, string) tea.Cmd { return nil },
-		},
+		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: func(m *Model) tea.Cmd {
+			return m.searchSelection(text)
+		}},
+		m.closeMenuAction(),
+	}
+}
+
+// closeMenuAction is the last entry of a menu: it closes the menu and does
+// nothing else.
+func (m *Model) closeMenuAction() selectionAction {
+	return selectionAction{
+		entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
+		run:   func(*Model) tea.Cmd { return nil },
 	}
 }
 
 func (s *selectionMenu) state() selectmenu.State {
 	state := selectmenu.State{
 		Title:  s.title,
-		Hint:   "shift+drag if not copied",
+		Hint:   s.hint,
 		Width:  s.screenWidth,
 		Cursor: s.cursor,
 		Hover:  -1,
@@ -168,11 +177,10 @@ func (m Model) runSelectionAction(entry int) (tea.Model, tea.Cmd) {
 	if action.entry.Disabled {
 		return m, nil
 	}
-	text := m.selMenu.text
 	m.selMenu = nil
 	// The run is a statement of its own: Go leaves unspecified whether m in
 	// the return is read before or after a call that changes it.
-	cmd := action.run(&m, text)
+	cmd := action.run(&m)
 	return m, cmd
 }
 

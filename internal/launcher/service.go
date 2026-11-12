@@ -436,6 +436,22 @@ func (templateInterpolator) Interpolate(input string, ctx InterpolationContext) 
 	return value
 }
 
+// Interpolate fills the placeholders of template from issue and projectRoot,
+// as a launcher template is filled. The result is text, never a command line.
+func Interpolate(template string, issue domain.IssueDetail, projectRoot string) string {
+	return templateInterpolator{}.Interpolate(template, contextFor(issue, projectRoot))
+}
+
+func contextFor(issue domain.IssueDetail, projectRoot string) InterpolationContext {
+	return InterpolationContext{
+		IssueID:       issue.Summary.ID,
+		IssueTitle:    issue.Summary.Title,
+		IssueLabels:   append([]string(nil), issue.Summary.Labels...),
+		IssueAssignee: issue.Summary.Assignee,
+		ProjectRoot:   projectRoot,
+	}
+}
+
 type launcherService struct {
 	resolver     definitionResolver
 	runner       ProcessRunner
@@ -470,13 +486,7 @@ func (s launcherService) Launch(ctx context.Context, action string, issue domain
 		return fmt.Errorf("launcher action %q is not defined", action)
 	}
 
-	interpolationContext := InterpolationContext{
-		IssueID:       issue.Summary.ID,
-		IssueTitle:    issue.Summary.Title,
-		IssueLabels:   append([]string(nil), issue.Summary.Labels...),
-		IssueAssignee: issue.Summary.Assignee,
-		ProjectRoot:   s.projectRoot,
-	}
+	interpolationContext := contextFor(issue, s.projectRoot)
 
 	command, err := interpolateExecTarget(s.interpolator, "command", definition.Command, interpolationContext)
 	if err != nil {

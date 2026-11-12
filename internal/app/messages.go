@@ -28,6 +28,16 @@ type agentsListedMsg struct {
 // agentFocusedMsg carries the result of bringing an agent to the front.
 type agentFocusedMsg struct{ err error }
 
+// agentStartedMsg carries the result of starting an agent on the issue
+// issueID: err when the host started none, linkErr when the agent started and
+// the label that links it to the issue was not written.
+type agentStartedMsg struct {
+	issueID string
+	agent   agent.Agent
+	err     error
+	linkErr error
+}
+
 // storeChangedMsg reports that the active store changed on disk.
 type storeChangedMsg struct{}
 

@@ -88,3 +88,12 @@ type Host interface {
 	// running or waits for the operator.
 	Close(ctx context.Context, a Agent, force bool) error
 }
+
+// linkLabelPrefix starts the issue label that links an agent's session to the
+// issue it was started on.
+const linkLabelPrefix = "agent:"
+
+// LinkLabel is the issue label that links the agent on session to the issue.
+func LinkLabel(session string) string {
+	return linkLabelPrefix + session
+}
