@@ -653,15 +653,22 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   it. `selectmenu.Place` puts it on the side of the cell away from the press, so it leaves the box
   clear, and on the other side where it would leave the screen.
   - Its title says sent, not copied: OSC 52 has no reply.
-  - It offers a quote of the text in a new comment on the selected issue, a store search for the
-    text on one line, and close. The quote goes to the issue its label names, taken when the menu
-    opens. Quote and search read the text without the screen's chrome (`quotable`): the border
+  - It offers a quote of the text in a new comment on the selected issue, an agent asked about the
+    text, a store search for the text on one line, and close. The quote and the ask go to the issue
+    their label names, taken when the menu opens. Quote and search read the text without the screen's chrome (`quotable`): the border
     rows at the top and the bottom, the leading columns that hold a side border `│`, the gutter or
     a space on every line, and the trailing side borders. A tree or a table drawn in the text keeps
     its glyphs; the clipboard keeps the box as drawn. The search runs once, at once
-    (`search.Model.SetQuery`). Quote and search are off on the picker, the configuration screen,
-    the issue editor, help and under a dialog, where each would leave the surface with work on it,
-    and for a box of chrome alone.
+    (`search.Model.SetQuery`). Quote, ask and search are off on the picker, the configuration
+    screen, the issue editor, help and under a dialog, where each would leave the surface with work
+    on it, and for a box of chrome alone. Ask is off without an agent host.
+  - Ask opens the ask question in the action modal: one line for the instruction, and `Ask`
+    (`Model.openAgentAsk`, `internal/app/askagent.go`). An empty line asks nothing. The agent
+    starts without the focus and is linked as an intent's agent is. An info toast says it works in
+    the background; when its turn ends the shell reloads the issue at once and reports the status
+    line its reply ends with (`Model.handleAgentAnswered`): `done` a success toast, `failed` an
+    error toast, `question` the focus offer, and a reply without one an info toast that it
+    finished. The agent stays open.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
     outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
     dropped while it is up, and a resize that changes the screen's size closes it.
@@ -694,11 +701,15 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - The Agents group of the Metadata pane is each linked agent's label, then its status word —
   `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. The
   Labels group leaves the link labels out.
-- The action modal carries three things: the store form of the picker (`Model.openStoreForm`),
-  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), and the yes or no
-  before a busy agent is closed (`Model.requestAgentClose`). Both questions have no input, a
-  `modal.ButtonDanger` confirm, and take `y` and `n`. `handleOverlayMessage` tells them apart by
-  `agentClose` and `storeForm.kind`. A new field of an issue is a row of the issue editor, never a modal.
+- The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
+  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), the yes or no
+  before a busy agent is closed (`Model.requestAgentClose`), the ask question of the selection
+  menu (`Model.openAgentAsk`), and the offer to bring an agent that asks to the front
+  (`Model.offerAgentFocus`). The delete and close questions have no input, a
+  `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
+  `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
+  `storeForm.kind`. The focus offer opens only where it takes no keys from work on screen; there
+  a warning toast names the agent menu instead. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

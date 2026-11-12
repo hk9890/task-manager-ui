@@ -348,10 +348,16 @@ instead.
   it. A terminal or multiplexer that ignores OSC 52 leaves the clipboard as it
   was: **hold `shift` and drag** there, and copy with the terminal.
 - The menu offers to quote the text in a new comment on the selected issue, to
-  search the store for it, and to close. `up`/`down` and
+  ask an agent about it, to search the store for it, and to close. `up`/`down` and
   `enter` or a click choose; `esc` or a click outside closes it, and the click
   outside does nothing else. Quote and search are off on screens where they
-  would drop work in progress, such as the issue editor.
+  would drop work in progress, such as the issue editor. Ask is off too when
+  revier is not there.
+- Ask an agent opens one line for your instruction. The agent starts in the
+  background, out of view, and changes the issue with taskmgr. When its turn
+  ends the issue is read again and a toast shows its summary. When the agent
+  has a question, a dialog offers to bring it to the front. The agent stays
+  open, linked to the issue.
 - Quote and search leave out the pane borders, the selection bar and the
   indent the screen adds; the clipboard gets the box as drawn. They are off
   for a box of borders alone. A resize during a drag drops the box and

@@ -55,12 +55,13 @@ func (m *Model) openSelectionMenu(selected textSelection, text string, release s
 	m.selMenu = menu
 }
 
-// selectionActions are the menu's entries for text. Quoting and searching
-// leave the surface on screen, so they are off where that would drop work in
-// progress or where there is no store to act on. They are off too for a box
+// selectionActions are the menu's entries for text. Quoting, asking an agent
+// and searching leave the surface on screen, so they are off where that would
+// drop work in progress or where there is no store to act on. Asking is off
+// too without an agent host. They are off too for a box
 // that holds only the screen's chrome: it leaves them no text.
 //
-// The quote goes to the issue its label names: a refresh under the menu can
+// The quote and the ask go to the issue their label names: a refresh under the menu can
 // move the selection before the entry is chosen.
 func (m *Model) selectionActions(text string) []selectionAction {
 	canAct := len(quotable(text)) > 0 && !m.showHelp && !m.showActionModal && m.storeOpen &&
@@ -73,10 +74,18 @@ func (m *Model) selectionActions(text string) []selectionAction {
 		issue = selection.Issue
 		quote = "Quote in a comment on " + displaytext.OneLine(issue.ID)
 	}
+	ask := "Ask an agent about it"
+	canAsk := canQuote && m.services.Agents != nil
+	if canAsk {
+		ask = "Ask an agent about it on " + displaytext.OneLine(issue.ID)
+	}
 	return []selectionAction{
 		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: func(m *Model) tea.Cmd {
 			m.quoteInComment(issue, text)
 			return nil
+		}},
+		{entry: selectmenu.Entry{Label: ask, Disabled: !canAsk}, run: func(m *Model) tea.Cmd {
+			return m.openAgentAsk(issue, text)
 		}},
 		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: func(m *Model) tea.Cmd {
 			return m.searchSelection(text)

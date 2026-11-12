@@ -162,15 +162,19 @@ type Model struct {
 	showHelp   bool
 	helpOffset int
 
-	// The action modal carries the store form, the comment delete question or
-	// the agent close question. commentDelete is the comment the delete
-	// question is about, and empty while another is open. agentClose is the
-	// agent the close question is about, and nil while another is open.
+	// The action modal carries the store form, the comment delete question,
+	// the agent close question, the ask question or the focus offer of an
+	// agent that asks. commentDelete is the comment the delete question is
+	// about, and empty while another is open. agentClose, agentAsk and
+	// agentFocusOffer are what their question is about, and nil while another
+	// is open.
 	actionModal     modal.Model
 	showActionModal bool
 	storeForm       storeForm
 	commentDelete   commentDelete
 	agentClose      *agent.Agent
+	agentAsk        *agentAsk
+	agentFocusOffer *agent.Agent
 
 	focusKnown      bool
 	terminalFocused bool
@@ -335,6 +339,8 @@ func (m *Model) bindStore(services Services) {
 	m.storeForm = storeForm{}
 	m.commentDelete = commentDelete{}
 	m.agentClose = nil
+	m.agentAsk = nil
+	m.agentFocusOffer = nil
 	m.fatalErrTitle, m.fatalErrBody = "", ""
 	// Board is initialised eagerly — by Init at startup, by switchStore after a
 	// switch — so it starts marked done and a later switch back to it does not
@@ -695,6 +701,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, modeCmd
 	case agentStartedMsg:
 		return m, batchCmds(modeCmd, m.handleAgentStarted(msg))
+	case agentAskStartedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentAskStarted(msg))
+	case agentAnsweredMsg:
+		return m, batchCmds(modeCmd, m.handleAgentAnswered(msg))
 	case agentResumedMsg:
 		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.err))
 	case agentClosedMsg:
@@ -1244,12 +1254,19 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 			m.storeForm = storeForm{}
 			m.commentDelete = commentDelete{}
 			m.agentClose = nil
+			m.agentAsk = nil
+			m.agentFocusOffer = nil
 			return m, modeCmd
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
-			if m.agentClose != nil {
+			switch {
+			case m.agentClose != nil:
 				return m, batchCmds(modeCmd, m.confirmAgentClose())
+			case m.agentAsk != nil:
+				return m, batchCmds(modeCmd, m.submitAgentAsk(submit.Values))
+			case m.agentFocusOffer != nil:
+				return m, batchCmds(modeCmd, m.confirmAgentFocus())
 			}
 			// No store form is open: the modal is the comment delete question.
 			if m.storeForm.kind == 0 {

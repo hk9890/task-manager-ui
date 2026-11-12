@@ -49,6 +49,10 @@ mise run ci          # the merge gate; see What the tools enforce
    label `agent.LinkLabel(session)`, written with `UpdateIssueInput.AddLabels`, which keeps every
    other label (`Model.startAgent`, `internal/app/intentmenu.go`).
 
+   - An agent asked from the selection menu runs in the background (`Model.askAgent`,
+     `internal/app/askagent.go`): `Host.Start` without the focus, the link label, then
+     `Host.Wait` and `Host.Read` in one scoped command on the store's context, so a store
+     switch ends the wait and drops the answer. The agent is never closed by the app.
    - The agents of an issue are `agent.Linked`: its link labels and its comment sessions, merged
      with the last poll. A link label no live agent holds is `agent.Gone`.
    - A link label stays in the store and off the screen: draw labels through

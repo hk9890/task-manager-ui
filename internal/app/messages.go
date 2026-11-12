@@ -38,6 +38,24 @@ type agentStartedMsg struct {
 	linkErr error
 }
 
+// agentAskStartedMsg carries the result of starting an agent in the
+// background on the issue issueID, as agentStartedMsg does for one in front.
+type agentAskStartedMsg struct {
+	issueID string
+	agent   agent.Agent
+	err     error
+	linkErr error
+}
+
+// agentAnsweredMsg carries the last thing an agent asked in the background
+// said once its turn ended: err when the wait or the read failed.
+type agentAnsweredMsg struct {
+	issueID string
+	agent   agent.Agent
+	reply   string
+	err     error
+}
+
 // agentResumedMsg carries the result of reopening a gone agent's
 // conversation and bringing it to the front: err when either failed.
 type agentResumedMsg struct {

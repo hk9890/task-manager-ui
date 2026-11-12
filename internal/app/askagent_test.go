@@ -1,0 +1,172 @@
+package app
+
+// Ask agent: the selection menu asks an agent in the background about the
+// selected text, waits for its turn to end, reloads the issue and reports
+// the status line of its reply.
+
+import (
+	"context"
+	"reflect"
+	"strings"
+	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/hk9890/task-manager-ui/internal/agent"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
+	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+)
+
+// askOnTitle selects the title of tm-1 in Detail, asks an agent about it with
+// instruction, and returns once the fake host has answered.
+func askOnTitle(t *testing.T, m Model, instruction string) Model {
+	t.Helper()
+	m.copyText = func(string) tea.Cmd { return nil }
+	x, y := testui.FindCell(t, testui.View(m), "Ready first")
+	endX := x + len("Ready first") - 1
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(endX, y))
+	m = send(t, m, testui.Release(endX, y))
+	if m.selMenu == nil {
+		t.Fatal("the release of a selection opened no menu")
+	}
+	testui.AssertContainsAll(t, plainShell(m), "Ask an agent about it on tm-1")
+	m = pressKey(t, m, "down")
+	// Stepped by hand from here: the question's input schedules a repeating
+	// cursor tick, so draining its commands never returns (docs/TESTING.md).
+	m = updateOnly(m, testui.Press("enter"))
+	if !m.showActionModal || m.agentAsk == nil {
+		t.Fatal("Ask an agent opened no question")
+	}
+	testui.AssertContainsAll(t, plainShell(m), "Ask an agent", "About the selection on tm-1")
+	m = updateOnly(m, testui.Runes(instruction))
+	m = updateOnly(m, testui.Press("enter")) // to the Ask button
+	next, cmd := m.Update(testui.Press("enter"))
+	if cmd == nil {
+		t.Fatal("Enter on Ask produced no command")
+	}
+	return applyMessages(t, next.(Model), []tea.Msg{cmd()})
+}
+
+// updateOnly hands m one message and drops the commands it returns.
+func updateOnly(m Model, msg tea.Msg) Model {
+	next, _ := m.Update(msg)
+	return next.(Model)
+}
+
+func askedShell(t *testing.T, said string) (Model, *fakes.FakeAgentHost) {
+	t.Helper()
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	client.Said = said
+	return askOnTitle(t, m, "make the title shorter"), client
+}
+
+// The agent starts without the focus, prompted with the issue, the selection,
+// the instruction and the status line to end with. It is linked to the issue,
+// waited on and read, and stays open. Its summary is reported.
+func TestAskAnAgentStartsItInTheBackgroundAndReportsItsSummary(t *testing.T) {
+	m, client := askedShell(t, "I shortened it.\n"+`{"status":"done","summary":"Shortened the title."}`)
+
+	specs := startCalls(client)
+	if len(specs) != 1 || specs[0].Focus || specs[0].Root != m.services.ProjectRoot {
+		t.Fatalf("Start calls = %+v, want one without the focus in the project", specs)
+	}
+	for _, part := range []string{"tm-1", `"Ready first"`, "make the title shorter", `{"status":"done"|"failed"|"question"`} {
+		if !strings.Contains(specs[0].Prompt, part) {
+			t.Errorf("prompt %q does not hold %q", specs[0].Prompt, part)
+		}
+	}
+	if strings.Contains(specs[0].Prompt, "\n") {
+		t.Errorf("prompt %q is more than one line", specs[0].Prompt)
+	}
+	want := []fakes.AgentHostCall{{Method: "Wait", Arg: "demo:home:9"}, {Method: "Read", Arg: "demo:home:9"}}
+	if got := hostCalls(client, "Wait", "Read", "Focus", "Close"); !reflect.DeepEqual(got, want) {
+		t.Fatalf("calls = %+v, want %+v", got, want)
+	}
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	}
+	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 is done: Shortened the title.") {
+		t.Fatalf("toast = %q, want the summary", view)
+	}
+}
+
+func TestAnAgentThatFailedIsReportedAsAnError(t *testing.T) {
+	m, _ := askedShell(t, `{"status":"failed","summary":"No such field."}`)
+	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 failed: No such field.") {
+		t.Fatalf("toast = %q, want the failure", view)
+	}
+}
+
+// A question offers to bring the agent to the front: yes focuses it.
+func TestAnAgentThatAsksIsOfferedToTheFront(t *testing.T) {
+	m, client := askedShell(t, "```json\n"+`{"status":"question","summary":"Which title?"}`+"\n```")
+	if !m.showActionModal || m.agentFocusOffer == nil {
+		t.Fatal("a question offered no focus")
+	}
+	testui.AssertContainsAll(t, plainShell(m), "The agent asks", "Which title?")
+	m = pressKey(t, m, "y")
+	if m.showActionModal {
+		t.Fatal("yes left the offer open")
+	}
+	if got := hostCalls(client, "Focus"); len(got) != 1 || got[0].Arg != "demo:home:9" {
+		t.Fatalf("Focus calls = %+v, want one on Tab 9", got)
+	}
+}
+
+func TestAReplyWithoutAStatusLineIsReportedAsFinished(t *testing.T) {
+	m, _ := askedShell(t, `Done. {"status": maybe}`)
+	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 finished") {
+		t.Fatalf("toast = %q, want the agent reported as finished", view)
+	}
+}
+
+// writingHost is a host whose agent renames tm-1 during its turn.
+type writingHost struct {
+	*fakes.FakeAgentHost
+	repo interface {
+		UpdateIssue(context.Context, string, domain.UpdateIssueInput) error
+	}
+}
+
+func (h writingHost) Wait(ctx context.Context, a agent.Agent) error {
+	title := "Renamed by the agent"
+	if err := h.repo.UpdateIssue(ctx, "tm-1", domain.UpdateIssueInput{Title: &title}); err != nil {
+		return err
+	}
+	return h.FakeAgentHost.Wait(ctx, a)
+}
+
+// The end of the turn reloads Detail at once, so it shows what the agent
+// wrote.
+func TestTheEndOfTheTurnReloadsTheIssue(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	m.services.Agents = writingHost{FakeAgentHost: client, repo: m.services.Repo}
+	m = askOnTitle(t, m, "rename it")
+	testui.AssertContainsAll(t, plainShell(m), "Renamed by the agent")
+}
+
+func TestParseAskReportReadsTheLastStatusLine(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		reply string
+		want  askReport
+		ok    bool
+	}{
+		{reply: `{"status":"done","summary":"ok"}`, want: askReport{Status: "done", Summary: "ok"}, ok: true},
+		{reply: "`{\"status\":\"failed\",\"summary\":\"no\"}`", want: askReport{Status: "failed", Summary: "no"}, ok: true},
+		{reply: `{"status":"done","summary":"first"}` + "\n" + `{"status":"question","summary":"last"}` + "\nbye", want: askReport{Status: "question", Summary: "last"}, ok: true},
+		{reply: `{"status":"maybe","summary":"x"}`},
+		{reply: "no status at all"},
+		{reply: ""},
+	}
+	for _, tc := range cases {
+		got, ok := parseAskReport(tc.reply)
+		if ok != tc.ok || got != tc.want {
+			t.Errorf("parseAskReport(%q) = %+v, %v; want %+v, %v", tc.reply, got, ok, tc.want, tc.ok)
+		}
+	}
+}
