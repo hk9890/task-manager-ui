@@ -92,7 +92,7 @@ func (m *Model) askAgent(ask agentAsk, instruction string) tea.Cmd {
 // submits a prompt as one line, so the selection is put on one.
 func askPrompt(issueID, text, instruction string) string {
 	selection := strings.Join(strings.Fields(strings.Join(quotable(text), " ")), " ")
-	return fmt.Sprintf("In taskmgr issue %s the operator selected this text: %q. Their instruction: %s "+
+	return fmt.Sprintf("In taskmgr issue %s the operator selected this text: %q. Their instruction: %q. "+
 		"Read the issue with taskmgr, apply the change to the issue with taskmgr, and change nothing else. "+
 		`End your reply with exactly one line of JSON: {"status":"done"|"failed"|"question","summary":"<one sentence>"}.`,
 		issueID, selection, instruction)
