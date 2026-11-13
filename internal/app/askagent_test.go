@@ -24,6 +24,14 @@ import (
 // instruction, and returns once the fake host has answered.
 func askOnTitle(t *testing.T, m Model, instruction string) Model {
 	t.Helper()
+	m, cmd := askCmdOnTitle(t, m, instruction)
+	return applyMessages(t, m, []tea.Msg{cmd()})
+}
+
+// askCmdOnTitle is askOnTitle up to the Ask button: it returns the command
+// Enter on Ask produced, not run yet.
+func askCmdOnTitle(t *testing.T, m Model, instruction string) (Model, tea.Cmd) {
+	t.Helper()
 	m.copyText = func(string) tea.Cmd { return nil }
 	x, y := testui.FindCell(t, testui.View(m), "Ready first")
 	endX := x + len("Ready first") - 1
@@ -48,7 +56,7 @@ func askOnTitle(t *testing.T, m Model, instruction string) Model {
 	if cmd == nil {
 		t.Fatal("Enter on Ask produced no command")
 	}
-	return applyMessages(t, next.(Model), []tea.Msg{cmd()})
+	return next.(Model), cmd
 }
 
 // updateOnly hands m one message and drops the commands it returns.
@@ -214,7 +222,7 @@ func TestTheLinkOfAnAskedAgentReloadsTheIssue(t *testing.T) {
 	if m.storeWatched() {
 		t.Fatal("fixture store is watched")
 	}
-	m.handleAgentAskStarted(agentAskStartedMsg{issueID: "tm-1", agent: startedOnTab9()})
+	m.handleAgentAskStarted(agentAskStartedMsg{epoch: m.storeEpoch, issueID: "tm-1", agent: startedOnTab9()})
 	if !m.detail.IsLoading() {
 		t.Fatal("the link of an asked agent did not reload the issue")
 	}

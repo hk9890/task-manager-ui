@@ -385,7 +385,8 @@ instead.
   background, out of view, and changes the issue with taskmgr. When its turn
   ends the issue is read again and a toast shows its summary. When the agent
   has a question, a dialog offers to bring it to the front. The agent stays
-  open, linked to the issue.
+  open, linked to the issue. Switch stores before its turn ends and no summary
+  comes.
 - Quote and search leave out the pane borders, the selection bar and the
   indent the screen adds; the clipboard gets the box as drawn. They are off
   for a box of borders alone. A resize during a drag drops the box and

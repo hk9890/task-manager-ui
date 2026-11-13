@@ -42,7 +42,9 @@ mise run ci          # the merge gate; see What the tools enforce
 6. **Launchers are thin.** Launchers receive issue context and produce a subprocess. They must not become an orchestration engine.
 
    The agent host (`agent.Host` in `internal/agent`, `Services.Agents`) is a seam outside the
-   store path: each method is one bounded request to the program that runs the agents. revier is
+   store path, over the program that runs the agents. Each call is bounded: none outlives its
+   context, and the host sets its own timeout on top. The steps inside a call (the harness wait,
+   the session lookup, the prompt, the focus) belong to the host, not to the core. revier is
    its one implementation (`internal/agent/revier`); the core reads `agent.Agent.Ref` as opaque.
    Its poll is a timer under the [Switching stores](#switching-stores) rules: the tick is
    unscoped, the listing it starts is scoped. An agent started on an issue is linked to it by the
@@ -52,9 +54,9 @@ mise run ci          # the merge gate; see What the tools enforce
    issue.
 
    - An agent asked from the selection menu runs in the background (`Model.askAgent`,
-     `internal/app/askagent.go`): `Host.Start` without the focus, the link label, then
-     `Host.Wait` and `Host.Read` in one scoped command on the store's context, so a store
-     switch ends the wait and drops the answer. The agent is never closed by the app.
+     `internal/app/askagent.go`): `Host.Start` without the focus and the link label in the
+     unscoped start command, then `Host.Wait` and `Host.Read` in one scoped command on the
+     store's context, so a store switch ends the wait and drops the answer. The agent is never closed by the app.
    - The agents of an issue are `agent.Linked`: its link labels and its comment sessions, merged
      with the last poll. A link label no live agent holds is `agent.Gone`.
    - A close from the app removes the link label from the open issues after the host closes the
@@ -150,6 +152,12 @@ still holds: each repository instance is bound to one store, and switching repla
   its last message must not reach the new store's chain. The wait also re-arms only from its own
   handler; an open overlay does not stop it, because `Model.overlayConsumes` takes only keys and
   the modal's own messages from the shell.
+- An agent start is the exception to `Model.scoped`: its command is unscoped and runs on no
+  store's context, so a store switch neither stops an agent half started nor drops the toast of its
+  result, which names the issue. The command writes the link label to the repository the start
+  began on and tags its result with that store's epoch (`startAndLink`,
+  `internal/app/agentstart.go`); the handler reloads and starts the ask wait only when that epoch
+  is the active one.
 - On a watched store (`Model.storeWatched`) the watch owns the reload after a write, the app's own
   writes included. Do not reload from the handler of a write result there: the signal for that
   write reloads a second time.

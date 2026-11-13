@@ -23,8 +23,10 @@ import (
 // signal, which it takes from Repo when Repo is a repository.ChangeWatcher.
 // Launcher integration stays shell-owned so browse/detail modes can emit intent
 // while launch execution stays centralized and reusable. Agents is the host
-// of the project's coding agents: each call on it is one bounded request, not
-// orchestration.
+// of the project's coding agents, not orchestration: each call on it is
+// bounded, none outlives its context and the host sets its own timeout on
+// top. The steps inside a call (the harness wait, the session lookup, the
+// prompt, the focus) belong to the host, not to the core.
 type Services struct {
 	Repo     repository.Repository
 	Launcher launcher.Service

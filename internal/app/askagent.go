@@ -82,9 +82,10 @@ func (m *Model) askAgent(ask agentAsk, instruction string) tea.Cmd {
 	issueID := ask.issue.ID
 	spec := agent.Spec{Root: root, Prompt: askPrompt(issueID, ask.text, instruction)}
 	asking := m.showToast("Asking an agent on "+displaytext.OneLine(issueID)+"…", toaster.StyleInfo)
-	start := m.scoped(func() tea.Msg {
-		return agentAskStartedMsg(startAndLink(host, repo, issueID, spec))
-	})
+	epoch := m.storeEpoch
+	start := func() tea.Msg {
+		return agentAskStartedMsg(startAndLink(host, repo, epoch, issueID, spec))
+	}
 	return batchCmds(asking, start)
 }
 
@@ -101,7 +102,8 @@ func askPrompt(issueID, text, instruction string) string {
 // handleAgentAskStarted reports a start that failed, or reloads the issue the
 // label was written to and waits in the background for the turn of the agent
 // that started. An agent that opened but did not take the prompt is linked
-// and not waited on: it has no turn.
+// and not waited on: it has no turn. After a store switch the start is
+// reported and not waited on: the wait belongs to the store it began on.
 func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
 	issueID := displaytext.OneLine(msg.issueID)
 	if msg.err != nil && msg.agent.Session == "" {
@@ -110,9 +112,13 @@ func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
 	label := displaytext.OneLine(msg.agent.Label)
 	var reload tea.Cmd
 	if msg.linkErr == nil {
-		reload = m.reloadAfterLink(msg.issueID)
+		reload = m.reloadAfterStart(agentStart(msg))
 	}
 	switch {
+	case msg.err == nil && msg.epoch != m.storeEpoch && msg.linkErr != nil:
+		return m.showToast(fmt.Sprintf("%s works on %s in the store you left, but could not be linked to it: %v", label, issueID, msg.linkErr), toaster.StyleError)
+	case msg.err == nil && msg.epoch != m.storeEpoch:
+		return m.showToast(fmt.Sprintf("%s works on %s in the store you left; its answer is not reported", label, issueID), toaster.StyleInfo)
 	case msg.err != nil && msg.linkErr != nil:
 		return m.showToast(fmt.Sprintf("Started %s on %s, but could not ask it: %v; and could not link it: %v", label, issueID, msg.err, msg.linkErr), toaster.StyleError)
 	case msg.err != nil:
@@ -141,16 +147,20 @@ func (m *Model) waitForAnswer(issueID string, a agent.Agent) tea.Cmd {
 	})
 }
 
-// handleAgentAnswered reloads what the agent may have written at once, then
-// reports the status line of its reply. An agent that stopped to wait for the
-// operator, and a question, offer to bring the agent to the front. A reply
-// without a status line is reported as finished: the reload shows what it
-// did.
+// handleAgentAnswered polls the agents and, on a store that is not watched,
+// reloads what the agent may have written at once: on a watched one the
+// watch reloads after the agent's writes. Then it reports the status line of
+// its reply. An agent that stopped to wait for the operator, and a question,
+// offer to bring the agent to the front. A reply without a status line is
+// reported as finished: the reload shows what it did.
 func (m *Model) handleAgentAnswered(msg agentAnsweredMsg) tea.Cmd {
-	m.markBrowseSurfacesDirty()
-	reload := []tea.Cmd{m.maybeAutoRefreshActiveSurfaceCmd(), m.pollAgentsCmd()}
-	if m.detail.Detail.Summary.ID == msg.issueID {
-		reload = append(reload, m.reloadDetailAfterMutationCmd(msg.issueID))
+	reload := []tea.Cmd{m.pollAgentsCmd()}
+	if !m.storeWatched() {
+		m.markBrowseSurfacesDirty()
+		reload = append(reload, m.maybeAutoRefreshActiveSurfaceCmd())
+		if m.detail.Detail.Summary.ID == msg.issueID {
+			reload = append(reload, m.reloadDetailAfterMutationCmd(msg.issueID))
+		}
 	}
 
 	label, issueID := displaytext.OneLine(msg.agent.Label), displaytext.OneLine(msg.issueID)

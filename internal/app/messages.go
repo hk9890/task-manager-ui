@@ -33,6 +33,8 @@ type agentFocusedMsg struct{ err error }
 // agent to the issue was not written. An agent with a session started even
 // when err is set, and is linked.
 type agentStart struct {
+	// epoch is the store the start began on: the link label is written there.
+	epoch   int
 	issueID string
 	agent   agent.Agent
 	err     error

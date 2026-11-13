@@ -35,22 +35,22 @@ func (m *Model) startAgent(issue domain.IssueDetail, intent config.Intent) tea.C
 	spec := agent.Spec{Root: root, Prompt: launcher.Interpolate(intent.Prompt, issue, root), Focus: true}
 	issueID := issue.Summary.ID
 	starting := m.showToast(fmt.Sprintf("Starting an agent to %s %s…", displaytext.OneLine(intent.Name), displaytext.OneLine(issueID)), toaster.StyleInfo)
-	// Not the store's context: a store switch must not stop an agent half
-	// started. The host bounds every call itself.
-	start := m.scoped(func() tea.Msg {
-		return agentStartedMsg(startAndLink(host, repo, issueID, spec))
-	})
+	epoch := m.storeEpoch
+	start := func() tea.Msg {
+		return agentStartedMsg(startAndLink(host, repo, epoch, issueID, spec))
+	}
 	return batchCmds(starting, start)
 }
 
 // startAndLink starts an agent on spec and writes the label of its session on
-// the issue. It runs on no store's context: a store switch must not stop an
-// agent half started, and the host bounds every call itself. An agent the
-// host returns with a session is linked even when a later step of its start
-// failed: it is open and may work on the issue.
-func startAndLink(host agent.Host, repo repository.Repository, issueID string, spec agent.Spec) agentStart {
+// the issue, in repo, the store the start began on. Its command is unscoped
+// and runs on no store's context: a store switch must not stop an agent half
+// started nor drop the report of its start, and the host bounds every call
+// itself. An agent the host returns with a session is linked even when a
+// later step of its start failed: it is open and may work on the issue.
+func startAndLink(host agent.Host, repo repository.Repository, epoch int, issueID string, spec agent.Spec) agentStart {
 	started, err := host.Start(context.Background(), spec)
-	result := agentStart{issueID: issueID, agent: started, err: err}
+	result := agentStart{epoch: epoch, issueID: issueID, agent: started, err: err}
 	if started.Session == "" {
 		if err == nil {
 			result.linkErr = errors.New("the agent host reported no session")
@@ -70,7 +70,7 @@ func startAndLink(host agent.Host, repo repository.Repository, issueID string, s
 
 // handleAgentStarted reports the start to the operator in one toast, a
 // failed start and a failed link both, and reloads the issue the label was
-// written to.
+// written to when its store is still the active one.
 func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 	issueID := displaytext.OneLine(msg.issueID)
 	if msg.err != nil && msg.agent.Session == "" {
@@ -83,10 +83,20 @@ func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 	case msg.linkErr != nil:
 		return m.showToast(fmt.Sprintf("Started %s, but could not link it to %s: %v", label, issueID, msg.linkErr), toaster.StyleError)
 	case msg.err != nil:
-		return batchCmds(m.reloadAfterLink(msg.issueID), m.showToast(fmt.Sprintf("Started %s on %s, but: %v", label, issueID, msg.err), toaster.StyleError))
+		return batchCmds(m.reloadAfterStart(agentStart(msg)), m.showToast(fmt.Sprintf("Started %s on %s, but: %v", label, issueID, msg.err), toaster.StyleError))
 	default:
-		return batchCmds(m.reloadAfterLink(msg.issueID), m.showToast(fmt.Sprintf("Started %s on %s", label, issueID), toaster.StyleSuccess))
+		return batchCmds(m.reloadAfterStart(agentStart(msg)), m.showToast(fmt.Sprintf("Started %s on %s", label, issueID), toaster.StyleSuccess))
 	}
+}
+
+// reloadAfterStart reloads after the link label of a start was written, when
+// the start began on the active store: the label went to the store it began
+// on, and another store's surfaces do not show it.
+func (m *Model) reloadAfterStart(start agentStart) tea.Cmd {
+	if start.epoch != m.storeEpoch {
+		return nil
+	}
+	return m.reloadAfterLink(start.issueID)
 }
 
 // reloadAfterLink reloads the browse surfaces, and Detail when it shows an

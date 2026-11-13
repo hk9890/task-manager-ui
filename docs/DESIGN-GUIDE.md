@@ -727,11 +727,13 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   - Ask opens the ask question in the action modal: one line for the instruction, and `Ask`
     (`Model.openAgentAsk`, `internal/app/askagent.go`). An empty line asks nothing. The agent
     starts without the focus and is linked as an intent's agent is. An info toast says it works in
-    the background; when its turn ends the shell reloads the issue at once and reports the status
-    line its reply ends with (`Model.handleAgentAnswered`): `done` a success toast, `failed` an
-    error toast, `question` the focus offer, and a reply without one an info toast that it
-    finished. A turn that ends with the agent waiting for the operator is the focus offer too,
-    whatever the reply says. The agent stays open.
+    the background; when its turn ends the shell polls the agents, reloads the issue (on a watched
+    store the watch does it) and reports the status line its reply ends with
+    (`Model.handleAgentAnswered`): `done` a success toast, `failed` an error toast, `question` the
+    focus offer, and a reply without one an info toast that it finished. A turn that ends with the
+    agent waiting for the operator is the focus offer too, whatever the reply says. The agent stays
+    open. A store switch before the start returns still reports the start, and the toast says no
+    answer comes: the wait belongs to the store the start began on.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
     outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
     dropped while it is up, and a resize that changes the screen's size closes it.
@@ -767,7 +769,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   host and raises an info toast at once, because a start takes as long as the agent takes to
   start; a start that fails, and a label that is not written, raise an error toast
   (`Model.handleAgentStarted`). A start that fails after the agent has its session, at the prompt
-  or the focus, still links the agent. Without an agent host or the project path, and without a
+  or the focus, still links the agent. A store switch does not drop the toast of a start, and each
+  toast names the issue; the link label goes to the store the start began on. Without an agent host or the project path, and without a
   linked agent and an intent both, the key raises a warning toast instead of the dialog.
 - The Agents group of the Details pane is each linked agent's title (`agent.Agent.Title`), then its
   status word — `running`, `idle`, `needs you`, `gone` (`agent.StatusWord`). What it does is on
