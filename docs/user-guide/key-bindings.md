@@ -113,7 +113,8 @@ issue, and `Not linked`, the live agents linked to none. Each agent is two lines
 its name, its status and what it does, then its tab and the ID and title of its
 issue. A long name is cut; the status stays. A labelled agent that no longer runs is `gone`; it is listed only on an
 open issue. Without an agent the tab says why: no agent host, no project path,
-or the error revier gave.
+the path not accessible, the path is no revier project, the error revier gave, or that
+revier has not answered yet.
 
 - `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
 - `enter` — bring the selected agent to the front; resume a `gone` one first,

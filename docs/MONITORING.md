@@ -56,8 +56,8 @@ Structured records include at least:
 - `project_root`
 - `build_version`
 - `component`, on records emitted through a component logger: `startup`
-  (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search`, `storepicker`
-  (`internal/app/model.go`).
+  (`cmd/taskmgr-ui/main.go`), and `agents`, `board`, `docs`, `search`,
+  `storepicker` (`internal/app/model.go`).
   Shell-level records — the health check below among them — go through the root logger
   and carry no `component` key.
 
@@ -159,7 +159,7 @@ suppressed for the interactive session.
   `internal/app/agents.go`). The agents leave Detail, the board and the Agents tab; the tab names
   the cause (`Model.agentsAbsent`). No toast. Logged once per
   failure: the next record comes after a poll succeeds and another one fails.
-- `reading the issues linked to agents failed` (WARN, with `error`) — the Agents tab's search for
+- `reading the issues linked to agents failed` (WARN, with `error`, `component=agents`) — the Agents tab's search for
   the issues that carry a link label failed (`Model.Update`, `internal/mode/agents/model.go`). No
   toast. The tab keeps the issues of the last read that succeeded. When none did, it shows only
   the live agents and those linked by a comment, with no label-linked and no `gone` agent, until a

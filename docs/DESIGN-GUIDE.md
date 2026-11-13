@@ -170,7 +170,8 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   renderer of their own. Each takes the content lines its column holds from `board.ContentRows`,
   which subtracts the list head and the two borders; none repeats that arithmetic. Both hold a
   `rowlist.List` (`internal/mode/rowlist`) for the selection, the scroll offset, the move keys and
-  the mouse.
+  the mouse. The Agents tab is the exception: its rows are agents in two groups with
+  headings, not issues, so `ui/agents` draws its own box and counts its own `RowLines`.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ### A button in a pane
@@ -647,7 +648,9 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The selection bar staying
   on a row that actually renders is a contract; `EnsureVisible` in a clipped pane satisfies the
   window check and hides the bar. Both count rows of one line; a list of two-line rows passes its
-  capacity in rows, as `mode/storepicker` does with `RowCapacity`.
+  capacity in rows, as `mode/storepicker` does with `RowCapacity`. The Agents tab is the
+  exception: its group headings and gaps are lines `scroll.EnsureVisible` does not count, so it
+  scrolls with `agents.EnsureVisible` (`internal/ui/agents`).
 - A column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
   issue older than a day and another before the first older than a week, each carrying the count
   of issues below it (`internal/ui/board/agemarker.go`). A divider is a row, not an issue:
