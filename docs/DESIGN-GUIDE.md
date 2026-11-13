@@ -366,7 +366,8 @@ store's project. It draws the list head of the board — the rule and the query 
   the focus. It shows the selected agent: the title and the status as the row draws them, what it
   does wrapped and muted, a rule in `BorderDefaultColor`, the linked issue as the Content pane of
   Detail heads it — type, priority, status and ID, the title bold under them — or `none`, the label
-  when the title is a name, the session, then `Last message` as markdown.
+  when the title is a name, the session, then `Last message` as markdown, also where it looks
+  like plain text (`markdown.Renderer.RenderMarkdown`): an agent writes markdown.
 - The last message is `agent.Host.Read`, which the shell hands the tab as `agents.Read`. It is read
   once the selection rests on an agent for `readPause`, only while the pane is on screen, and never
   for a gone agent (`Model.readSoon`). The shell calls `agents.Model.SetShown` after every message
@@ -429,8 +430,8 @@ focuses it.
   to an `alt+` chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything
   else ([CONFIGURATION.md](CONFIGURATION.md#keybindings)).
 - A built-in key that prints nothing — `backspace`, `ctrl+w`, `ctrl+u`, the scope key of the store
-  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in the
-  `shell` and `board` contexts. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
+  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in every
+  context but `modal`. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
   (`internal/mode/search/model_test.go`) fails while that list and the surfaces disagree.
 - The startup-error screen (`internal/ui/fatalerror`) is the one exception: it quits on `q` as well
   as on the quit key. It has no query line and no other action, so the key can type into nothing.
@@ -847,10 +848,10 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   (`Model.offerAgentFocus`). The delete and close questions have no input, a
   `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
   `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
-  `storeForm.kind`. The focus offer opens only on Detail or the Agents tab with no overlay, menu or
-  drag open: no key typed there is text. Board, Docs and the store search take a typed key as
-  query text with no prefix, so anywhere else a warning toast names the agent dialog and the
-  Agents tab instead. A new field of an issue is a row of the issue editor, never a modal.
+  `storeForm.kind`. The focus offer opens only on Detail with no overlay, menu or drag open: no
+  key typed there is text. Board, Docs, Agents and the store search take a typed key as query text
+  with no prefix, so anywhere else a warning toast names the agent dialog and the Agents tab
+  instead; on the Agents tab the agent's row says `needs you` and comes first. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

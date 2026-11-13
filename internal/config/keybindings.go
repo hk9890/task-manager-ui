@@ -315,7 +315,7 @@ func buildContextBindings(context string, input map[string][]string, allowed map
 			if context != ModalContext && isPrintableKey(key) {
 				return ContextBindings{}, fmt.Errorf("key %q for action %q in %s context is a printable key, which types into the filter; bind it with alt+ or ctrl+", key, action, context)
 			}
-			if use, reserved := reservedKeys[key]; reserved && (context == ShellContext || context == BoardContext) {
+			if use, reserved := reservedKeys[key]; reserved && context != ModalContext {
 				return ContextBindings{}, fmt.Errorf("key %q for action %q in %s context %s, which takes it before any binding; bind another key", key, action, context, use)
 			}
 			if existing, exists := ctx.index[key]; exists {
@@ -360,8 +360,9 @@ func isPrintableKey(key string) bool {
 // reservedKeys are the keys a browse surface takes before any binding, by
 // canonical name, each with what it does there. The surfaces own the keys;
 // this list repeats their names because mode imports config. They are refused
-// in the shell and board contexts, which a browse surface reads; the detail
-// has no query, so its context keeps them.
+// in every context but the modal: the shell and board contexts are read by a
+// browse surface, and the detail page keys by the Agents tab, which has a
+// query too.
 var reservedKeys = map[string]string{
 	"backspace": "edits the filter",
 	"ctrl+w":    "edits the filter",

@@ -163,6 +163,23 @@ func TestAQuestionWhileAQueryIsTypedIsAToast(t *testing.T) {
 	}
 }
 
+// The Agents tab types every key into its query, so a question there is a
+// toast too, not an offer a typed `y` would confirm.
+func TestAQuestionOnTheAgentsTabIsAToast(t *testing.T) {
+	m, _ := agentsTab(t)
+	if m.active != mode.Agents {
+		t.Fatalf("fixture is on %q, want the Agents tab", m.active)
+	}
+	m = send(t, m, agentAnsweredMsg{issueID: "tm-1", agent: startedOnTab9(), stoppedOn: agent.Idle, reply: `{"status":"question","summary":"Which?"}`})
+
+	if m.showActionModal {
+		t.Fatal("a question on the Agents tab opened the offer")
+	}
+	if view := m.toast.View(); !strings.Contains(view, "answer it from the agent dialog") {
+		t.Fatalf("toast = %q, want the pointer to the agent dialog", view)
+	}
+}
+
 func TestAReplyWithoutAStatusLineIsReportedAsFinished(t *testing.T) {
 	m, _ := askedShell(t, `Done. {"status": maybe}`)
 	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 finished") {

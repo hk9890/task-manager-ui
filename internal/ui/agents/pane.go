@@ -137,7 +137,7 @@ func messageLines(pane Pane, status agent.Status, width int) []string {
 		return []string{muted("(nothing yet)")}
 	}
 	var lines []string
-	for _, line := range strings.Split(markdown.NewRenderer().RenderReadOnly(pane.Message, width), "\n") {
+	for _, line := range strings.Split(markdown.NewRenderer().RenderMarkdown(pane.Message, width), "\n") {
 		lines = append(lines, textutil.TruncateString(strings.TrimRight(line, " \t"), width))
 	}
 	return lines

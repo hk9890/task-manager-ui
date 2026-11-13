@@ -409,9 +409,9 @@ instead.
   ends the issue is read again and a toast shows its summary, over up to three
   lines. A summary longer than that is cut, and the toast stays until `esc` or
   the next toast. When the agent
-  has a question, a dialog offers to bring it to the front, in detail mode or on
-  the Agents tab with nothing else open; anywhere else a toast says so, and you
-  answer from the agent dialog or the Agents tab. The agent stays
+  has a question, a dialog offers to bring it to the front, in detail mode with
+  nothing else open; anywhere else a toast says so, and you answer from the
+  agent dialog or the Agents tab, where the agent comes first as `needs you`. The agent stays
   open, linked to the issue. Switch stores before its turn ends and no summary
   comes.
 - Quote and search leave out the pane borders, the selection bar and the

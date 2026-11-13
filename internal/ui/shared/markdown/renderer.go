@@ -223,13 +223,24 @@ func NewRenderer() Renderer {
 // RenderReadOnly renders markdown as ANSI output when markdown structure is
 // present, otherwise returns deterministic plain text fallback output.
 func (r Renderer) RenderReadOnly(input string, width int) string {
+	return r.render(input, width, true)
+}
+
+// RenderMarkdown renders input as markdown even where it looks like plain
+// text: for text that is markdown by convention, such as what a coding agent
+// says, whose bold and code spans the plain-text guess would leave raw.
+func (r Renderer) RenderMarkdown(input string, width int) string {
+	return r.render(input, width, false)
+}
+
+func (r Renderer) render(input string, width int, guessPlain bool) string {
 	content := strings.Trim(drawable(input), "\n")
 	if strings.TrimSpace(content) == "" {
 		return emptyFallback(r.EmptyFallback)
 	}
 
 	width = normalizeWidth(width)
-	if isEffectivelyPlainText(content) {
+	if guessPlain && isEffectivelyPlainText(content) {
 		return renderPlain(content, width)
 	}
 

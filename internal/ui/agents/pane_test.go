@@ -100,19 +100,33 @@ func TestTheQueryLineFiltersTheList(t *testing.T) {
 	}
 }
 
-// OnPane is the pane's cells only, and nothing while the screen is not split.
-func TestOnPaneIsThePaneOnly(t *testing.T) {
+// OnPane is true on the cells Render draws the pane on and false on the gap
+// and the list beside it; it is false everywhere while the screen is not split.
+func TestOnPaneIsWhereThePaneIsDrawn(t *testing.T) {
 	t.Parallel()
 	state := splitState()
-	list, _, _ := styles.SplitWidths(state.Width)
-	if OnPane(state, list-1, 5) || !OnPane(state, list+styles.SplitGap, 5) || OnPane(state, list+styles.SplitGap, 1) {
-		t.Errorf("OnPane does not follow the split at list width %d", list)
+	view := Render(state)
+
+	x, y := testui.FindCell(t, view, "╭─ Agent ")
+	if !OnPane(state, x, y) || OnPane(state, x-1, y) {
+		t.Errorf("OnPane does not start at the pane's left border (%d, %d)", x, y)
 	}
-	if _, ok := HitTest(state, list+styles.SplitGap+3, 4); ok {
-		t.Errorf("a click on the pane hits a row")
+	if x, y := testui.FindCell(t, view, "Last message"); !OnPane(state, x, y) {
+		t.Errorf("OnPane is false inside the pane at (%d, %d)", x, y)
 	}
+	if x, y := testui.FindCell(t, view, "Session s-gone-0"); OnPane(state, x, y) {
+		t.Errorf("OnPane is true on a list row at (%d, %d)", x, y)
+	} else if _, ok := HitTest(state, x, y); !ok {
+		t.Errorf("the list row at (%d, %d) is no hit", x, y)
+	}
+	x, y = testui.FindCell(t, view, "Session  s-4")
+	if _, ok := HitTest(state, x, y); ok || !OnPane(state, x, y) {
+		t.Errorf("the pane line at (%d, %d) is a row hit, or not on the pane", x, y)
+	}
+
 	state.Width = styles.SplitMinWidth - 1
-	if OnPane(state, state.Width-2, 5) {
+	narrow := Render(state)
+	if x, y := testui.FindCell(t, narrow, "Not linked"); OnPane(state, x+20, y) {
 		t.Errorf("OnPane is true while the screen is not split")
 	}
 }

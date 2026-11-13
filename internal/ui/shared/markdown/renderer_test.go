@@ -45,6 +45,21 @@ func TestRenderReadOnlyUsesPlainFallbackForEffectivelyPlainText(t *testing.T) {
 	}
 }
 
+// RenderMarkdown renders what RenderReadOnly takes for plain text: bold and a
+// code span lose their markers.
+func TestRenderMarkdownRendersTextThatLooksPlain(t *testing.T) {
+	t.Parallel()
+
+	r := NewRenderer()
+	if got := r.RenderReadOnly("I filed **the task** in `store.go`.", 60); !strings.Contains(got, "**the task**") {
+		t.Fatalf("fixture: RenderReadOnly no longer guesses plain text: %q", got)
+	}
+	got := ansiStripPattern.ReplaceAllString(r.RenderMarkdown("I filed **the task** in `store.go`.", 60), "")
+	if strings.Contains(got, "**") || strings.Contains(got, "`") || !strings.Contains(got, "the task") {
+		t.Fatalf("expected the markers rendered away, got %q", got)
+	}
+}
+
 func TestRenderReadOnlyFallsBackToPlainWhenRendererErrors(t *testing.T) {
 	t.Parallel()
 
