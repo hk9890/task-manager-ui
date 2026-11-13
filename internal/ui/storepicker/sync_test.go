@@ -82,10 +82,10 @@ func TestSyncLineCutsTheFrontOfTheBranchAndKeepsTheTime(t *testing.T) {
 
 // The sync line is a detail, not a row: it draws in TextMutedColor.
 func TestSyncLineIsMuted(t *testing.T) {
-	t.Parallel()
+	testui.ForceTrueColor(t)
 
-	got := renderSync(Sync{Branch: "machine/a"}, syncNow, 60)
-	want := "  " + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("Not synced yet · machine/a")
+	got := testui.Downsample(renderSync(Sync{Branch: "machine/a"}, syncNow, 60))
+	want := testui.Downsample("  " + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render("Not synced yet · machine/a"))
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

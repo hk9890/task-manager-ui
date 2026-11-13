@@ -131,8 +131,9 @@ Every store the app opens is resolved through `repositorytaskmgr.Resolve`, never
 `tasks.Resolve` itself: `buildRepository` and the store catalog's `Catalog.resolve` call it. It
 passes `tasks.WithLockTimeout(repositorytaskmgr.StoreLockTimeout)`. Without it a write blocks its
 command with no limit while a hook or a publish holds the store's write lock. With it the write fails with
-`tasks.ErrStoreBusy`, which `mapWriteErr` maps to `domain.ErrorCodeTimeout`: the toast says the
-store is busy and the write can be tried again.
+`tasks.ErrStoreBusy`, which `mapWriteErr` maps to `domain.ErrorCodeTimeout`. The issue editor's
+error line, or the toast of a write from elsewhere, says the store is busy and the write can be
+tried again.
 
 Nothing resolving is not an error. When `tasks.Resolve` reports `ErrNoStore`, or
 `ErrStoreNotRegistered` for a `--store-name`, `resolveStartupStore` starts the app on the store

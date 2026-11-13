@@ -386,6 +386,7 @@ func (m *Model) handleAgentUnlinked(msg agentUnlinkedMsg) tea.Cmd {
 	}
 	label := displaytext.OneLine(msg.agent.Title())
 	if msg.err != nil {
+		m.logWriteFailure("", msg.err)
 		return batchCmds(reload, m.showToast(fmt.Sprintf("Could not unlink %s: %s", label, displaytext.OneLine(msg.err.Error())), toaster.StyleError))
 	}
 	return batchCmds(reload, m.dropAgent(msg.agent), m.showToast("Unlinked "+label, toaster.StyleSuccess))
@@ -438,6 +439,7 @@ func (m *Model) handleAgentClosed(msg agentClosedMsg) tea.Cmd {
 		reload = m.reloadAfterLink(msg.unlinked...)
 	}
 	if msg.unlinkErr != nil {
+		m.logWriteFailure("", msg.unlinkErr)
 		var poll tea.Cmd
 		if active {
 			poll = m.pollAgentsAgain()
