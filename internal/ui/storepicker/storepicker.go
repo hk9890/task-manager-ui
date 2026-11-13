@@ -7,6 +7,7 @@ package storepicker
 
 import (
 	"fmt"
+	"time"
 
 	"charm.land/lipgloss/v2"
 
@@ -47,6 +48,17 @@ type Row struct {
 	Active bool
 }
 
+// Sync is this machine's sync state, as the line at the foot of the box draws
+// it.
+type Sync struct {
+	// Branch is the branch this machine publishes to, machine/<id>.
+	Branch string
+	// LastSync is when the last publish ended; zero when none is recorded.
+	LastSync time.Time
+	// Running is true while a publish or a sync init runs.
+	Running bool
+}
+
 // State is the full picker renderer input.
 type State struct {
 	Rows         []Row
@@ -68,6 +80,12 @@ type State struct {
 	// Hover is the index of the row under the pointer, as HitTest reported it;
 	// nil when the pointer is elsewhere. That row draws the hover band.
 	Hover *int
+	// Sync draws this machine's sync state on the last line inside the box.
+	// Nil draws no line, and the rows keep that line.
+	Sync *Sync
+	// Now is the time Sync.LastSync is counted back from. The mode sets it
+	// when the listing loads, so the line does not tick.
+	Now time.Time
 }
 
 // HitTest reports the index of the row Render(state) draws at cell (x, y),
@@ -86,10 +104,10 @@ func HitTest(state State, x, y int) (row int, ok bool) {
 	if state.Error != "" {
 		line--
 	}
-	hasError := state.Error != ""
+	hasError, hasSync := state.Error != "", state.Sync != nil
 	// A frame too short for one whole row still draws its first line, so the
 	// rows end where the content does.
-	rowsEnd := min(rowLines*RowCapacity(height, hasError), contentLines(height, hasError))
+	rowsEnd := min(rowLines*RowCapacity(height, hasError, hasSync), contentLines(height, hasError, hasSync))
 	if x < 1 || x >= width-1 || line < 0 || line >= rowsEnd {
 		return 0, false
 	}
@@ -102,23 +120,28 @@ func HitTest(state State, x, y int) (row int, ok bool) {
 
 // RowCapacity returns how many store rows fit at this terminal height. The
 // controller derives its scroll window from it, so the window and the rows
-// actually drawn cannot disagree.
-func RowCapacity(height int, hasError bool) int {
+// actually drawn cannot disagree. The error row above the rows and the sync
+// line below them each cost a line.
+func RowCapacity(height int, hasError, hasSync bool) int {
 	if height <= 0 {
 		height = defaultHeight
 	}
-	rows := contentLines(height, hasError) / rowLines
+	rows := contentLines(height, hasError, hasSync) / rowLines
 	if rows < 1 {
 		rows = 1
 	}
 	return rows
 }
 
-// contentLines is the number of lines inside the box below the error row.
-func contentLines(height int, hasError bool) int {
+// contentLines is the number of lines inside the box between the error row
+// and the sync line.
+func contentLines(height int, hasError, hasSync bool) int {
 	// Two border lines plus the help line below the box.
 	lines := height - 2 - helpLines
 	if hasError {
+		lines--
+	}
+	if hasSync {
 		lines--
 	}
 	return max(lines, 1)
@@ -139,13 +162,17 @@ func Render(state State) string {
 	if innerWidth < 1 {
 		innerWidth = 1
 	}
-	capacity := RowCapacity(height, state.Error != "")
+	hasError, hasSync := state.Error != "", state.Sync != nil
+	capacity := RowCapacity(height, hasError, hasSync)
 
-	content := make([]string, 0, capacity+1)
-	if state.Error != "" {
+	content := make([]string, 0, capacity+2)
+	if hasError {
 		content = append(content, renderError(state.Error, innerWidth))
 	}
-	content = append(content, renderRows(state, innerWidth, capacity, contentLines(height, state.Error != ""))...)
+	content = append(content, renderRows(state, innerWidth, capacity, contentLines(height, hasError, hasSync))...)
+	if hasSync {
+		content = append(content, renderSync(*state.Sync, state.Now, innerWidth))
+	}
 
 	box := styles.FormSection(styles.FormSectionConfig{
 		Content:            content,
@@ -352,4 +379,40 @@ func emptyState(innerWidth, capacity int) []string {
 func renderError(message string, innerWidth int) string {
 	text := textutil.TruncateString("Store listing failed: "+displaytext.OneLine(message), innerWidth)
 	return lipgloss.NewStyle().Foreground(styles.ToastBorderErrorColor).Render(text)
+}
+
+// renderSync draws this machine's sync state, after a gutter as wide as the
+// selection's so it lines up with the row text. A line too long for the box
+// loses the end of the branch; the time stays.
+func renderSync(sync Sync, now time.Time, innerWidth int) string {
+	gutter, _ := styles.SelectionPrefix(false, false)
+	textWidth := max(innerWidth-lipgloss.Width(gutter), 0)
+
+	state := "Not synced yet"
+	switch {
+	case sync.Running:
+		state = "Sync running"
+	case !sync.LastSync.IsZero():
+		state = "Last sync " + relativeTime(now.Sub(sync.LastSync))
+	}
+	state += " · "
+
+	branch := textutil.TruncateString(displaytext.OneLine(sync.Branch), max(textWidth-lipgloss.Width(state), 0))
+	text := textutil.TruncateString(state+branch, textWidth)
+	return gutter + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(text)
+}
+
+// relativeTime is how long ago, in the largest whole unit: "just now" under a
+// minute, then minutes, hours and days. A time ahead of now is "just now".
+func relativeTime(ago time.Duration) string {
+	switch {
+	case ago < time.Minute:
+		return "just now"
+	case ago < time.Hour:
+		return fmt.Sprintf("%d min ago", int(ago/time.Minute))
+	case ago < 24*time.Hour:
+		return fmt.Sprintf("%d h ago", int(ago/time.Hour))
+	default:
+		return fmt.Sprintf("%d d ago", int(ago/(24*time.Hour)))
+	}
 }

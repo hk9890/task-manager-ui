@@ -182,7 +182,7 @@ func TestRowCapacityMatchesRenderedRows(t *testing.T) {
 
 	for _, hasError := range []bool{false, true} {
 		for _, height := range []int{6, 7, 10, 11, 16, 17, 24, 25, 40} {
-			capacity := RowCapacity(height, hasError)
+			capacity := RowCapacity(height, hasError, false)
 
 			rows := make([]Row, 0, capacity+5)
 			for i := 0; i < capacity+5; i++ {
@@ -226,11 +226,11 @@ func TestRowCapacityCountsRowsNotLines(t *testing.T) {
 		{height: 24, plain: 10, withError: 10},
 		{height: 25, plain: 11, withError: 10},
 	} {
-		if got := RowCapacity(tc.height, false); got != tc.plain {
-			t.Errorf("RowCapacity(%d, false) = %d, want %d", tc.height, got, tc.plain)
+		if got := RowCapacity(tc.height, false, false); got != tc.plain {
+			t.Errorf("RowCapacity(%d, false, false) = %d, want %d", tc.height, got, tc.plain)
 		}
-		if got := RowCapacity(tc.height, true); got != tc.withError {
-			t.Errorf("RowCapacity(%d, true) = %d, want %d", tc.height, got, tc.withError)
+		if got := RowCapacity(tc.height, true, false); got != tc.withError {
+			t.Errorf("RowCapacity(%d, true, false) = %d, want %d", tc.height, got, tc.withError)
 		}
 	}
 }
@@ -239,12 +239,12 @@ func TestRowCapacityLeavesRoomForTheErrorRow(t *testing.T) {
 	t.Parallel()
 
 	for _, height := range []int{16, 17} {
-		if with, without := contentLines(height, true), contentLines(height, false); with != without-1 {
+		if with, without := contentLines(height, true, false), contentLines(height, false, false); with != without-1 {
 			t.Errorf("height %d: an inline error row costs one content line: got %d with, %d without", height, with, without)
 		}
 	}
 	// With no line spare, that line is a store row.
-	if withError, withoutError := RowCapacity(17, true), RowCapacity(17, false); withError != withoutError-1 {
+	if withError, withoutError := RowCapacity(17, true, false), RowCapacity(17, false, false); withError != withoutError-1 {
 		t.Errorf("an inline error row costs one store row: got %d with, %d without", withError, withoutError)
 	}
 }
@@ -340,6 +340,8 @@ func TestEveryStateFillsTheFrame(t *testing.T) {
 		"empty":          {},
 		"cold listing":   {Loading: true},
 		"failed read":    {Error: "registry unreadable"},
+		"rows and sync":  {Rows: sampleRows(), Sync: &Sync{Branch: "machine/a-long-machine-id"}},
+		"all three":      {Rows: sampleRows(), Error: "registry unreadable", Sync: &Sync{Branch: "machine/a-long-machine-id"}},
 	}
 	for name, state := range states {
 		for height := 4; height <= 13; height++ {

@@ -127,6 +127,13 @@ discovery only, so a project whose store was promoted with `taskmgr store move -
 would report "no .tasks directory found". `Resolve` applies the same precedence as the
 `taskmgr` CLI — see the SDK for the order.
 
+Every `tasks.Resolve` the app makes passes
+`tasks.WithLockTimeout(repositorytaskmgr.StoreLockTimeout)` — `buildRepository` and the store
+catalog's `Catalog.resolve`. Without it a write blocks its command with no limit while a hook or a
+publish holds the store's write lock. With it the write fails with
+`tasks.ErrStoreBusy`, which `mapWriteErr` maps to `domain.ErrorCodeTimeout`: the toast says the
+store is busy and the write can be tried again.
+
 Nothing resolving is not an error. When `tasks.Resolve` reports `ErrNoStore`, or
 `ErrStoreNotRegistered` for a `--store-name`, `resolveStartupStore` starts the app on the store
 picker with the `nostore` repository, and the operator stays there until a store is open. Every

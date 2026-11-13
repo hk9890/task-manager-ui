@@ -61,6 +61,21 @@ func TestMapReadErrNil(t *testing.T) {
 	}
 }
 
+// The toast of a write that gave up on the write lock says the store is busy
+// and that the write can be tried again.
+func TestMapWriteErrStoreBusySaysTryAgain(t *testing.T) {
+	t.Parallel()
+	var re domain.RepositoryError
+	if !errors.As(mapWriteErr("CreateIssue", tasks.ErrStoreBusy), &re) {
+		t.Fatal("mapWriteErr did not return a domain.RepositoryError")
+	}
+	for _, want := range []string{"busy", "try again"} {
+		if !strings.Contains(re.Message, want) {
+			t.Errorf("message = %q, want it to contain %q", re.Message, want)
+		}
+	}
+}
+
 // TestMapWriteErr drives every branch of mapWriteErr — the normalizer for the
 // write methods (CreateIssue, UpdateIssue, CloseIssue, AddComment). The
 // ErrNoStore branch in particular is otherwise unexercised by the suite.
@@ -83,6 +98,7 @@ func TestMapWriteErr(t *testing.T) {
 			Exit:    1,
 			Reason:  "denied (exit 1)",
 		}, domain.ErrorCodeHookDenied},
+		{"store busy", fmt.Errorf("%w: /p/.tasks: another writer held the write lock for 10s", tasks.ErrStoreBusy), domain.ErrorCodeTimeout},
 		{"unknown", errors.New("boom"), domain.ErrorCodeUnknown},
 	}
 

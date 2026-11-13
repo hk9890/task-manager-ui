@@ -1,10 +1,18 @@
 package taskmgr
 
 import (
+	"time"
+
 	"github.com/hk9890/task-manager/sdk/tasks"
 
 	"github.com/hk9890/task-manager-ui/internal/repository"
 )
+
+// StoreLockTimeout is how long a write waits for the store's write lock while
+// another writer holds it. Every store the app opens takes it through
+// tasks.WithLockTimeout: when it runs out, the write fails as
+// domain.ErrorCodeTimeout and the app does not freeze.
+const StoreLockTimeout = 10 * time.Second
 
 // Repository adapts a *tasks.Store to the repository.Repository interface.
 type Repository struct {

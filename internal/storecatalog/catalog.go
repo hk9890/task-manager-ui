@@ -9,6 +9,7 @@ package storecatalog
 
 import (
 	"context"
+	"time"
 
 	"github.com/hk9890/task-manager-ui/internal/repository"
 )
@@ -66,6 +67,20 @@ type Opened struct {
 	StorePath string
 }
 
+// SyncStatus is this machine's sync state: whether `taskmgr sync init` has
+// run, the branch it publishes to, and its last and current publish.
+type SyncStatus struct {
+	SetUp bool
+	// Branch is machine/<machine-id>, as one line of text to draw
+	// (displaytext.OneLine).
+	Branch string
+	// LastSync is when the last successful publish of Branch ended; zero when
+	// none is recorded.
+	LastSync time.Time
+	// Running is true while a publish or a sync init holds the publish lock.
+	Running bool
+}
+
 // Catalog lists the stores this machine knows about and opens them.
 //
 // Local stores are absent from the listing by design: nothing indexes the
@@ -94,4 +109,7 @@ type Catalog interface {
 	// be read is a HealthBroken entry with the reason in Detail, not an error.
 	// The error is for a registry that cannot be read at all.
 	Stores(ctx context.Context) ([]Entry, error)
+
+	// SyncStatus reads this machine's sync state without running a sync.
+	SyncStatus(ctx context.Context) (SyncStatus, error)
 }

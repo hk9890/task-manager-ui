@@ -18,6 +18,10 @@ type FakeStoreCatalog struct {
 	Entries []storecatalog.Entry
 	Err     error
 
+	// Sync is what SyncStatus returns; SyncErr fails it instead.
+	Sync    storecatalog.SyncStatus
+	SyncErr error
+
 	// Opens maps a registry name to what Open returns for it. A name absent
 	// here fails Open, the way an unregistered name fails the SDK.
 	Opens   map[string]storecatalog.Opened
@@ -28,9 +32,10 @@ type FakeStoreCatalog struct {
 	Created   storecatalog.Opened
 	CreateErr error
 
-	calls   int
-	opened  []string
-	creates []StoreCreateCall
+	calls     int
+	syncCalls int
+	opened    []string
+	creates   []StoreCreateCall
 }
 
 // StoreCreateCall records one CreateLocal or CreateCentral call. Name is empty
@@ -56,6 +61,18 @@ func (f *FakeStoreCatalog) Stores(_ context.Context) ([]storecatalog.Entry, erro
 	out := make([]storecatalog.Entry, len(f.Entries))
 	copy(out, f.Entries)
 	return out, nil
+}
+
+// SyncStatus returns the configured sync state, or the configured error.
+func (f *FakeStoreCatalog) SyncStatus(_ context.Context) (storecatalog.SyncStatus, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.syncCalls++
+	if f.SyncErr != nil {
+		return storecatalog.SyncStatus{}, f.SyncErr
+	}
+	return f.Sync, nil
 }
 
 // Open returns the configured store for name and records the call.
@@ -115,6 +132,14 @@ func (f *FakeStoreCatalog) Calls() int {
 	defer f.mu.Unlock()
 
 	return f.calls
+}
+
+// SyncCalls returns how many times SyncStatus has been called.
+func (f *FakeStoreCatalog) SyncCalls() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.syncCalls
 }
 
 // Opened returns the names Open was called with, in order.

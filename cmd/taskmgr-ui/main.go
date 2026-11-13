@@ -94,7 +94,7 @@ func buildRepository(opts startupOptions) (backend, error) {
 		store, info, err := tasks.Resolve(tasks.ResolveOptions{
 			WorkDir:   opts.projectRoot,
 			StoreName: opts.storeName,
-		})
+		}, tasks.WithLockTimeout(repositorytaskmgr.StoreLockTimeout))
 		if err != nil {
 			if opts.storeName != "" {
 				return backend{}, fmt.Errorf("failed to open central task-manager store %q: %w", opts.storeName, err)
