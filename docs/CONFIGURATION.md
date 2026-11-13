@@ -229,13 +229,16 @@ Supported actions by context:
     binding. Of the other `shell` actions only `quit`, `toggle_help` and `escape` act there.
 - `board`
   - `move_left`, `move_right`, `move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
-    `page_down`, `open_detail`, `reload`
+    `page_down`, `open_detail`, `reload`, `close_agent`, `open_issue`
   - Docs mode, the store search and the store picker have no context of their own: each
     reads the row movement (`move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
     `page_down`), `open_detail` and `reload` from this one. Rebinding them moves all four
     surfaces together, which is deliberate — each is a single list of rows, and a context
     of its own would ask for the same movement to be rebound twice. In the picker
     `open_detail` opens the highlighted store.
+  - The Agents tab reads the row movement and `reload` from this context too. There
+    `open_detail` brings the selected agent to the front, `close_agent` closes it and
+    `open_issue` opens its issue in Detail; the other surfaces ignore the last two.
   - The configuration screen reads `move_up` and `move_down` from this context. The keys that
     step a value there, `left`, `right` and `enter`, are built in and follow no binding.
 - `detail`

@@ -15,10 +15,10 @@ chords and on keys that print nothing.
 
 - `ctrl+c` — quit
 - `alt+h` — toggle help
-- `tab`, `ctrl+pgdown` — next view tab (Board → Docs → Board)
+- `tab`, `ctrl+pgdown` — next view tab (Board → Docs → Agents → Board)
 - `shift+tab`, `ctrl+pgup` — previous view tab
 - `alt+f` — open the store search, from a tab or from detail
-- `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs to Board, or dismiss toast state
+- `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs or Agents to Board, or dismiss toast state
 - `alt+r` — manually reload detail mode from the repository immediately (detail mode only)
 - `alt+n` — create an issue, in the [issue editor](#issue-editor)
 - `alt+u` — edit the selected issue, its description included
@@ -37,8 +37,8 @@ message, and the detail footer reads `launchers off`.
 
 The `agent:<session>` labels are not shown, in Detail or in the issue editor,
 and a save in the editor keeps them. Detail lists each linked agent under
-`Agents` with its status and what it does: `running`, `idle`, `needs you`, or
-`gone` for a labelled agent that no longer runs.
+`Agents` with its status: `running`, `idle`, `needs you`, or `gone` for a
+labelled agent that no longer runs. What it does is on the Agents tab.
 
 In the agent dialog `up` and `down` move, `enter` or a click
 runs the entry, and `esc` or a click outside closes the menu.
@@ -99,6 +99,25 @@ columns; this tab is where they are browsed. Docs mode reuses the board keymap:
 - `enter` — open selected doc in detail mode
 - `alt+r` — manually reload the docs list immediately
 
+## Agents Tab
+
+Every agent of the project, in two groups: `Linked`, the agents linked to an
+issue, and `Not linked`, the live agents linked to none. Each agent is two lines:
+its name, its status and what it does, then its tab and the ID and title of its
+issue. A labelled agent that no longer runs is `gone`; it is listed only on an
+open issue. Without an agent the tab says why: no agent host, no project path,
+or the error revier gave.
+
+- `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
+- `enter` — bring the selected agent to the front; resume a `gone` one first
+- `alt+x` — close the selected agent; one that runs or needs you asks first
+- `alt+o` — open the issue the selected agent is linked to in detail mode;
+  `esc` there returns to the tab
+- `alt+r` — read the linked issues again
+
+A click selects an agent and a second click brings it to the front. Edit,
+comment and close act on the issue of the selected agent.
+
 ## Store Search
 
 `alt+f`, or the `search` button on the menu bar, opens the store search from a
@@ -144,8 +163,7 @@ spinner stands in the first cell of the menu bar.
 The Details pane shows the issue's fields and the agents linked to it. It takes
 no focus and no key, and does not scroll: on a short screen it ends on
 `… (N more)`. Change a field in the issue editor (`alt+u`). A click on the row
-of an agent brings that agent to the front, and resumes a `gone` one first; the
-agent dialog (`alt+i`) does the same from the keyboard.
+of an agent switches to the Agents tab with that agent selected.
 
 The comments stand at the end of the Content pane, newest first, each under a
 bold line with its author and time, with a rule between two of them. With the
@@ -171,9 +189,9 @@ An agent is linked to an issue by an `agent:<session>` label, which starting it
 from the agent dialog or the selection menu writes. In the In Progress column an
 agent whose revier session wrote a comment on the issue is linked too.
 taskmgr-ui asks `revier` for the live agents every few seconds. The Details
-pane lists the linked agents in an `Agents` group, one line each: its name, its
-status — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier
-does not list — and what it does, when revier says. On the board, a card of any
+pane lists the linked agents in an `Agents` group, one line each: its name and
+its status — `running`, `idle`, `needs you`, or `gone` for a labelled agent
+revier does not list. The Agents tab lists every agent of the project. On the board, a card of any
 column that a live agent is linked to carries the agent mark after its status,
 green while the agent runs, grey while it is idle and orange while it needs you.
 
@@ -326,7 +344,7 @@ instead.
   `enter` does: an issue, a doc or a search result opens in detail mode, a row of
   the detail Dependencies pane navigates to that issue, a store picker row opens
   that store.
-- **Click a view tab** — Board, Docs — to switch to it.
+- **Click a view tab** — Board, Docs, Agents — to switch to it.
 - **Click a button** on the menu bar, the first line — the name of the open store, `search`,
   `reload`, `config`, `help`, `quit` — to do what the key shown beside it does. The store's name
   opens the store picker. `reload` reloads the view on screen. `config` opens the configuration

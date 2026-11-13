@@ -943,6 +943,55 @@ func TestRemoveLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
 	}
 }
 
+// TestSearchByLabelContainsConformance pins the read the Agents tab takes: the
+// issues with a label that contains the text, without case, closed ones too
+// when asked, and with every other filter still applied.
+func TestSearchByLabelContainsConformance(t *testing.T) {
+	ctx := context.Background()
+	for _, b := range freshBackends(t) {
+		for _, input := range []domain.CreateIssueInput{
+			{Title: "linked", Labels: []string{"alpha", "agent:s-1"}},
+			{Title: "linked twice", Labels: []string{"agent:s-2", "agent:s-3"}},
+			{Title: "unlinked", Labels: []string{"alpha"}},
+			{Title: "bare"},
+		} {
+			if _, err := b.repo.CreateIssue(ctx, input); err != nil {
+				t.Fatalf("%s: CreateIssue %q: %v", b.name, input.Title, err)
+			}
+		}
+		closed, err := b.repo.CreateIssue(ctx, domain.CreateIssueInput{Title: "linked and closed", Labels: []string{"agent:s-4"}})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.CloseIssue(ctx, closed.IssueID, domain.CloseIssueInput{Reason: "done"}); err != nil {
+			t.Fatalf("%s: CloseIssue: %v", b.name, err)
+		}
+
+		for _, tc := range []struct {
+			query domain.SearchIssuesQuery
+			want  []string
+		}{
+			{domain.SearchIssuesQuery{LabelContains: "AGENT:"}, []string{"linked", "linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent:", IncludeClosed: true}, []string{"linked", "linked and closed", "linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent:", Labels: []string{"alpha"}}, []string{"linked"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent:", Text: "twice"}, []string{"linked twice"}},
+		} {
+			page, err := b.repo.Search(ctx, tc.query)
+			if err != nil {
+				t.Fatalf("%s: Search %+v: %v", b.name, tc.query, err)
+			}
+			var got []string
+			for _, result := range page.Results {
+				got = append(got, result.Issue.Title)
+			}
+			sort.Strings(got)
+			if !equalStrings(got, tc.want) {
+				t.Errorf("%s: Search %+v = %v, want %v", b.name, tc.query, got, tc.want)
+			}
+		}
+	}
+}
+
 // TestSearchPagingConformance pins what a paged search reports about the
 // matches it did not return: the window holds what Limit and Offset leave, and
 // Total counts every match. The rule belongs to both backends or the parity

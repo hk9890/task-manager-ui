@@ -3,6 +3,7 @@ package detail
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
@@ -18,7 +19,7 @@ const wheelLines = 3
 // issue: the command returned carries the OpenRelatedIssueMsg. A click on a
 // comment puts the comment cursor there, and one on a button sends the request
 // the button's key sends. A click on the row of an agent in the Details pane
-// asks the shell to bring that agent to the front.
+// asks the shell to select that agent on the Agents tab.
 func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) tea.Cmd {
 	// Nothing is drawn without a viewport, so there is no cell to be over.
 	if viewportHeight <= 0 {
@@ -74,7 +75,7 @@ const commentClick = "comment"
 
 func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
 	if hit.Agent != "" {
-		return mode.RequestOpenAgentCmd(mode.Detail, hit.Agent)
+		return mode.RequestAgentCmd(mode.Detail, mode.ActionSelectAgent, agent.Agent{Session: hit.Agent})
 	}
 	if action, ok := buttonActions[hit.Button]; ok {
 		// A click that selects a comment draws its buttons, and one of them

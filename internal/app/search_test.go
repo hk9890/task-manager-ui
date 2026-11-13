@@ -97,19 +97,19 @@ func TestSearchOpensByKeyAndByButtonFromBoardDocsAndDetail(t *testing.T) {
 	}
 }
 
-// TestTabLineShowsBoardAndDocsAndNoneActiveWhileSearchIsUp: the search is not
-// a tab.
-func TestTabLineShowsBoardAndDocsAndNoneActiveWhileSearchIsUp(t *testing.T) {
+// TestTabLineShowsTheTabsAndNoneActiveWhileSearchIsUp: the search is not a
+// tab.
+func TestTabLineShowsTheTabsAndNoneActiveWhileSearchIsUp(t *testing.T) {
 	testui.ForceTrueColor(t)
 	board, _ := filterShell(t)
 	search := press(t, board, "alt+f")
 
-	if len(mode.BrowseModes) != 2 || mode.IsBrowse(mode.Search) {
-		t.Fatalf("the browse tabs are %v, want board and docs only", mode.BrowseModes)
+	if len(mode.BrowseModes) != 3 || mode.IsBrowse(mode.Search) {
+		t.Fatalf("the browse tabs are %v, want board, docs and agents only", mode.BrowseModes)
 	}
 	tabs := tabLine(search)
-	if got := strings.TrimRight(tabs[:headerTabsEnd()], " "); got != "   Board   Docs" {
-		t.Fatalf("the tab line holds %q, want the two tabs", got)
+	if got := strings.TrimRight(tabs[:headerTabsEnd()], " "); got != "   Board   Docs   Agents" {
+		t.Fatalf("the tab line holds %q, want the three tabs", got)
 	}
 	// The active tab rides a background; with the search up none does.
 	if !strings.Contains(board.renderTabs(), "48;2;") {
@@ -365,8 +365,8 @@ func TestSearchIsLeftForATabByTheTabKeysAndAClick(t *testing.T) {
 	if byKey.active != mode.Docs || byKey.searchFrom != "" || byKey.lastBrowse != mode.Docs {
 		t.Fatalf("tab went to %q (search from %q), want docs", byKey.active, byKey.searchFrom)
 	}
-	if got := press(t, base, "shift+tab"); got.active != mode.Docs || got.searchFrom != "" {
-		t.Fatalf("shift+tab went to %q, want docs", got.active)
+	if got := press(t, base, "shift+tab"); got.active != mode.Agents || got.searchFrom != "" {
+		t.Fatalf("shift+tab went to %q, want agents", got.active)
 	}
 
 	x, _ := testui.FindCell(t, tabLine(base), " Board ")

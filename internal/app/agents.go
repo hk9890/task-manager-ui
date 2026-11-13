@@ -9,6 +9,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -48,11 +49,13 @@ func (m *Model) pollAgentsCmd() tea.Cmd {
 	})
 }
 
-// applyAgentList hands the listed agents to Detail and their statuses to the
-// board, both keyed by session. A failed poll clears them, and is logged once
-// until a poll succeeds again: the poll runs every few seconds.
-func (m *Model) applyAgentList(msg agentsListedMsg) {
+// applyAgentList hands the listed agents to Detail and the Agents tab, and
+// their statuses to the board, keyed by session. A failed poll clears them,
+// and is logged once until a poll succeeds again: the poll runs every few
+// seconds. The Agents tab takes the board's comment links with each poll.
+func (m *Model) applyAgentList(msg agentsListedMsg) tea.Cmd {
 	m.agentPollInFlight = false
+	linksCmd := m.agents.SetCommentLinks(m.board.CommentLinks())
 	if msg.err != nil {
 		if errors.Is(msg.err, agent.ErrNoProject) {
 			m.projectLookupWait = projectRetryTicks
@@ -63,7 +66,7 @@ func (m *Model) applyAgentList(msg agentsListedMsg) {
 			m.logAgentPollFailure(msg.err)
 		}
 		m.agentPollFailing = true
-		return
+		return m.scoped(batchCmds(linksCmd, m.agents.SetAgents(nil, false, m.agentsAbsent(msg.err))))
 	}
 	m.agentPollFailing = false
 
@@ -77,6 +80,34 @@ func (m *Model) applyAgentList(msg agentsListedMsg) {
 	}
 	m.detail.SetLiveAgents(bySession)
 	m.board.SetLiveAgents(statusBySession)
+	return m.scoped(batchCmds(linksCmd, m.agents.SetAgents(msg.agents, true, "")))
+}
+
+// agentsAbsent is why the Agents tab may show no agent: no host, no project
+// path to ask about, or the error the last poll failed with; "" when nothing
+// keeps the host from answering.
+func (m Model) agentsAbsent(pollErr error) string {
+	root := m.services.ProjectRoot
+	switch {
+	case m.services.Agents == nil:
+		return "no agent host: agents are off"
+	case root == "":
+		return "the store has no project path to ask the agent host about"
+	case m.projectRootMissing:
+		return "the project path is not accessible: " + root
+	case errors.Is(pollErr, agent.ErrNoProject):
+		return root + " is no project of the agent host"
+	case pollErr != nil:
+		return "the agent host failed: " + pollErr.Error()
+	}
+	return ""
+}
+
+// selectAgent switches to the Agents tab with the agent of session selected.
+// The click on its row in the Details pane asks for it.
+func (m *Model) selectAgent(session string) tea.Cmd {
+	switchCmd := m.switchToTab(mode.Agents)
+	return batchCmds(switchCmd, m.scoped(m.agents.Select(session)))
 }
 
 func (m Model) logAgentPollFailure(err error) {
@@ -97,20 +128,16 @@ func (m *Model) focusOneAgent(a agent.Agent) tea.Cmd {
 	}
 }
 
-// openAgent brings the agent of session, linked to the issue open in Detail,
-// to the front: a live one at once, a gone one after its resume. The click on
-// its row in the Details pane asks for it.
-func (m *Model) openAgent(session string) tea.Cmd {
-	for _, a := range m.detail.LinkedAgents() {
-		switch {
-		case a.Session != session || m.services.Agents == nil:
-		case a.Status == agent.Gone:
-			return m.resumeAgent(a)
-		default:
-			return m.focusOneAgent(a)
-		}
+// openAgent brings a to the front: a live one at once, a gone one after its
+// resume. Enter on its row of the Agents tab asks for it.
+func (m *Model) openAgent(a agent.Agent) tea.Cmd {
+	if m.services.Agents == nil {
+		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
 	}
-	return m.showToast("That agent is no longer linked to this issue", toaster.StyleWarn)
+	if a.Status == agent.Gone {
+		return m.resumeAgent(a)
+	}
+	return m.focusOneAgent(a)
 }
 
 // openAgentDialog opens the agent dialog of the issue open in Detail, in the
@@ -167,7 +194,7 @@ func (m *Model) openAgentDialog() tea.Cmd {
 // linkedAgentActions are the entries of one linked agent in the agent
 // dialog: Focus and Close for a live one, Resume for a gone one.
 func linkedAgentActions(a agent.Agent) []selectionAction {
-	label := displaytext.OneLine(a.Label)
+	label := displaytext.OneLine(a.Title())
 	if a.Status == agent.Gone {
 		return []selectionAction{{
 			entry: selectmenu.Entry{Label: "Resume " + label},
@@ -203,13 +230,19 @@ func (m *Model) resumeAgent(gone agent.Agent) tea.Cmd {
 // closes one that is running or waits for the operator: the host refuses
 // those unless forced, and the turn in them is lost.
 func (m *Model) requestAgentClose(a agent.Agent) tea.Cmd {
+	switch {
+	case m.services.Agents == nil:
+		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
+	case a.Status == agent.Gone:
+		return m.showToast(displaytext.OneLine(a.Title())+" is gone: there is nothing to close", toaster.StyleWarn)
+	}
 	if a.Status != agent.Running && a.Status != agent.NeedsYou {
 		return m.closeAgent(a, false)
 	}
 	m.agentClose = &a
 	m.actionModal = modal.NewWithKeys(modal.Config{
 		Title:          "Close agent",
-		Message:        displaytext.OneLine(fmt.Sprintf("%s is %s. Close it anyway?", a.Label, agentStatusWord(a.Status))),
+		Message:        displaytext.OneLine(fmt.Sprintf("%s is %s. Close it anyway?", a.Title(), agentStatusWord(a.Status))),
 		ConfirmText:    "Close",
 		ConfirmVariant: modal.ButtonDanger,
 	}, modal.BindingsFromConfig(m.keys))
@@ -237,7 +270,7 @@ func (m *Model) closeAgent(a agent.Agent, force bool) tea.Cmd {
 // reportAgentAction reports a resume or a close of a, and on success polls
 // at once, so the Agents group shows the change before the next tick.
 func (m *Model) reportAgentAction(verb, past string, a agent.Agent, err error) tea.Cmd {
-	label := displaytext.OneLine(a.Label)
+	label := displaytext.OneLine(a.Title())
 	if err != nil {
 		return m.showToast(fmt.Sprintf("Could not %s %s: %v", verb, label, err), toaster.StyleError)
 	}

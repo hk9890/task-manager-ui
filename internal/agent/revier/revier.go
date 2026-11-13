@@ -365,6 +365,7 @@ type listedProject struct {
 			Status   string `json:"status"`
 			Session  string `json:"session"`
 			Activity string `json:"activity"`
+			Name     string `json:"name"`
 		} `json:"state"`
 	} `json:"agents"`
 }
@@ -385,6 +386,7 @@ func parseAgents(out []byte) ([]agent.Agent, error) {
 				Ref:      address(p.Project.Name, a.Target, a.Panel),
 				Session:  a.State.Session,
 				Label:    label(a.Target, a.Panel),
+				Name:     a.State.Name,
 				Status:   status(a.State.Status),
 				Activity: a.State.Activity,
 			})

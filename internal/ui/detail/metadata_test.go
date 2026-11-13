@@ -367,9 +367,10 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	}
 }
 
-// A field of the Agents group says what the agent does when the host says it,
-// and a gone agent says gone. The link labels stay off the Labels group.
-func TestTheAgentsGroupSaysTheActivityAndHidesTheLinkLabels(t *testing.T) {
+// A field of the Agents group is the agent's name, its label when the
+// harness names none, and its status: what it does is on the Agents tab. A
+// gone agent says gone. The link labels stay off the Labels group.
+func TestTheAgentsGroupNamesTheAgentAndHidesTheLinkLabels(t *testing.T) {
 	t.Parallel()
 
 	state := DetailsPaneState{
@@ -380,17 +381,17 @@ func TestTheAgentsGroupSaysTheActivityAndHidesTheLinkLabels(t *testing.T) {
 		Width:  metadataRailWidth,
 		Height: 40,
 		Agents: []agent.Agent{
-			{Label: "Tab 1", Status: agent.Running, Session: "s-1", Activity: "tests"},
+			{Label: "Tab 1", Name: "fix-the-board", Status: agent.Running, Session: "s-1", Activity: "tests"},
 			{Label: "Session s-2", Status: agent.Gone, Session: "s-2"},
 		},
 	}
 	view := testui.Downsample(RenderDetailsPane(state))
-	for _, want := range []string{"Tab 1      : running · tests", "Session s-2: gone", "• backend"} {
+	for _, want := range []string{"fix-the-board: running ", "Session s-2  : gone", "• backend"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the pane does not draw %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "agent:") {
-		t.Errorf("the pane draws a link label:\n%s", view)
+	if strings.Contains(view, "agent:") || strings.Contains(view, "tests") || strings.Contains(view, "Tab 1") {
+		t.Errorf("the pane draws a link label, the activity or the label of a named agent:\n%s", view)
 	}
 }

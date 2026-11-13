@@ -28,7 +28,7 @@ const recordedList = `[
     "home": {"host": "kitty", "id": "12"},
     "targets": [{"name": "home", "host": "kitty", "ref": {"host": "kitty", "id": "12"}, "available": true}],
     "agents": [
-      {"panel": "7", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "running", "activity": "Editing model.go", "session": "s-7"}},
+      {"panel": "7", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "running", "activity": "Editing model.go", "session": "s-7", "name": "fix-the-board"}},
       {"panel": "9", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "attention", "session": "s-9"}},
       {"panel": "11", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "shell", "status": "idle"}},
       {"panel": "13", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "starting", "session": "s-13"}},
@@ -69,7 +69,7 @@ func TestParseAgentsReadsTheLocalAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []agent.Agent{
-		{Ref: "demo:home:7", Label: "Tab 7", Status: agent.Running, Session: "s-7", Activity: "Editing model.go"},
+		{Ref: "demo:home:7", Label: "Tab 7", Name: "fix-the-board", Status: agent.Running, Session: "s-7", Activity: "Editing model.go"},
 		{Ref: "demo:home:9", Label: "Tab 9", Status: agent.NeedsYou, Session: "s-9"},
 		{Ref: "demo:11", Label: "Tab 11", Status: agent.Idle},
 		{Ref: "demo:home:13", Label: "Tab 13", Status: "starting", Session: "s-13"},

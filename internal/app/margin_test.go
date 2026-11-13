@@ -233,9 +233,9 @@ func TestATerminalUnderTwentyFourRowsKeepsTheSideMarginAlone(t *testing.T) {
 	}
 
 	m := send(t, newMouseShell(t), tea.WindowSizeMsg{Width: width, Height: height})
-	x, y := testui.FindCell(t, testui.View(m), " Docs ")
-	if m = send(t, m, testui.Click(x, y, tea.MouseLeft)); y != headerTabsRow || x != 2+headerTabsEnd()-len(" Docs ") || m.active != mode.Docs {
-		t.Errorf("a click on the Docs tab, drawn at column %d of row %d, left the shell on %q", x, y, m.active)
+	x, y := testui.FindCell(t, testui.View(m), " Agents ")
+	if m = send(t, m, testui.Click(x, y, tea.MouseLeft)); y != headerTabsRow || x != 2+headerTabsEnd()-len(" Agents ") || m.active != mode.Agents {
+		t.Errorf("a click on the Agents tab, drawn at column %d of row %d, left the shell on %q", x, y, m.active)
 	}
 }
 
@@ -246,22 +246,22 @@ func TestTheMouseLandsOnWhatIsDrawnInsideTheMargin(t *testing.T) {
 	base := newMouseShell(t)
 	view := testui.View(base)
 
-	tabX, tabY := testui.FindCell(t, view, " Docs ")
-	if tabY != 1+headerTabsRow || tabX != 2+headerTabsEnd()-len(" Docs ") {
-		t.Fatalf("fixture: the Docs tab is drawn at column %d of row %d, not inside a margin", tabX, tabY)
+	tabX, tabY := testui.FindCell(t, view, " Agents ")
+	if tabY != 1+headerTabsRow || tabX != 2+headerTabsEnd()-len(" Agents ") {
+		t.Fatalf("fixture: the Agents tab is drawn at column %d of row %d, not inside a margin", tabX, tabY)
 	}
 	// Both padding cells of the tab, and the cell on either side of it.
-	for _, x := range []int{tabX, tabX + len(" Docs ") - 1} {
-		if m := send(t, base, testui.Move(x, tabY)); m.hoverTab != mode.Docs {
-			t.Errorf("the pointer on column %d of the Docs tab lights %q", x, m.hoverTab)
+	for _, x := range []int{tabX, tabX + len(" Agents ") - 1} {
+		if m := send(t, base, testui.Move(x, tabY)); m.hoverTab != mode.Agents {
+			t.Errorf("the pointer on column %d of the Agents tab lights %q", x, m.hoverTab)
 		}
-		if m := send(t, base, testui.Click(x, tabY, tea.MouseLeft)); m.active != mode.Docs {
-			t.Errorf("a click on column %d of the Docs tab left the shell on %q", x, m.active)
+		if m := send(t, base, testui.Click(x, tabY, tea.MouseLeft)); m.active != mode.Agents {
+			t.Errorf("a click on column %d of the Agents tab left the shell on %q", x, m.active)
 		}
 	}
-	for _, cell := range [][2]int{{tabX - 1, tabY}, {tabX + len(" Docs "), tabY}, {tabX, tabY - 1}, {tabX, tabY + 1}} {
+	for _, cell := range [][2]int{{tabX - 1, tabY}, {tabX + len(" Agents "), tabY}, {tabX, tabY - 1}, {tabX, tabY + 1}} {
 		if m := send(t, base, testui.Click(cell[0], cell[1], tea.MouseLeft)); m.active != mode.Board || m.hoverTab != "" {
-			t.Errorf("a click beside the Docs tab, on column %d of row %d, reached it (surface %q, hover %q)", cell[0], cell[1], m.active, m.hoverTab)
+			t.Errorf("a click beside the Agents tab, on column %d of row %d, reached it (surface %q, hover %q)", cell[0], cell[1], m.active, m.hoverTab)
 		}
 	}
 

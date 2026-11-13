@@ -52,7 +52,7 @@ func TestAStartedAgentShowsInTheAgentsGroupByItsLabel(t *testing.T) {
 	m = send(t, m, agentPollTickMsg{})
 
 	view := plainShell(m)
-	testui.AssertContainsAll(t, view, "Agents", "Tab 9: running · reading")
+	testui.AssertContainsAll(t, view, "Agents", "Tab 9: running")
 	if strings.Contains(view, "agent:s-9") {
 		t.Errorf("Detail draws the link label:\n%s", view)
 	}
@@ -177,11 +177,10 @@ func TestTheAgentDialogWithoutAnIntentHasNoStartPart(t *testing.T) {
 	}
 }
 
-// A click on the row of an agent in the Details pane does what its entry in
-// the agent dialog does: a live one comes to the front, a gone one is resumed
-// first. A request for an agent no longer linked warns and asks the host
-// nothing.
-func TestAClickOnAnAgentRowFocusesOrResumesThatAgent(t *testing.T) {
+// A click on the row of an agent in the Details pane switches to the Agents
+// tab with that agent selected: Enter there does what its entry in the agent
+// dialog does, a live one comes to the front and a gone one is resumed first.
+func TestAClickOnAnAgentRowSelectsItOnTheAgentsTab(t *testing.T) {
 	click := func(t *testing.T, m Model, text string) Model {
 		t.Helper()
 		x, y := testui.FindCell(t, plainShell(m), text)
@@ -189,8 +188,15 @@ func TestAClickOnAnAgentRowFocusesOrResumesThatAgent(t *testing.T) {
 	}
 
 	t.Run("live", func(t *testing.T) {
-		m, client, _, _ := agentShell(t, runningOnTab3())
-		click(t, m, "Tab 3: running")
+		m, client, _, _ := agentShell(t, runningOnTab3(), agent.Agent{Ref: "demo:home:4", Label: "Tab 4", Status: agent.Idle, Session: "s-4"})
+		m = click(t, m, "Tab 3: running")
+		if m.active != mode.Agents {
+			t.Fatalf("the click left the shell on %q, want the Agents tab", m.active)
+		}
+		if got := hostCalls(client, "Focus", "Resume"); len(got) != 0 {
+			t.Fatalf("the click asked the host %+v, want nothing", got)
+		}
+		m = pressKey(t, m, "enter")
 		want := []fakes.AgentHostCall{{Method: "Focus", Arg: "demo:home:3"}}
 		if got := hostCalls(client, "Focus", "Resume"); !reflect.DeepEqual(got, want) {
 			t.Errorf("calls = %+v, want %+v", got, want)
@@ -198,27 +204,17 @@ func TestAClickOnAnAgentRowFocusesOrResumesThatAgent(t *testing.T) {
 	})
 
 	t.Run("gone", func(t *testing.T) {
-		m, client, _, _ := agentShell(t)
+		m, client, _, _ := agentShell(t, agent.Agent{Ref: "demo:home:4", Label: "Tab 4", Status: agent.Idle, Session: "s-4"})
 		client.Resumed = agent.Agent{Ref: "demo:home:5", Session: "s-gone-0123", Label: "Tab 5", Status: agent.Idle}
 		m = withLinkLabel(t, m, "s-gone-0123")
 		m = click(t, m, "Session s-gone-0: gone")
+		m = pressKey(t, m, "enter")
 		want := []fakes.AgentHostCall{{Method: "Resume", Arg: "s-gone-0123"}, {Method: "Focus", Arg: "demo:home:5"}}
 		if got := hostCalls(client, "Resume", "Focus"); !reflect.DeepEqual(got, want) {
 			t.Errorf("calls = %+v, want %+v", got, want)
 		}
 		if !strings.Contains(m.toast.View(), "Resumed Session s-gone-0") {
 			t.Errorf("toast = %q, want the resume reported", m.toast.View())
-		}
-	})
-
-	t.Run("no longer linked", func(t *testing.T) {
-		m, client, _, _ := agentShell(t, runningOnTab3())
-		m = send(t, m, mode.ActionRequestMsg{Mode: mode.Detail, Action: mode.ActionOpenAgent, Agent: "s-other"})
-		if got := hostCalls(client, "Focus", "Resume"); len(got) != 0 {
-			t.Errorf("calls = %+v, want none", got)
-		}
-		if !strings.Contains(m.toast.View(), "no longer linked") {
-			t.Errorf("toast = %q, want a warning", m.toast.View())
 		}
 	})
 }

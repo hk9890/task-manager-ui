@@ -52,8 +52,13 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "ctrl+t", Desc: "in the search, switch between open issues and all of them"},
 		}},
 		{Title: "Tabs", Entries: []helpscreen.Entry{
-			{Key: shell(config.ShellActionModeCycleNext), Desc: "next tab: Board, Docs"},
+			{Key: shell(config.ShellActionModeCycleNext), Desc: "next tab: Board, Docs, Agents"},
 			{Key: shell(config.ShellActionModeCyclePrev), Desc: "previous tab"},
+		}},
+		{Title: "Agents tab", Entries: []helpscreen.Entry{
+			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
+			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent; asks first while it is running or needs you"},
+			{Key: board(config.BoardActionOpenIssue), Desc: "open the issue the selected agent is linked to in Detail"},
 		}},
 		{Title: "Issue", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionCreateIssue), Desc: "create an issue, in the issue editor"},
@@ -110,8 +115,8 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		{Title: "Mouse", Entries: []helpscreen.Entry{
 			{Key: "click", Desc: "select a row or a comment, switch to a tab, focus a pane or a field of the issue editor"},
 			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
-			{Key: "click", Desc: "an agent in the Details pane: bring it to the front, resuming a gone one first"},
-			{Key: "second click", Desc: "open the row"},
+			{Key: "click", Desc: "an agent in the Details pane: select it on the Agents tab"},
+			{Key: "second click", Desc: "open the row; on the Agents tab, bring the agent to the front"},
 			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the text of the issue editor and this screen"},
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},

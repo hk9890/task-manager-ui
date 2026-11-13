@@ -218,8 +218,9 @@ const (
 
 // tabLabels names each browse tab on the tab line.
 var tabLabels = map[mode.ID]string{
-	mode.Board: "Board",
-	mode.Docs:  "Docs",
+	mode.Board:  "Board",
+	mode.Docs:   "Docs",
+	mode.Agents: "Agents",
 }
 
 // barAction is one button on the menu bar: what the shell can do that is not
@@ -604,6 +605,15 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
 			filter, clear,
 			create,
+			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
+			help, quit,
+		}
+	case mode.Agents:
+		return []styles.KeyHint{
+			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "agents"},
+			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "focus"},
+			{Key: primary(config.BoardContext, config.BoardActionCloseAgent), Desc: "close"},
+			{Key: primary(config.BoardContext, config.BoardActionOpenIssue), Desc: "issue"},
 			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
 		}

@@ -132,7 +132,7 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 			entries[section.Title+": "+entry.Desc] = entry.Key
 		}
 	}
-	want := "Moving and opening, Filter and search, Tabs, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse, Selection menu and agent dialog"
+	want := "Moving and opening, Filter and search, Tabs, Agents tab, Issue, Issue editor, Detail and launchers, Menu bar and stores, Dialogs, Configuration screen, Mouse, Selection menu and agent dialog"
 	if got := strings.Join(titles, ", "); got != want {
 		t.Errorf("sections:\n got %s\nwant %s", got, want)
 	}
@@ -141,7 +141,7 @@ func TestHelpSectionsReadTheResolvedBindings(t *testing.T) {
 		"Moving and opening: the row above / below":                             "up / down",
 		"Moving and opening: open the selected issue in Detail":                 "enter",
 		"Filter and search: search the store: titles, IDs and descriptions":     "alt+f",
-		"Tabs: next tab: Board, Docs":                                           "tab/ctrl+pgdown",
+		"Tabs: next tab: Board, Docs, Agents":                                   "tab/ctrl+pgdown",
 		"Issue: close the selected issue: opens the editor on the close reason": "delete",
 		"Issue editor: save": "ctrl+s",
 		"Issue editor: the next / previous field or button":                                           "tab / shift+tab",
@@ -428,7 +428,7 @@ func TestTheHelpScreenScrollsOnReboundDetailKeys(t *testing.T) {
 // TestTheScrollKeysChangeNothingWhenTheHelpFits: in a terminal tall enough for
 // the whole help there is nowhere to scroll to.
 func TestTheScrollKeysChangeNothingWhenTheHelpFits(t *testing.T) {
-	m := newHelpShell(t, config.Default(), 100)
+	m := newHelpShell(t, config.Default(), 110)
 	whole := testui.View(m)
 	if !strings.Contains(whole, "shift+drag") || !strings.Contains(whole, "Moving and opening") {
 		t.Fatalf("fixture: the help screen is clipped at this height:\n%s", whole)

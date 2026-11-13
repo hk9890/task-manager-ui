@@ -17,6 +17,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	agentsmode "github.com/hk9890/task-manager-ui/internal/mode/agents"
 	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
 	configscreenmode "github.com/hk9890/task-manager-ui/internal/mode/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
@@ -122,6 +123,7 @@ type Model struct {
 
 	board  *boardmode.Model
 	docs   *docsmode.Model
+	agents *agentsmode.Model
 	search *searchmode.Model
 
 	// storePicker is the full-screen store list. pickerReturn is the mode the
@@ -297,7 +299,8 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 
 // bindStore makes services the active store. It cancels the previous store's
 // context, derives a new one, and rebuilds every surface that reads a store —
-// board, docs, search, detail — with the state the shell keeps about them.
+// board, docs, agents, search, detail — with the state the shell keeps about
+// them.
 //
 // It is the one construction path for those surfaces, at startup and on every
 // switch, so a switch cannot keep a field that a per-mode Reset() forgot to
@@ -318,12 +321,14 @@ func (m *Model) bindStore(services Services) {
 	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
 	m.search = searchmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "search"), m.keys)
+	m.agents = agentsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "agents"), m.keys)
 	m.detail = detail.Model{Keys: m.keys}
 	// The agents belong to the previous store's project. The poll a caller
 	// starts after the bind resolves the new one.
 	m.agentPollInFlight = false
 	m.agentPollFailing = false
 	m.projectLookupWait = 0
+	m.agents.SetAgents(nil, false, m.agentsAbsent(nil))
 	m.applyWorkspaceSizeToBrowseModes()
 
 	m.active = mode.Board
@@ -351,6 +356,7 @@ func (m *Model) bindStore(services Services) {
 	m.refreshStateBySurface = map[mode.ID]surfaceRefreshState{
 		mode.Board:  {lastRefresh: now},
 		mode.Docs:   {lastRefresh: now},
+		mode.Agents: {lastRefresh: now},
 		mode.Search: {lastRefresh: now},
 		mode.Detail: {},
 	}
@@ -697,8 +703,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentPollTickMsg:
 		return m, batchCmds(modeCmd, m.scheduleAgentPoll(), m.pollAgentsCmd())
 	case agentsListedMsg:
-		m.applyAgentList(msg)
-		return m, modeCmd
+		return m, batchCmds(modeCmd, m.applyAgentList(msg))
 	case agentStartedMsg:
 		return m, batchCmds(modeCmd, m.handleAgentStarted(msg))
 	case agentAskStartedMsg:
@@ -872,6 +877,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.openAgentDialog())
 		case mode.ActionOpenAgent:
 			return m, batchCmds(modeCmd, m.openAgent(msg.Agent))
+		case mode.ActionCloseAgent:
+			return m, batchCmds(modeCmd, m.requestAgentClose(msg.Agent))
+		case mode.ActionSelectAgent:
+			return m, batchCmds(modeCmd, m.selectAgent(msg.Agent.Session))
 		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd

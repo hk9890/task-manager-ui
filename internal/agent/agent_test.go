@@ -74,3 +74,19 @@ func TestVisibleLabelsHidesTheLinkLabels(t *testing.T) {
 		t.Fatalf("LinkSessions = %v, want %v", got, want)
 	}
 }
+
+// An agent's title is its name, its label when the harness names none; its
+// key is its session, its ref when the host does not know the session.
+func TestTitleAndKeyFallBack(t *testing.T) {
+	named := Agent{Ref: "demo:home:3", Session: "s-3", Label: "Tab 3", Name: "fix-board"}
+	unnamed := Agent{Ref: "demo:11", Label: "Tab 11", Name: "  "}
+	if named.Title() != "fix-board" || unnamed.Title() != "Tab 11" {
+		t.Errorf("titles = %q, %q; want fix-board, Tab 11", named.Title(), unnamed.Title())
+	}
+	if named.Key() != "s-3" || unnamed.Key() != "demo:11" {
+		t.Errorf("keys = %q, %q; want s-3, demo:11", named.Key(), unnamed.Key())
+	}
+	if StatusWord(NeedsYou) != "needs you" || StatusWord(Running) != "running" {
+		t.Errorf("StatusWord = %q, %q", StatusWord(NeedsYou), StatusWord(Running))
+	}
+}

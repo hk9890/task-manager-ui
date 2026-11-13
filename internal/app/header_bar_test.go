@@ -444,7 +444,7 @@ func TestTabLineHoldsTheTabsAlone(t *testing.T) {
 		m.active = active
 		for _, width := range []int{headerTabsEnd(), 80, 220} {
 			line := headerLines(m, width)[headerTabsRow]
-			if lipgloss.Width(line) != headerTabsEnd() || strings.TrimSpace(line) != "Board   Docs" {
+			if lipgloss.Width(line) != headerTabsEnd() || strings.TrimSpace(line) != "Board   Docs   Agents" {
 				t.Errorf("%s at width %d: want the tabs alone, got %q", active, width, line)
 			}
 		}

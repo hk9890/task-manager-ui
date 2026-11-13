@@ -37,6 +37,11 @@ func (r *Repository) Search(ctx context.Context, query domain.SearchIssuesQuery)
 	if err != nil {
 		return domain.SearchResultPage{}, mapReadErr("search", err)
 	}
+	if query.LabelContains != "" {
+		// Criteria has no field for it; the query language's label ~ is the
+		// same comparison.
+		expr = joinExpr(expr, "label ~ "+tasks.QuoteQueryValue(query.LabelContains))
+	}
 	filter.Expr = expr
 
 	page, err := r.store.ListPage(filter)
@@ -109,4 +114,12 @@ func buildCriteria(q domain.SearchIssuesQuery) (tasks.Criteria, tasks.Filter) {
 		Offset:        q.Offset,
 		Limit:         q.Limit,
 	}
+}
+
+// joinExpr is both filter expressions; an empty one matches every issue.
+func joinExpr(a, b string) string {
+	if a == "" {
+		return b
+	}
+	return "(" + a + ") && " + b
 }

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
@@ -14,6 +15,9 @@ type ID string
 const (
 	Board ID = "board"
 	Docs  ID = "docs"
+	// Agents lists the agents of the store's project, linked to an issue or
+	// not.
+	Agents ID = "agents"
 	// Search is the store search. It satisfies Browse and holds a selection,
 	// but it is not a tab: it is absent from BrowseModes and is opened by a
 	// shell action instead.
@@ -35,7 +39,7 @@ const (
 // Config and IssueEdit are not tabs: Detail is a drill-in reached from a
 // browse mode and left with Escape, and the other three are full-screen
 // surfaces above all of them.
-var BrowseModes = []ID{Board, Docs}
+var BrowseModes = []ID{Board, Docs, Agents}
 
 // IsBrowse reports whether id is one of the browse tabs. The shell keeps
 // lastBrowse pointing at one of these, so selection lookups always resolve.
@@ -133,16 +137,17 @@ type ActionRequestMsg struct {
 	// the request does not depend on a SelectionChangedMsg arriving first. The
 	// editor actions leave it nil.
 	Selection *Selection
-	// Agent is the session of the agent an ActionOpenAgent acts on; "" for
-	// every other action.
-	Agent string
+	// Agent is the agent an ActionOpenAgent, an ActionCloseAgent or an
+	// ActionSelectAgent acts on, as the mode drew it; the zero Agent for
+	// every other action. An ActionSelectAgent names it by Session alone.
+	Agent agent.Agent
 }
 
 // RequestActionCmd returns the Cmd that asks the shell for a shell-owned action
 // on behalf of the mode with this id.
 //
-// It, RequestOpenDetailCmd and RequestOpenAgentCmd are the constructors of
-// the whole contract, so no mode builds the message inline.
+// It, RequestOpenDetailCmd and RequestAgentCmd are the constructors of the
+// whole contract, so no mode builds the message inline.
 func RequestActionCmd(id ID, action Action) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: action}
@@ -157,11 +162,12 @@ func RequestOpenDetailCmd(id ID, selection *Selection) tea.Cmd {
 	}
 }
 
-// RequestOpenAgentCmd returns the Cmd that asks the shell to bring the agent
-// of session to the front, on behalf of the mode with this id.
-func RequestOpenAgentCmd(id ID, session string) tea.Cmd {
+// RequestAgentCmd returns the Cmd that asks the shell for an action on the
+// agent a — ActionOpenAgent, ActionCloseAgent or ActionSelectAgent — on
+// behalf of the mode with this id.
+func RequestAgentCmd(id ID, action Action, a agent.Agent) tea.Cmd {
 	return func() tea.Msg {
-		return ActionRequestMsg{Mode: id, Action: ActionOpenAgent, Agent: session}
+		return ActionRequestMsg{Mode: id, Action: action, Agent: a}
 	}
 }
 
@@ -189,10 +195,16 @@ const (
 	// new ones.
 	ActionLaunchAgent Action = "launch_agent"
 
-	// ActionOpenAgent is a click on the row of an agent in the Details pane
-	// of Detail: the shell brings that agent to the front, and resumes it
-	// first when it is gone.
-	ActionOpenAgent Action = "open_agent"
+	// ActionOpenAgent is Enter on a row of the Agents tab: the shell brings
+	// that agent to the front, and resumes it first when it is gone.
+	// ActionCloseAgent closes it, and asks first when it is busy.
+	ActionOpenAgent  Action = "open_agent"
+	ActionCloseAgent Action = "close_agent"
+
+	// ActionSelectAgent is a click on the row of an agent in the Details
+	// pane of Detail: the shell switches to the Agents tab with that agent
+	// selected.
+	ActionSelectAgent Action = "select_agent"
 )
 
 // MouseKind is what the pointer did.

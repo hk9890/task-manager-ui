@@ -248,7 +248,7 @@ func TestNonBlockingRefreshBoardSearchBoardFlow(t *testing.T) {
 	}
 
 	// Switch back to Board.
-	boardNext, boardBackCmd := m.Update(testui.Press("tab"))
+	boardNext, boardBackCmd := m.Update(testui.Press("shift+tab"))
 	m = boardNext.(Model)
 	m = applyMessages(t, m, runBatch(boardBackCmd))
 

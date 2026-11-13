@@ -92,8 +92,8 @@ func TestAClickOnAnAgentRowAsksForThatAgent(t *testing.T) {
 		t.Fatal("a click on an agent row asks for nothing")
 	}
 	request, ok := cmd().(mode.ActionRequestMsg)
-	if !ok || request.Action != mode.ActionOpenAgent || request.Agent != "s-2" {
-		t.Errorf("a click on Tab 4 sent %#v, want ActionOpenAgent for s-2", request)
+	if !ok || request.Action != mode.ActionSelectAgent || request.Agent.Session != "s-2" {
+		t.Errorf("a click on Tab 4 sent %#v, want ActionSelectAgent for s-2", request)
 	}
 	if m.FocusPane != focus {
 		t.Errorf("a click on an agent row moved the focus to %d", m.FocusPane)

@@ -369,6 +369,18 @@ func (m *Model) SetLiveAgents(statusBySession map[string]agent.Status) {
 	m.markAgents()
 }
 
+// CommentLinks is the In Progress issues by the session of each agent that
+// commented on them: the agents a card links without a link label.
+func (m *Model) CommentLinks() map[string]domain.IssueSummary {
+	links := make(map[string]domain.IssueSummary)
+	for _, issue := range m.columns[inProgressColumnIndex].issues {
+		for _, session := range m.inProgressSessions[issue.ID] {
+			links[session] = issue
+		}
+	}
+	return links
+}
+
 func (m *Model) agentMarksOf(colIdx int) map[string]agent.Status {
 	if colIdx >= len(m.agentMarks) {
 		return nil

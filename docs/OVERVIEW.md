@@ -13,13 +13,14 @@ internal/
   app/                    the root shell: mode lifecycle, routing, selection and detail
                           coordination, the screen margin, the shell half of the issue editor
                           (issue_editor.go) and the content of the help screen (help.go)
-  mode/                   board, docs, search, detail, storepicker, configscreen and issueedit
+  mode/                   board, docs, agents, search, detail, storepicker, configscreen and issueedit
                           feature models, plus the shell message contracts and Query, the typed
                           filter text (query.go).
                           Type.IsWork() is false for doc, so doc issues reach no board column —
                           docs/ is the tab that browses them. search/ is the store search: a
                           browse surface that is not a tab. rowlist/ is the list code those
-                          two share
+                          two share. agents/ is the tab of the project's agents, linked to
+                          an issue or not
   ui/                     rendering: a state struct in, a string out; reads no repository (DESIGN-GUIDE.md)
     styles/                 every colour role, the themes, the glyph sets, the key legend, the
                             shared FormSection chrome and Screen, the chrome of the full screens
@@ -27,6 +28,7 @@ internal/
     board/                  the columns and the query line above them; the docs tab and the
                             store search draw through it too
     detail/                 the issue detail panes, the comments and the buttons in them
+    agents/                 the list of the Agents tab: the agents in two groups, two lines each
     storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
     configscreen/           the full-screen configuration screen: the theme and the glyph set;
                             it renders instead of the shell too

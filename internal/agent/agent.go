@@ -29,6 +29,15 @@ const (
 	Gone Status = "gone"
 )
 
+// StatusWord is what the operator reads for status: "needs you" for
+// NeedsYou, and the status itself for every other one.
+func StatusWord(status Status) string {
+	if status == NeedsYou {
+		return "needs you"
+	}
+	return string(status)
+}
+
 // Rank orders the statuses by how much the agent needs the operator: the
 // lowest rank first. An unmapped status ranks after the live ones, and Gone
 // last.
@@ -49,15 +58,35 @@ func Rank(status Status) int {
 
 // Agent is one agent of a host. Ref is the host's own handle for it and
 // opaque to the core. Session is the conversation it holds, empty when the
-// host does not know it. Label is what the operator calls it, ready to draw
-// once cleaned. Activity is a short title of what it does, empty when the host
-// does not say.
+// host does not know it. Label is where the operator finds it, such as its
+// tab, and Name what its harness calls it, empty when the harness names none;
+// both are ready to draw once cleaned. Activity is a short title of what it
+// does, empty when the host does not say.
 type Agent struct {
 	Ref      string
 	Session  string
 	Label    string
+	Name     string
 	Status   Status
 	Activity string
+}
+
+// Title is what the operator calls a: its Name, or its Label when the
+// harness names none.
+func (a Agent) Title() string {
+	if name := strings.TrimSpace(a.Name); name != "" {
+		return name
+	}
+	return a.Label
+}
+
+// Key tells a from the other agents of a host: its Session, or its Ref when
+// the host does not know the session.
+func (a Agent) Key() string {
+	if a.Session != "" {
+		return a.Session
+	}
+	return a.Ref
 }
 
 // Spec is the agent Start opens: in the project at Root, prompted with Prompt
@@ -144,6 +173,12 @@ func LinkSessions(labels []string) []string {
 // goneLabelLength is how much of its session the label of a gone agent shows.
 const goneLabelLength = 8
 
+// GoneAgent is the agent of a session that a link label names and no live
+// agent holds.
+func GoneAgent(session string) Agent {
+	return Agent{Session: session, Label: "Session " + session[:min(len(session), goneLabelLength)], Status: Gone}
+}
+
 // Linked is the agents linked to an issue: those whose session a link label
 // among labels names, and those whose session wrote one of its comments,
 // merged by session with the live agents of the project. live is nil when
@@ -166,7 +201,7 @@ func Linked(live map[string]Agent, labels, commentSessions []string) []Agent {
 			return
 		}
 		if !ok {
-			a = Agent{Session: session, Label: "Session " + session[:min(len(session), goneLabelLength)], Status: Gone}
+			a = GoneAgent(session)
 		}
 		seen[session] = true
 		linked = append(linked, a)

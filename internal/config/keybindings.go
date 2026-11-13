@@ -46,6 +46,11 @@ const (
 	BoardActionPageDown   = "page_down"
 	BoardActionOpenDetail = "open_detail"
 	BoardActionReload     = "reload"
+	// BoardActionCloseAgent and BoardActionOpenIssue act on the selected
+	// row of the Agents tab: they close its agent and open the issue it is
+	// linked to.
+	BoardActionCloseAgent = "close_agent"
+	BoardActionOpenIssue  = "open_issue"
 
 	DetailActionScrollUp   = "scroll_up"
 	DetailActionScrollDown = "scroll_down"
@@ -127,6 +132,8 @@ func DefaultKeyBindings() KeyBindings {
 			BoardActionPageDown:   {"pgdown"},
 			BoardActionOpenDetail: {"enter"},
 			BoardActionReload:     {"alt+r"},
+			BoardActionCloseAgent: {"alt+x"},
+			BoardActionOpenIssue:  {"alt+o"},
 		},
 		Detail: map[string][]string{
 			DetailActionScrollUp:   {"up"},
@@ -436,6 +443,8 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			BoardActionPageDown,
 			BoardActionOpenDetail,
 			BoardActionReload,
+			BoardActionCloseAgent,
+			BoardActionOpenIssue,
 		} {
 			allowed[action] = struct{}{}
 		}

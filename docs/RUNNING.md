@@ -171,7 +171,9 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   Progress issue, as `fakeRevier` in `internal/agent/revier/revier_integration_test.go` does. The card
   carries the agent mark, Detail lists the agent under `Agents`. `alt+i`
   opens the agent dialog; its Close and Resume entries run `revier agent close` and
-  `revier agent new --resume`, so the fake must answer both.
+  `revier agent new --resume`, so the fake must answer both. `shift+tab` from Board opens the
+  Agents tab: the agent stands under `Linked`, one with no link under `Not linked`, each with
+  the `.state.name` the fake gives; `enter`, `alt+x` and `alt+o` act on the selected one.
 
 ## Behaviours that need a real terminal
 

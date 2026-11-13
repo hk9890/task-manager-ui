@@ -49,6 +49,11 @@ func (m *Model) browseController(id mode.ID) mode.Browse {
 			return nil
 		}
 		return m.docs
+	case mode.Agents:
+		if m.agents == nil {
+			return nil
+		}
+		return m.agents
 	case mode.Search:
 		if m.search == nil {
 			return nil
