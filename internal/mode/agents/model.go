@@ -313,30 +313,29 @@ func (m *Model) matching(rows []uiagents.Row) []uiagents.Row {
 	})
 }
 
-func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
-	match := func(action string) bool { return m.keys.Match(config.BoardContext, action, msg) }
-	page := max(1, uiagents.InnerHeight(m.height)/uiagents.RowLines)
+// page is a page key in direction (-1 up, 1 down): it scrolls the Agent pane
+// while the pane is drawn, as the Docs preview does, and pages the list
+// without it.
+func (m *Model) page(direction int) tea.Cmd {
 	if m.split() {
 		// A page step keeps the lines the two scroll markers cover on screen.
-		step := max(1, uiagents.InnerHeight(m.height)-2)
-		switch {
-		case m.keys.Match(config.DetailContext, config.DetailActionPageUp, msg):
-			m.scrollPane(-step)
-			return nil
-		case m.keys.Match(config.DetailContext, config.DetailActionPageDown, msg):
-			m.scrollPane(step)
-			return nil
-		}
+		m.scrollPane(direction * max(1, uiagents.InnerHeight(m.height)-2))
+		return nil
 	}
+	return m.move(direction * max(1, uiagents.InnerHeight(m.height)/uiagents.RowLines))
+}
+
+func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
+	match := func(action string) bool { return m.keys.Match(config.BoardContext, action, msg) }
 	switch {
 	case match(config.BoardActionMoveUp):
 		return m.move(-1)
 	case match(config.BoardActionMoveDown):
 		return m.move(1)
 	case match(config.BoardActionPageUp):
-		return m.move(-page)
+		return m.page(-1)
 	case match(config.BoardActionPageDown):
-		return m.move(page)
+		return m.page(1)
 	case match(config.BoardActionMoveHome):
 		return m.move(-len(m.rows))
 	case match(config.BoardActionMoveEnd):

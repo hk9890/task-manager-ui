@@ -2,12 +2,14 @@ package agents
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/agent"
+	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository/memory"
@@ -159,5 +161,56 @@ func TestThePageKeysScrollThePane(t *testing.T) {
 	m.move(1)
 	if m.paneOffset != 0 {
 		t.Errorf("a new selection kept the pane offset %d", m.paneOffset)
+	}
+}
+
+// The pane scrolls with the board page keys, as the Docs preview does: a
+// rebound board page key scrolls it, a rebound detail page key does not, and
+// without the pane the board key pages the list.
+func TestThePaneScrollsWithTheBoardPageKeys(t *testing.T) {
+	t.Parallel()
+	bindings := config.DefaultKeyBindings()
+	bindings.Board[config.BoardActionPageDown] = []string{"alt+j"}
+	bindings.Board[config.BoardActionPageUp] = []string{"alt+u"}
+	bindings.Detail[config.DetailActionPageDown] = []string{"alt+k"}
+	bindings.Detail[config.DetailActionPageUp] = []string{"alt+i"}
+	rebound, err := config.ResolveKeyBindings(bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewModel(context.Background(), memory.New(), nil, rebound, func(context.Context, agent.Agent) (string, error) {
+		return strings.Repeat("line\n\n", 60), nil
+	})
+	m.SetSize(140, 30)
+	m.SetShown(true)
+	agents := make([]agent.Agent, 0, 30)
+	for i := range 30 {
+		agents = append(agents, live(fmt.Sprintf("s-%02d", i), fmt.Sprintf("%02d", i), agent.Idle))
+	}
+	settle(t, m, m.SetAgents(agents, true, "", nil))
+
+	m.Update(testui.Press("alt+k"))
+	if m.paneOffset != 0 {
+		t.Errorf("the detail page_down scrolled the pane to %d", m.paneOffset)
+	}
+	m.Update(testui.Press("alt+j"))
+	m.Update(testui.Press("alt+j"))
+	if m.paneOffset == 0 || m.selected != 0 {
+		t.Fatalf("the board page_down: pane offset %d, selected %d; want the pane scrolled", m.paneOffset, m.selected)
+	}
+	scrolled := m.paneOffset
+	m.Update(testui.Press("alt+i"))
+	if m.paneOffset != scrolled {
+		t.Errorf("the detail page_up scrolled the pane from %d to %d", scrolled, m.paneOffset)
+	}
+	m.Update(testui.Press("alt+u"))
+	if m.paneOffset >= scrolled {
+		t.Errorf("the board page_up left the pane at %d, want above %d", m.paneOffset, scrolled)
+	}
+
+	m.SetSize(90, 30)
+	m.Update(testui.Press("alt+j"))
+	if m.selected == 0 {
+		t.Errorf("without the pane the board page_down did not page the list")
 	}
 }
