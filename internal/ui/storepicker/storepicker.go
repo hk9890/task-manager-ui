@@ -385,8 +385,8 @@ func renderError(message string, innerWidth int) string {
 // selection's so it lines up with the row text. A line too long for the box
 // loses the end of the branch; the time stays.
 func renderSync(sync Sync, now time.Time, innerWidth int) string {
-	gutter, _ := styles.SelectionPrefix(false, false)
-	textWidth := max(innerWidth-lipgloss.Width(gutter), 0)
+	plainGutter, renderedGutter := styles.SelectionPrefix(false, true)
+	textWidth := max(innerWidth-lipgloss.Width(plainGutter), 0)
 
 	state := "Not synced yet"
 	switch {
@@ -399,7 +399,7 @@ func renderSync(sync Sync, now time.Time, innerWidth int) string {
 
 	branch := textutil.TruncateString(displaytext.OneLine(sync.Branch), max(textWidth-lipgloss.Width(state), 0))
 	text := textutil.TruncateString(state+branch, textWidth)
-	return gutter + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(text)
+	return renderedGutter + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(text)
 }
 
 // relativeTime is how long ago, in the largest whole unit: "just now" under a
