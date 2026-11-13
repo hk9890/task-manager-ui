@@ -210,13 +210,12 @@ Keybindings are resolved once at startup from the `keybindings` section.
   into the filter; bind it with alt+ or ctrl+`. The Board, Docs and Agents tabs and the store search
   type every such key into their query (`mode.Query`, `internal/mode/query.go`), so an action
   on one would never run there. `isPrintableKey` (`internal/config/keybindings.go`) is the test.
-- **`backspace`, `ctrl+w`, `ctrl+u` and `ctrl+t` are refused outside `modal`.** The first
+- **`backspace`, `ctrl+w`, `ctrl+u` and `ctrl+t` are refused in `shell` and `board`.** The first
   three edit that query and `ctrl+t` toggles the scope of the store search. The four are built
   in: those surfaces take them before any binding. A binding on one fails startup and
   `--check-config`: `key "ctrl+u" for action "reload" in board context edits the filter, which
-  takes it before any binding; bind another key`. `detail` refuses them too: the Agents tab scrolls
-  its pane with the `detail` page keys. `modal` keeps them: a dialog is above every query.
-  `reservedKeys` (`internal/config/keybindings.go`) is the list.
+  takes it before any binding; bind another key`. `detail` and `modal` keep them: neither has a
+  query. `reservedKeys` (`internal/config/keybindings.go`) is the list.
 
 Supported actions by context:
 
@@ -241,14 +240,14 @@ Supported actions by context:
   - The Agents tab reads the row movement and `reload` from this context too. There
     `open_detail` brings the selected agent to the front, `close_agent` closes it, or
     unlinks a gone one, and `open_issue` opens its issue in Detail; the other surfaces ignore the last two.
+    `page_up` and `page_down` scroll the Agent pane while it is drawn, and page the list without
+    it, as on the Docs tab.
   - The configuration screen reads `move_up` and `move_down` from this context. The keys that
     step a value there, `left`, `right` and `enter`, are built in and follow no binding.
 - `detail`
   - `scroll_up`, `scroll_down`, `page_up`, `page_down`, `home`, `end`, `delete_comment`
   - `delete_comment` acts while the comments have the focus. `left`, `right` and `enter` in
     Detail are built in and follow no binding.
-  - The Agents tab reads `page_up` and `page_down` from this context while its Agent pane is
-    drawn: they scroll the pane.
 - `modal`
   - `next`, `prev`, `left`, `right`, `enter`, `escape`
 
