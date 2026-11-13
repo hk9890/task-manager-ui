@@ -344,6 +344,8 @@ The Docs tab (`internal/mode/docs`) lists every doc, open and closed, in one boa
 description and the notes as markdown. It has no button, no comment and no focus; Enter still
 opens Detail.
 
+- The list is ordered by last change and draws no age dividers (`Column.AgeMarkers` false): the
+  preview shows the doc, and a divider between docs says nothing a reader acts on.
 - The preview follows the selection and reads nothing itself. The shell reads the selected issue
   for Detail on every selection change, and its `detailLoadedMsg` handler hands each read to the
   tab (`docs.Model.ShowDoc`, `ShowDocFailure`). The pane draws a read only while its issue is the
@@ -689,7 +691,7 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   capacity in rows, as `mode/storepicker` does with `RowCapacity`. The Agents tab is the
   exception: its group headings and gaps are lines `scroll.EnsureVisible` does not count, so it
   scrolls with `agents.EnsureVisible` (`internal/ui/agents`).
-- A column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
+- A board column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
   issue older than a day and another before the first older than a week, each carrying the count
   of issues below it (`internal/ui/board/agemarker.go`). A divider is a row, not an issue:
   `ScrollOffset` and `SelectedRow` stay issue indices. A mode model that draws through `ui/board`

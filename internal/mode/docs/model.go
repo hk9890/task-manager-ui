@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -42,10 +41,6 @@ type Model struct {
 	keys   config.ResolvedKeyBindings
 	width  int
 	height int
-
-	// now is the clock the age markers measure against. Tests replace it so a
-	// golden pins which rows fall on which side of a divider.
-	now func() time.Time
 
 	// issues is every loaded doc; shown is the docs of it the query matches,
 	// and is issues itself while the query is empty. Selection, scroll, hit
@@ -98,7 +93,6 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		repo:   repo,
 		logger: logger,
 		keys:   keys,
-		now:    time.Now,
 	}
 }
 
@@ -195,7 +189,6 @@ func (m *Model) uiColumn() uiboard.Column {
 		Loaded:       len(m.issues),
 		Loading:      m.loading,
 		Error:        errText,
-		AgeMarkers:   true,
 	}
 }
 

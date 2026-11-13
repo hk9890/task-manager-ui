@@ -40,7 +40,6 @@ func (m *Model) viewState(skeletonPhase int) uiboard.State {
 		Width:         m.width,
 		Height:        m.height,
 		SkeletonPhase: skeletonPhase,
-		Now:           m.now(),
 		AsideWidth:    previewWidth,
 	}
 }

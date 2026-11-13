@@ -20,7 +20,6 @@ var mouseStart = time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 func mouseDocs(t *testing.T) *Model {
 	t.Helper()
 	m := NewModel(context.Background(), memoryrepo.New(fakes.FrozenClock()), nil)
-	m.now = func() time.Time { return mouseStart }
 	m.issues = []domain.IssueSummary{
 		{ID: "tm-1", Title: "doc-one", Type: "doc", Status: "open"},
 		{ID: "tm-2", Title: "doc-two", Type: "doc", Status: "open"},
