@@ -68,14 +68,14 @@ func TestSyncLineNamesTheStateAndTheBranch(t *testing.T) {
 	}
 }
 
-// A narrow box cuts the branch and keeps the time, which is the part that
-// changes.
-func TestSyncLineCutsTheBranchAndKeepsTheTime(t *testing.T) {
+// A narrow box cuts the front of the branch: the time and the end of the
+// machine ID stay, which tell the syncs and the machines apart.
+func TestSyncLineCutsTheFrontOfTheBranchAndKeepsTheTime(t *testing.T) {
 	t.Parallel()
 
 	sync := Sync{Branch: "machine/a-rather-long-machine-id", LastSync: syncNow.Add(-2 * time.Hour)}
 	got := testui.AnsiEscapePattern.ReplaceAllString(renderSync(sync, syncNow, 30), "")
-	if want := "  Last sync 2 h ago · machine…"; got != want {
+	if want := "  Last sync 2 h ago · …hine-id"; got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }

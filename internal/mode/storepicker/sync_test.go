@@ -73,6 +73,25 @@ func TestAMachineNotSetUpForSyncDrawsNoLine(t *testing.T) {
 	}
 }
 
+// A reopened picker does not draw the sync line of the earlier open, timed
+// from that open, while its own listing is in flight.
+func TestAReopenDrawsNoSyncLineUntilItsListingLands(t *testing.T) {
+	t.Parallel()
+
+	catalog := &fakes.FakeStoreCatalog{
+		Entries: entries("alpha"),
+		Sync:    storecatalog.SyncStatus{SetUp: true, Branch: "machine/box", LastSync: syncNow},
+	}
+	m, _ := newSyncModel(t, catalog)
+	run(t, m, m.Init())
+
+	m.Init()
+
+	if view := ansi.ReplaceAllString(m.View(0, "help"), ""); strings.Contains(view, "Last sync") {
+		t.Errorf("the earlier open's sync line is drawn while the listing is in flight:\n%s", view)
+	}
+}
+
 // A sync state that cannot be read fails no listing: the stores are listed,
 // no sync line is drawn, and the failure is a warning in the log.
 func TestASyncStateErrorLeavesTheListAndDrawsNoLine(t *testing.T) {

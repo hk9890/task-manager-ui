@@ -138,7 +138,9 @@ func NewModel(ctx context.Context, catalog storecatalog.Catalog, logger *slog.Lo
 // Init loads the store list. Every open lists again: a store registered from
 // another terminal must appear without restarting the app, so an open is never
 // suppressed by a listing left in flight from an earlier one.
+// The sync line of an earlier open is not drawn meanwhile: it is timed from that open.
 func (m *Model) Init() tea.Cmd {
+	m.sync = nil
 	return m.startListing()
 }
 

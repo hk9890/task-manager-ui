@@ -91,10 +91,10 @@ func buildRepository(opts startupOptions) (backend, error) {
 		// whose store was promoted with `taskmgr store move --central` reports
 		// ErrNoStore. Resolve walks up for a local .tasks first and falls back to
 		// the central registry, matching what the taskmgr CLI does.
-		store, info, err := tasks.Resolve(tasks.ResolveOptions{
+		store, info, err := repositorytaskmgr.Resolve(tasks.ResolveOptions{
 			WorkDir:   opts.projectRoot,
 			StoreName: opts.storeName,
-		}, tasks.WithLockTimeout(repositorytaskmgr.StoreLockTimeout))
+		})
 		if err != nil {
 			if opts.storeName != "" {
 				return backend{}, fmt.Errorf("failed to open central task-manager store %q: %w", opts.storeName, err)

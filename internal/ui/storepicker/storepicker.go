@@ -397,7 +397,7 @@ func renderSync(sync Sync, now time.Time, innerWidth int) string {
 	}
 	state += " · "
 
-	branch := textutil.TruncateString(displaytext.OneLine(sync.Branch), max(textWidth-lipgloss.Width(state), 0))
+	branch := textutil.TruncateStringFront(displaytext.OneLine(sync.Branch), max(textWidth-lipgloss.Width(state), 0))
 	text := textutil.TruncateString(state+branch, textWidth)
 	return renderedGutter + lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(text)
 }

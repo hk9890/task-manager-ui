@@ -122,15 +122,15 @@ mise run ci          # the merge gate; see What the tools enforce
 
 ### Store resolution
 
-`buildRepository` must call `tasks.Resolve`, never `tasks.Open`: `Open` performs local
+`buildRepository` must resolve the store, never call `tasks.Open`: `Open` performs local
 discovery only, so a project whose store was promoted with `taskmgr store move --central`
-would report "no .tasks directory found". `Resolve` applies the same precedence as the
+would report "no .tasks directory found". `tasks.Resolve` applies the same precedence as the
 `taskmgr` CLI — see the SDK for the order.
 
-Every `tasks.Resolve` the app makes passes
-`tasks.WithLockTimeout(repositorytaskmgr.StoreLockTimeout)` — `buildRepository` and the store
-catalog's `Catalog.resolve`. Without it a write blocks its command with no limit while a hook or a
-publish holds the store's write lock. With it the write fails with
+Every store the app opens is resolved through `repositorytaskmgr.Resolve`, never through
+`tasks.Resolve` itself: `buildRepository` and the store catalog's `Catalog.resolve` call it. It
+passes `tasks.WithLockTimeout(repositorytaskmgr.StoreLockTimeout)`. Without it a write blocks its
+command with no limit while a hook or a publish holds the store's write lock. With it the write fails with
 `tasks.ErrStoreBusy`, which `mapWriteErr` maps to `domain.ErrorCodeTimeout`: the toast says the
 store is busy and the write can be tried again.
 

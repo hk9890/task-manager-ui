@@ -85,7 +85,7 @@ func mapWriteErr(op string, err error) error {
 	case errors.Is(err, tasks.ErrImmutable):
 		return repoError(domain.ErrorCodeConflict, op, "issue is closed; reopen it before editing", err)
 	case errors.Is(err, tasks.ErrStoreBusy):
-		return repoError(domain.ErrorCodeTimeout, op, "store busy: another writer holds it; try again", err)
+		return repoError(domain.ErrorCodeTimeout, op, "store busy: another write holds the lock; try again", err)
 	case errors.Is(err, tasks.ErrNoStore):
 		return repoError(domain.ErrorCodeNoDatabaseFound, op, "", err)
 	default:

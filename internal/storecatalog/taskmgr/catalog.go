@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/hk9890/task-manager/sdk/tasks"
 
@@ -22,19 +21,13 @@ type Catalog struct {
 	// written through a store this catalog opens, as it is for the store
 	// resolved at startup.
 	author string
-	// lockTimeout bounds how long each write of an opened store waits for the
-	// write lock another writer holds.
-	lockTimeout time.Duration
 }
 
-// New returns a Catalog whose opened stores write as author and wait
-// repositorytaskmgr.StoreLockTimeout for the write lock. It holds no other
+// New returns a Catalog whose opened stores write as author. It holds no other
 // state: the SDK reads the registry from disk on every call, so a listing is
 // never served from a snapshot taken before the operator ran
 // `taskmgr init --central` in another terminal.
-func New(author string) Catalog {
-	return Catalog{author: author, lockTimeout: repositorytaskmgr.StoreLockTimeout}
-}
+func New(author string) Catalog { return Catalog{author: author} }
 
 // Stores implements storecatalog.Catalog.
 //
@@ -66,9 +59,10 @@ func (c Catalog) Stores(ctx context.Context) ([]storecatalog.Entry, error) {
 
 // SyncStatus implements storecatalog.Catalog.
 //
-// tasks.PublishStatus takes no context — it runs no git and takes no lock
-// while no publish runs — so cancellation is honoured by checking before the
-// call, as Stores does.
+// tasks.PublishStatus takes no context — it runs no git and reads a few small
+// files — so cancellation is honoured by checking before the call, as Stores
+// does. It is not read-only: where a killed publish left its lock file
+// filled, it empties that file.
 func (c Catalog) SyncStatus(ctx context.Context) (storecatalog.SyncStatus, error) {
 	if err := ctx.Err(); err != nil {
 		return storecatalog.SyncStatus{}, err
@@ -76,7 +70,7 @@ func (c Catalog) SyncStatus(ctx context.Context) (storecatalog.SyncStatus, error
 
 	state, err := tasks.PublishStatus()
 	if err != nil {
-		return storecatalog.SyncStatus{}, fmt.Errorf("failed to read this machine's sync state: %w", err)
+		return storecatalog.SyncStatus{}, fmt.Errorf("tasks.PublishStatus: %w", err)
 	}
 	return storecatalog.SyncStatus{
 		SetUp:    state.SetUp,
@@ -129,7 +123,7 @@ func (c Catalog) CreateCentral(ctx context.Context, dir, name, prefix string) (s
 func (c Catalog) DerivePrefix(dir string) string { return tasks.DerivePrefix(dir) }
 
 func (c Catalog) resolve(opts tasks.ResolveOptions) (storecatalog.Opened, error) {
-	store, info, err := tasks.Resolve(opts, tasks.WithLockTimeout(c.lockTimeout))
+	store, info, err := repositorytaskmgr.Resolve(opts)
 	if err != nil {
 		return storecatalog.Opened{}, err
 	}
