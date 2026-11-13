@@ -43,7 +43,9 @@ mise run ci          # the merge gate; see What the tools enforce
 
    The agent host (`agent.Host` in `internal/agent`, `Services.Agents`) is a seam outside the
    store path, over the program that runs the agents. Each call is bounded: none outlives its
-   context, and the host sets its own timeout on top. The steps inside a call (the harness wait,
+   context, and the host sets its own timeout on top. One exception: when a start or a resume
+   gives up, the close of the tab it opened may outlive the context, under its own timeout, so no
+   half-started agent stays open (`closeOrphan`). The steps inside a call (the harness wait,
    the session lookup, the prompt) belong to the host, not to the core. revier is
    its one implementation (`internal/agent/revier`); the core reads `agent.Agent.Ref` as opaque.
    Its poll is a timer under the [Switching stores](#switching-stores) rules: the tick is
