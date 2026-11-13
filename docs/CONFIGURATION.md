@@ -60,9 +60,9 @@ The model is intentionally small and only covers app-shell concerns:
     action for any other. Startup warns by name for a definition nothing can
     start; override a built-in instead of appending a new action.
 - `Agent.Intents`
-  - The entries of the intent menu that `launch_agent` opens in Detail, in menu order. An intent
-    starts an agent through the agent host in front, with its `prompt` as the first prompt, and
-    labels the issue `agent:<session>`.
+  - The `Start new` entries of the agent dialog that `launch_agent` opens in Detail, in menu
+    order. An intent starts an agent through the agent host in front, with its `prompt` as the
+    first prompt, and labels the issue `agent:<session>`.
   - Defaults to `implement` and `review`, each a short prompt that names `{{issue.id}}`.
   - Each intent has a `name` (required, unique) and a `prompt` (required, one line: revier
     submits a prompt as one line). The prompt takes the
@@ -223,7 +223,7 @@ Supported actions by context:
   - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `open_config`,
     `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `create_issue`,
     `update_issue`, `close_issue`, `comment_issue`, `save_edit`, `launch_nvim`,
-    `launch_opencode`, `launch_shell_command`, `launch_agent`, `focus_agent`, `agent_menu`
+    `launch_opencode`, `launch_shell_command`, `launch_agent`
   - `save_edit` acts in the issue editor only. The keys that move between the fields there —
     `tab`, `shift+tab`, the arrows, `enter`, `pgup`, `pgdown` — are built in and follow no
     binding. Of the other `shell` actions only `quit`, `toggle_help` and `escape` act there.

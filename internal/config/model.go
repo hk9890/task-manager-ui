@@ -24,7 +24,7 @@ type LauncherDefinition struct {
 
 // Agent configures the agents the shell starts on an issue.
 type Agent struct {
-	// Intents are the entries of the intent menu, in menu order.
+	// Intents are the Start new entries of the agent dialog, in menu order.
 	Intents []Intent `yaml:"intents"`
 }
 

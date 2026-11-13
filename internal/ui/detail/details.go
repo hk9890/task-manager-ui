@@ -63,8 +63,7 @@ type State struct {
 	// pointer is elsewhere. Its reference row draws the hover band, and its
 	// button is lit.
 	Hover *Hit
-	// Agents is the agents linked to the issue; the open button acts on the
-	// first live one. The Details pane lists them.
+	// Agents is the agents linked to the issue. The Details pane lists them.
 	Agents []agent.Agent
 }
 
@@ -107,8 +106,6 @@ type ButtonKeys struct {
 	EditComment   string
 	DeleteComment string
 	LaunchAgent   string
-	FocusAgent    string
-	AgentMenu     string
 }
 
 // Render renders standalone issue detail metadata and content.
@@ -408,9 +405,6 @@ type ContentPaneState struct {
 	CommentIndex    int
 	// Hover is the button under the pointer.
 	Hover Button
-	// Agents is the agents linked to the issue: with a live one, the ID line
-	// draws the open button.
-	Agents []agent.Agent
 }
 
 // contentPane is the Content pane of state at the size the layout gives it.
@@ -443,7 +437,6 @@ func (state State) contentPane(width, height int) ContentPaneState {
 		ButtonKeys:      state.ButtonKeys,
 		CommentsFocused: state.FocusPane == FocusPaneComments,
 		CommentIndex:    state.CommentIndex,
-		Agents:          state.Agents,
 	}
 	if state.Hover != nil {
 		pane.Hover = state.Hover.Button
@@ -714,30 +707,19 @@ func renderContentPaneLines(pane ContentPaneState, width, availableHeight int) c
 	return out
 }
 
-// placeIDLineButtons puts open (only with a live linked agent), agents (only
-// with a linked agent), agent and edit at the right end of the ID line. The
-// ID is not cut to make room for them.
-//
-// The width alone picks the set: open, agents, agent and edit; else open,
-// agent and edit; else open and edit; else edit; else none. A set fits by
-// the room it takes with open and agents drawn, so a linked agent coming or
-// going adds or removes them and moves no other button: a click aimed at
-// open never lands on agent. Each key still does what its button does.
+// placeIDLineButtons puts agent and edit at the right end of the ID line.
+// The ID is not cut to make room for them: the width alone picks the set,
+// agent and edit; else edit; else none. Each key still does what its button
+// does.
 func placeIDLineButtons(idLine string, width int, pane ContentPaneState, keys ButtonKeys) (string, []placedButton) {
 	textRoom := max(lipgloss.Width(idLine)+1, buttonTextFloor)
-	_, live := agent.FirstLive(pane.Agents)
 	for _, set := range [][]Button{
-		{ButtonFocusAgent, ButtonAgentMenu, ButtonLaunchAgent, ButtonEdit},
-		{ButtonFocusAgent, ButtonLaunchAgent, ButtonEdit},
-		{ButtonFocusAgent, ButtonEdit},
+		{ButtonLaunchAgent, ButtonEdit},
 		{ButtonEdit},
 	} {
 		if width-buttonsWidth(set, keys) < textRoom {
 			continue
 		}
-		set = slices.DeleteFunc(slices.Clone(set), func(button Button) bool {
-			return button == ButtonFocusAgent && !live || button == ButtonAgentMenu && len(pane.Agents) == 0
-		})
 		drawn := make([]string, len(set))
 		for idx, button := range set {
 			drawn[idx] = idLineButton(button, keys, pane.Hover == button)
@@ -767,10 +749,6 @@ func idLineButton(button Button, keys ButtonKeys, lit bool) string {
 	switch button {
 	case ButtonLaunchAgent:
 		return paneButton("agent", keys.LaunchAgent, lit)
-	case ButtonFocusAgent:
-		return paneButton("open", keys.FocusAgent, lit)
-	case ButtonAgentMenu:
-		return paneButton("agents", keys.AgentMenu, lit)
 	default:
 		return paneButton("edit", keys.EditIssue, lit)
 	}
@@ -819,9 +797,6 @@ func (k ButtonKeys) withDefaults() ButtonKeys {
 	}
 	if strings.TrimSpace(k.LaunchAgent) == "" {
 		k.LaunchAgent = "i"
-	}
-	if strings.TrimSpace(k.FocusAgent) == "" {
-		k.FocusAgent = "o"
 	}
 	return k
 }

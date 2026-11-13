@@ -869,11 +869,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case mode.ActionDeleteComment:
 			return m, batchCmds(modeCmd, m.confirmCommentDelete())
 		case mode.ActionLaunchAgent:
-			return m, batchCmds(modeCmd, m.openIntentMenu())
-		case mode.ActionFocusAgent:
-			return m, batchCmds(modeCmd, m.focusAgent())
-		case mode.ActionAgentMenu:
-			return m, batchCmds(modeCmd, m.openAgentMenu())
+			return m, batchCmds(modeCmd, m.openAgentDialog())
 		case mode.ActionOpenAgent:
 			return m, batchCmds(modeCmd, m.openAgent(msg.Agent))
 		}
@@ -1208,17 +1204,7 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, m.openIntentMenu())
-	case m.keys.Match(config.ShellContext, config.ShellActionFocusAgent, msg):
-		if m.active != mode.Detail {
-			return m, modeCmd
-		}
-		return m, batchCmds(modeCmd, m.focusAgent())
-	case m.keys.Match(config.ShellContext, config.ShellActionAgentMenu, msg):
-		if m.active != mode.Detail {
-			return m, modeCmd
-		}
-		return m, batchCmds(modeCmd, m.openAgentMenu())
+		return m, batchCmds(modeCmd, m.openAgentDialog())
 	}
 
 	return m, modeCmd

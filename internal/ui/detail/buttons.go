@@ -19,8 +19,6 @@ const (
 	ButtonEditComment
 	ButtonDeleteComment
 	ButtonLaunchAgent
-	ButtonFocusAgent
-	ButtonAgentMenu
 )
 
 const (

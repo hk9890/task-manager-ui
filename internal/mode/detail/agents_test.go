@@ -5,8 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
@@ -54,25 +52,16 @@ func TestLinkedAgentsAreTheLiveAgentsThatCommentedInOrderOfNeed(t *testing.T) {
 	}
 }
 
-// The agent button is drawn on every loaded issue, the open button only with a
-// linked agent, and a click on each sends the request its key sends.
-func TestClicksOnTheAgentButtonsSendTheirRequests(t *testing.T) {
+// The agent button is drawn on every loaded issue, and a click on it sends
+// the request its key sends.
+func TestAClickOnTheAgentButtonSendsItsRequest(t *testing.T) {
 	t.Parallel()
 
 	m := commentsBySessions(t, "s-1")
-	view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0))
-	if !strings.Contains(view, "agent alt+i") || strings.Contains(view, "open alt+o") {
-		t.Fatalf("without a live agent the ID line is not agent and edit:\n%s", view)
-	}
-
 	m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}})
-	click := func(text string) tea.Msg {
-		t.Helper()
-		x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), text)
-		return m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)()
-	}
-	testui.AssertActionRequest(t, click("agent alt+i"), mode.Detail, mode.ActionLaunchAgent)
-	testui.AssertActionRequest(t, click("open alt+o"), mode.Detail, mode.ActionFocusAgent)
+	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "agent alt+i")
+	request := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)()
+	testui.AssertActionRequest(t, request, mode.Detail, mode.ActionLaunchAgent)
 	if view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0)); !strings.Contains(view, "Tab 3: running") {
 		t.Errorf("the Details pane does not list the linked agent:\n%s", view)
 	}
@@ -112,29 +101,5 @@ func TestAClickOnAnAgentRowAsksForThatAgent(t *testing.T) {
 
 	if cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseWheelDown, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight); cmd != nil || m.ContentScrollOffset != 0 {
 		t.Errorf("the wheel on an agent row: cmd %v, content offset %d", cmd != nil, m.ContentScrollOffset)
-	}
-}
-
-// A click aimed at open after the linked agent is gone starts no agent: agent
-// does not move into the cells open held, in the stacked and the three-pane
-// layouts.
-func TestAClickWhereOpenWasStartsNoAgent(t *testing.T) {
-	t.Parallel()
-
-	for _, width := range []int{commentsWidth, 124, 160} {
-		m := commentsBySessions(t, "s-1")
-		m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}})
-		x, y := testui.FindCell(t, m.View(width, commentsHeight, false, 0), "open alt+o")
-
-		m.SetLiveAgents(nil)
-		for _, column := range []int{x - 1, x, x + len("open alt+o")} {
-			cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: column, Y: y, At: mouseStart}, width, commentsHeight)
-			if cmd == nil {
-				continue
-			}
-			if request, ok := cmd().(mode.ActionRequestMsg); ok && request.Action == mode.ActionLaunchAgent {
-				t.Errorf("width %d: a click at column %d, where open was, starts an agent", width, column)
-			}
-		}
 	}
 }

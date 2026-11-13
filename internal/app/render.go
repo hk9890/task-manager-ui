@@ -624,7 +624,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "back"},
 			{Key: primary(config.ShellContext, config.ShellActionUpdateIssue), Desc: "edit"},
 			{Key: primary(config.ShellContext, config.ShellActionCommentIssue), Desc: "comment"},
-			{Key: primary(config.ShellContext, config.ShellActionAgentMenu), Desc: "agents"},
+			{Key: primary(config.ShellContext, config.ShellActionLaunchAgent), Desc: "agents"},
 			{Key: pair(config.DetailContext, config.DetailActionPageUp, config.DetailActionPageDown), Desc: "page"},
 			{Key: pair(config.DetailContext, config.DetailActionHome, config.DetailActionEnd), Desc: "bounds"},
 		}

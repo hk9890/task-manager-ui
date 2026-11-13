@@ -187,14 +187,14 @@ func withSummary(head, summary string) string {
 // offerAgentFocus asks whether to bring the agent to the front, in the action
 // modal. Where a question would take keys from work on screen — another
 // question, a menu, help, a drag, a query being typed, a surface above the
-// shell — a warning toast points to the agent menu instead.
+// shell — a warning toast points to the agent dialog instead.
 func (m *Model) offerAgentFocus(a agent.Agent, question string) tea.Cmd {
 	tab := m.browseController(m.active)
 	busy := m.overlayOpen() || m.selMenu != nil || m.press != nil ||
 		(tab != nil && tab.HasQuery()) ||
 		m.active == mode.IssueEdit || m.active == mode.Config || m.active == mode.StorePicker
 	if busy {
-		return m.showToast(question+" (answer it from the agent menu)", toaster.StyleWarn)
+		return m.showToast(question+" (answer it from the agent dialog)", toaster.StyleWarn)
 	}
 	m.agentFocusOffer = &a
 	m.actionModal = modal.NewWithKeys(modal.Config{

@@ -184,14 +184,10 @@ const (
 	ActionEditComment   Action = "edit_comment"
 	ActionDeleteComment Action = "delete_comment"
 
-	// ActionLaunchAgent, ActionFocusAgent and ActionAgentMenu are the agent,
-	// open and agents buttons of the Content pane's ID line: the first opens
-	// the intent menu that starts an agent on the issue, the second brings the
-	// issue's live agent to the front, the third opens the menu of the
-	// issue's agents.
+	// ActionLaunchAgent is the agent button of the Content pane's ID line: it
+	// opens the agent dialog of the issue, which acts on its agents and starts
+	// new ones.
 	ActionLaunchAgent Action = "launch_agent"
-	ActionFocusAgent  Action = "focus_agent"
-	ActionAgentMenu   Action = "agent_menu"
 
 	// ActionOpenAgent is a click on the row of an agent in the Details pane
 	// of Detail: the shell brings that agent to the front, and resumes it

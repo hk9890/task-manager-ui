@@ -8,6 +8,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -89,16 +90,6 @@ func (m Model) logAgentPollFailure(err error) {
 		"project_root", m.services.ProjectRoot, "error", err.Error())
 }
 
-// focusAgent brings the first live agent linked to the issue open in Detail
-// to the front: the one that needs the operator most.
-func (m *Model) focusAgent() tea.Cmd {
-	first, live := agent.FirstLive(m.detail.LinkedAgents())
-	if !live || m.services.Agents == nil {
-		return m.showToast("No live agent on this issue", toaster.StyleWarn)
-	}
-	return m.focusOneAgent(first)
-}
-
 func (m *Model) focusOneAgent(a agent.Agent) tea.Cmd {
 	ctx, host := m.ctx, m.services.Agents
 	return func() tea.Msg {
@@ -122,44 +113,77 @@ func (m *Model) openAgent(session string) tea.Cmd {
 	return m.showToast("That agent is no longer linked to this issue", toaster.StyleWarn)
 }
 
-// openAgentMenu opens the menu of the agents linked to the issue open in
-// Detail, in the middle of the screen: focus or close each live one, resume
-// each gone one. The agents are taken when the menu opens.
-func (m *Model) openAgentMenu() tea.Cmd {
+// openAgentDialog opens the agent dialog of the issue open in Detail, in the
+// middle of the screen: first the agents linked to it, focus or close each
+// live one and resume each gone one, then one entry per configured intent
+// that starts a new agent, then Close. The issue and its agents are taken
+// when the dialog opens, so a refresh under it cannot move an agent to
+// another issue.
+func (m *Model) openAgentDialog() tea.Cmd {
+	issue, ok := m.selectedIssueContext()
+	if !ok {
+		return m.showToast("No selected issue to start an agent on", toaster.StyleWarn)
+	}
 	if m.services.Agents == nil {
 		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
 	}
-	linked := m.detail.LinkedAgents()
-	if len(linked) == 0 {
-		return m.showToast("No agent on this issue", toaster.StyleWarn)
+	m.projectRootMissing = projectRootMissing(m.services.ProjectRoot)
+	if m.projectRootMissing {
+		return m.showToast("Agents are off: project path not accessible: "+m.services.ProjectRoot, toaster.StyleWarn)
 	}
+	linked := m.detail.LinkedAgents()
+	intents := m.services.Config.Agent.Intents
+	if len(linked) == 0 && len(intents) == 0 {
+		return m.showToast("No agent on this issue and no agent intents configured", toaster.StyleWarn)
+	}
+
 	menu := &selectionMenu{
-		title:       "Agents on " + displaytext.OneLine(m.detail.Detail.Summary.ID),
+		title:       "Agents on " + displaytext.OneLine(issue.Summary.ID),
+		hint:        "the agent opens in front",
 		backdrop:    m.frozenScreen(),
 		screenWidth: m.width,
 	}
 	for _, a := range linked {
-		label := displaytext.OneLine(a.Label)
-		if a.Status == agent.Gone {
-			menu.entries = append(menu.entries, selectionAction{
-				entry: selectmenu.Entry{Label: "Resume " + label},
-				run:   func(m *Model) tea.Cmd { return m.resumeAgent(a) },
-			})
-			continue
+		menu.entries = append(menu.entries, linkedAgentActions(a)...)
+	}
+	if len(intents) > 0 {
+		heading, off := "Start new", issue.Summary.Status == domain.StatusClosed
+		if off {
+			heading = "Start new: off, the issue is closed"
 		}
-		menu.entries = append(menu.entries,
-			selectionAction{
-				entry: selectmenu.Entry{Label: "Focus " + label},
-				run:   func(m *Model) tea.Cmd { return m.focusOneAgent(a) },
-			},
-			selectionAction{
-				entry: selectmenu.Entry{Label: "Close " + label},
-				run:   func(m *Model) tea.Cmd { return m.requestAgentClose(a) },
+		menu.entries = append(menu.entries, selectionAction{entry: selectmenu.Entry{Label: heading, Heading: true}})
+		for _, intent := range intents {
+			menu.entries = append(menu.entries, selectionAction{
+				entry: selectmenu.Entry{Label: displaytext.OneLine(intent.Name), Disabled: off},
+				run:   func(m *Model) tea.Cmd { return m.startAgent(issue, intent) },
 			})
+		}
 	}
 	menu.entries = append(menu.entries, m.closeMenuAction())
 	m.openCentredMenu(menu)
 	return nil
+}
+
+// linkedAgentActions are the entries of one linked agent in the agent
+// dialog: Focus and Close for a live one, Resume for a gone one.
+func linkedAgentActions(a agent.Agent) []selectionAction {
+	label := displaytext.OneLine(a.Label)
+	if a.Status == agent.Gone {
+		return []selectionAction{{
+			entry: selectmenu.Entry{Label: "Resume " + label},
+			run:   func(m *Model) tea.Cmd { return m.resumeAgent(a) },
+		}}
+	}
+	return []selectionAction{
+		{
+			entry: selectmenu.Entry{Label: "Focus " + label},
+			run:   func(m *Model) tea.Cmd { return m.focusOneAgent(a) },
+		},
+		{
+			entry: selectmenu.Entry{Label: "Close " + label},
+			run:   func(m *Model) tea.Cmd { return m.requestAgentClose(a) },
+		},
+	}
 }
 
 // resumeAgent reopens the conversation of a gone agent in the store's

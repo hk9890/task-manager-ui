@@ -176,10 +176,9 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 ### A button in a pane
 
 A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
-has its buttons in the Content pane: `open`, `agents`, `agent` and `edit` on the ID line, the first
-line of the pane, `add` on the Comments heading, and `edit` and `delete` on the header line of the
-selected comment. `open` is drawn only while a live agent is linked to the issue, `agents` only
-while any agent is (`State.Agents`). The Details pane may hold buttons and clickable rows too; its
+has its buttons in the Content pane: `agent` and `edit` on the ID line, the first line of the pane,
+`add` on the Comments heading, and `edit` and `delete` on the header line of the selected comment.
+The Details pane may hold buttons and clickable rows too; its
 one clickable row today is the row of an agent
 ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
 
@@ -193,11 +192,9 @@ one clickable row today is the row of an agent
   the last cell of every button line is the same column: `edit` on the ID line ends where `add`
   ends (`TestTheEditButtonEndsInTheColumnOfTheAddButton`, `internal/ui/detail/comments_test.go`).
   It draws none when fewer than `buttonTextFloor` cells would stay for the text. The ID is never
-  cut for a button. The width alone picks the ID line's set — `open`, `agents`, `agent` and
-  `edit`; else `open`, `agent` and `edit`; else `open` and `edit`; else `edit`; else none —
-  measured with `open` and `agents` drawn, so a linked agent coming or going adds or removes them
-  and moves no other button: a click aimed at `open` never lands on `agent`
-  (`placeIDLineButtons`). Place the buttons of one line with one `placeButtons` call.
+  cut for a button. The width alone picks the ID line's set — `agent` and `edit`; else `edit`;
+  else none (`placeIDLineButtons`) — so no button comes or goes with the agents of the issue.
+  Place the buttons of one line with one `placeButtons` call.
 - `HitTest` reads the cells `placeButtons` returned, through `renderContentPaneLines`, so a click
   lands on the button that is drawn.
 - A pane border holds no button.
@@ -213,8 +210,8 @@ click runs the row, no first click selects it.
   gone one first (`ActionOpenAgent`, `Model.openAgent`, `internal/app/agents.go`). The agent is
   named by its session in the request (`mode.RequestOpenAgentCmd`), so the click acts on the row
   that is drawn. A request for an agent that is no longer linked raises a warning toast.
-- The keyboard path to the same action is the agent menu (`agent_menu`): its `Focus <label>` and
-  `Resume <label>` entries do what the click does. Every new action in the pane needs a key or a
+- The keyboard path to the same action is the agent dialog (`launch_agent`): its `Focus <label>`
+  and `Resume <label>` entries do what the click does. Every new action in the pane needs a key or a
   menu entry that does the same, as a button in a pane does.
 - Under the pointer the row draws the hover band, `styles.RowHighlight` with `RowHoverBgColor`,
   across the inner width of the pane, as a reference row of the Dependencies pane does.
@@ -654,7 +651,7 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   `internal/mode/detail/mouse.go`). A click on a comment gives the comments the focus and puts
   the cursor on it; a second click does nothing more, and the click does not scroll the pane.
   A click on the row of an agent in the Details pane brings that agent to the front; the agent
-  menu is its key ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
+  dialog is its key ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
 - The configuration screen takes no mouse event: `handleMouse` returns before the header and the
   surface are measured. Text selection still works there, because it runs before the routing.
 - The issue editor takes the event at the same place, before the header is measured
@@ -688,8 +685,10 @@ The selection menu is the one exception: no key selects text, so no key reaches 
     its glyphs; the clipboard keeps the box as drawn. The search runs once, at once
     (`search.Model.SetQuery`). Quote, ask and search are off on the picker, the configuration
     screen, the issue editor, help and under a dialog, where each would leave the surface with work
-    on it, and for a box of chrome alone. Ask is off without an agent host; a host that is there
-    but fails, such as revier missing from the `PATH`, fails the start with an error toast.
+    on it, and for a box of chrome alone. Ask is off without an agent host, and on a closed issue,
+    where the store refuses the link label; there its label says so
+    (`Ask an agent: off, <id> is closed`). A host that is there but fails, such as revier missing
+    from the `PATH`, fails the start with an error toast.
   - Ask opens the ask question in the action modal: one line for the instruction, and `Ask`
     (`Model.openAgentAsk`, `internal/app/askagent.go`). An empty line asks nothing. The agent
     starts without the focus and is linked as an intent's agent is. An info toast says it works in
@@ -709,30 +708,33 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   helpers corrupt already-rendered colour, so they are not an alternative here.
 - A modal is centred (`overlay.Center`); a toast is bottom-centred with `PadY: 1`
   (`overlay.Bottom`). Both are placed on the screen, so the margin stays blank around them.
-- The action modal, the toast, the selection menu, the intent menu and the agent menu are the
-  only overlays. Help
+- The action modal, the toast, the selection menu and the agent dialog are the only overlays. Help
   is a full screen ([Surfaces above the shell](#surfaces-above-the-shell)).
-- The intent menu is the selection menu's overlay (`selectionMenu`, drawn by
+- The agent dialog is the selection menu's overlay (`selectionMenu`, drawn by
   `internal/ui/selectmenu`) with other entries: `launch_agent` and the `agent` button open it in
-  Detail (`Model.openIntentMenu`, `internal/app/intentmenu.go`). It is centred over the screen as
-  it was when it opened, titled `Start an agent on <id>`, with one entry per configured intent and
-  Close, and takes keys and the mouse as the selection menu does. The issue is taken when it
-  opens. An intent starts the agent through the agent host and raises an info toast at once,
-  because a start takes as long as the agent takes to start; a start that fails, and a label
-  that is not written, raise an error toast (`Model.handleAgentStarted`). A start that fails
-  after the agent has its session, at the prompt or the focus, still links the agent. Without an agent host,
-  an intent or the project path, the key raises a warning toast instead of the menu.
-- The agent menu is the same overlay again: `agent_menu` opens it in Detail
-  (`Model.openAgentMenu`, `internal/app/agents.go`), centred, titled `Agents on <id>`, with
-  `Focus <label>` and `Close <label>` for each live linked agent, `Resume <label>` for each gone
-  one, and Close. The `agents` button of the ID line opens it too. A close of an agent that is running or needs you asks first
-  and then forces the close; an idle one closes at once. A resume reopens the conversation and
-  brings it to the front. Without a linked agent the key raises a warning toast.
+  Detail (`Model.openAgentDialog`, `internal/app/agents.go`). It is centred over the screen as it
+  was when it opened, titled `Agents on <id>`, and takes keys and the mouse as the selection menu
+  does. The issue and its agents are taken when it opens. Its entries, in order:
+  - `Focus <label>` and `Close <label>` for each live linked agent, `Resume <label>` for each gone
+    one. A close of an agent that is running or needs you asks first and then forces the close; an
+    idle one closes at once. A resume reopens the conversation and brings it to the front.
+  - The heading `Start new`, then one entry per configured intent. A heading is a muted bold line
+    without the gutter that takes no cursor and no click (`selectmenu.Entry.Heading`). On a closed
+    issue the store refuses the link label: the heading reads `Start new: off, the issue is closed`
+    and the intents are off. Without an intent the part is left out.
+  - Close.
+
+  The cursor opens on the first entry that is on. An intent starts the agent through the agent
+  host and raises an info toast at once, because a start takes as long as the agent takes to
+  start; a start that fails, and a label that is not written, raise an error toast
+  (`Model.handleAgentStarted`). A start that fails after the agent has its session, at the prompt
+  or the focus, still links the agent. Without an agent host or the project path, and without a
+  linked agent and an intent both, the key raises a warning toast instead of the dialog.
 - The Agents group of the Details pane is each linked agent's label, then its status word —
   `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. A
   link label no live agent holds is `gone` after a poll that answered. Before the first answer
   and after a failed poll the live agents are not known, so such a label draws no row and the
-  agent menu offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
+  agent dialog offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
 - The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
   the yes or no before a comment is deleted (`Model.confirmCommentDelete`), the yes or no
   before a busy agent is closed (`Model.requestAgentClose`), the ask question of the selection
@@ -741,7 +743,7 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
   `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
   `storeForm.kind`. The focus offer opens only where it takes no keys from work on screen, a
-  query with text in it included; there a warning toast names the agent menu instead. A new field of an issue is a row of the issue editor, never a modal.
+  query with text in it included; there a warning toast names the agent dialog instead. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

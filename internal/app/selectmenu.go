@@ -19,7 +19,7 @@ import (
 // The release has already sent the text to the clipboard; the menu offers
 // what else to do with it. It stands over the screen the drag froze, box
 // included, and holds every key and mouse event until it closes: each would
-// change the screen it stands over. The intent menu (intentmenu.go) is the
+// change the screen it stands over. The agent dialog (agents.go) is the
 // same menu over the screen as it was when the menu opened.
 type selectionMenu struct {
 	title    string
@@ -46,9 +46,7 @@ func (m *Model) openSelectionMenu(selected textSelection, text string, release s
 		backdrop: selected.view(),
 		entries:  m.selectionActions(text),
 	}
-	for menu.cursor < len(menu.entries)-1 && menu.entries[menu.cursor].entry.Disabled {
-		menu.cursor++
-	}
+	menu.cursorToFirst()
 	menu.screenWidth = m.width
 	width, height := selectmenu.Size(menu.state())
 	menu.at.x, menu.at.y = selectmenu.Place(selected.from.x, selected.from.y, release.x, release.y, width, height, m.width, m.height)
@@ -76,7 +74,11 @@ func (m *Model) selectionActions(text string) []selectionAction {
 	}
 	ask := "Ask an agent about it"
 	canAsk := canQuote && m.services.Agents != nil
-	if canAsk {
+	switch {
+	case canAsk && m.issueClosed(issue):
+		canAsk = false
+		ask = "Ask an agent: off, " + displaytext.OneLine(issue.ID) + " is closed"
+	case canAsk:
 		ask = "Ask an agent about it on " + displaytext.OneLine(issue.ID)
 	}
 	return []selectionAction{
@@ -92,6 +94,15 @@ func (m *Model) selectionActions(text string) []selectionAction {
 		}},
 		m.closeMenuAction(),
 	}
+}
+
+// issueClosed reports whether issue is closed, as Detail shows it when Detail
+// shows that issue: a close made there reaches the browse selection later.
+func (m *Model) issueClosed(issue domain.IssueSummary) bool {
+	if m.active == mode.Detail && m.detail.Detail.Summary.ID == issue.ID {
+		return m.detail.Detail.Summary.Status == domain.StatusClosed
+	}
+	return issue.Status == domain.StatusClosed
 }
 
 // closeMenuAction is the last entry of a menu: it closes the menu and does
@@ -151,9 +162,15 @@ func (m Model) selectionMenuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// cursorToFirst puts the cursor on the first entry that is on.
+func (s *selectionMenu) cursorToFirst() {
+	s.cursor = -1
+	s.move(1)
+}
+
 func (s *selectionMenu) move(step int) {
 	for next := s.cursor + step; next >= 0 && next < len(s.entries); next += step {
-		if !s.entries[next].entry.Disabled {
+		if s.entries[next].entry.On() {
 			s.cursor = next
 			return
 		}
@@ -183,7 +200,7 @@ func (m Model) selectionMenuMouse(msg pointer) (tea.Model, tea.Cmd) {
 
 func (m Model) runSelectionAction(entry int) (tea.Model, tea.Cmd) {
 	action := m.selMenu.entries[entry]
-	if action.entry.Disabled {
+	if !action.entry.On() {
 		return m, nil
 	}
 	m.selMenu = nil

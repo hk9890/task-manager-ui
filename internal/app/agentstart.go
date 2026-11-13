@@ -17,45 +17,10 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
-// openIntentMenu opens the menu of the configured intents for the issue open
-// in Detail, in the middle of the screen. The issue is taken when the menu
-// opens, so a refresh under it cannot move the agent to another issue.
-func (m *Model) openIntentMenu() tea.Cmd {
-	issue, ok := m.selectedIssueContext()
-	if !ok {
-		return m.showToast("No selected issue to start an agent on", toaster.StyleWarn)
-	}
-	if m.services.Agents == nil {
-		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
-	}
-	intents := m.services.Config.Agent.Intents
-	if len(intents) == 0 {
-		return m.showToast("No agent intents configured", toaster.StyleWarn)
-	}
-	m.projectRootMissing = projectRootMissing(m.services.ProjectRoot)
-	if m.projectRootMissing {
-		return m.showToast("Agents are off: project path not accessible: "+m.services.ProjectRoot, toaster.StyleWarn)
-	}
-
-	menu := &selectionMenu{
-		title:       "Start an agent on " + displaytext.OneLine(issue.Summary.ID),
-		hint:        "it opens in front",
-		backdrop:    m.frozenScreen(),
-		screenWidth: m.width,
-	}
-	for _, intent := range intents {
-		menu.entries = append(menu.entries, selectionAction{
-			entry: selectmenu.Entry{Label: displaytext.OneLine(intent.Name)},
-			run:   func(m *Model) tea.Cmd { return m.startAgent(issue, intent) },
-		})
-	}
-	menu.entries = append(menu.entries, m.closeMenuAction())
-	m.openCentredMenu(menu)
-	return nil
-}
-
-// openCentredMenu puts menu on screen, in the middle of it.
+// openCentredMenu puts menu on screen, in the middle of it, with the cursor
+// on its first entry that is on.
 func (m *Model) openCentredMenu(menu *selectionMenu) {
+	menu.cursorToFirst()
 	width, height := selectmenu.Size(menu.state())
 	menu.at.x, menu.at.y = max((m.width-width)/2, 0), max((m.height-height)/2, 0)
 	m.selMenu = menu

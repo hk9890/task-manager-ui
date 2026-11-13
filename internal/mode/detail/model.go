@@ -356,8 +356,6 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 			EditComment:   "enter",
 			DeleteComment: m.Keys.DisplayLabel(config.DetailContext, config.DetailActionDeleteComment),
 			LaunchAgent:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchAgent),
-			FocusAgent:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionFocusAgent),
-			AgentMenu:     m.Keys.DisplayLabel(config.ShellContext, config.ShellActionAgentMenu),
 		},
 		Agents: linkedAgents(m.liveAgents, d),
 		BrowserItems: func() []domain.IssueReference {
@@ -515,7 +513,7 @@ func (m *Model) focusPane() detail.FocusPane {
 
 // focusStops is the panes left and right walk, in that order. The comments are
 // a stop of their own while the issue has one. The Details pane is no stop:
-// its agent rows take a click, and the agent menu is their keyboard path.
+// its agent rows take a click, and the agent dialog is their keyboard path.
 func (m *Model) focusStops() []detail.FocusPane {
 	stops := []detail.FocusPane{detail.FocusPaneDependencies, detail.FocusPaneContent}
 	if len(m.Detail.Comments) > 0 {

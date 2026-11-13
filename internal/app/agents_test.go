@@ -1,8 +1,7 @@
 package app
 
 // The live agents of the issue, through the shell: the poll that finds them,
-// the open key and button that bring one to the front, and the agent button
-// that starts one. The linking itself is tested in internal/mode/detail.
+// and the agent key and button that open the agent dialog. The linking itself is tested in internal/mode/detail.
 
 import (
 	"bytes"
@@ -74,18 +73,18 @@ func callsOf(client *fakes.FakeAgentHost, method string) []string {
 }
 
 // The first poll runs when the store is bound; a tick polls again, for the
-// project root. An agent that comes up between two polls shows on the ID line
-// and in the Details pane.
+// project root. An agent that comes up between two polls shows in the
+// Details pane.
 func TestAPollTickShowsTheAgentThatCommentedOnTheIssue(t *testing.T) {
 	m, client, _, _ := agentShell(t)
-	if view := plainShell(m); strings.Contains(view, "open alt+o") || strings.Contains(view, "Agents") {
+	if view := plainShell(m); strings.Contains(view, "Agents") {
 		t.Fatalf("Detail draws an agent while the host lists none:\n%s", view)
 	}
 
 	client.Agents = []agent.Agent{runningOnTab3(), {Ref: "demo:home:4", Label: "Tab 4", Status: agent.Idle, Session: "s-other"}}
 	m = send(t, m, agentPollTickMsg{})
 
-	testui.AssertContainsAll(t, plainShell(m), "agent alt+i", "open alt+o", "edit alt+u", "Agents", "Tab 3: running")
+	testui.AssertContainsAll(t, plainShell(m), "agent alt+i", "edit alt+u", "Agents", "Tab 3: running")
 	if strings.Contains(plainShell(m), "Tab 4") {
 		t.Errorf("an agent that wrote no comment on the issue is listed:\n%s", plainShell(m))
 	}
@@ -132,13 +131,13 @@ func TestBindingAStoreClearsTheAgentsOfThePreviousOne(t *testing.T) {
 	}
 }
 
-// The open key brings the linked agent to the front; a failure says so in a
-// toast, and an issue with no live agent refuses with a toast and asks the
-// host nothing.
-func TestTheOpenKeyFocusesTheLinkedAgent(t *testing.T) {
+// Focus in the agent dialog brings the linked agent to the front; a failure
+// says so in a toast.
+func TestFocusInTheAgentDialogBringsTheAgentToTheFront(t *testing.T) {
 	t.Run("linked", func(t *testing.T) {
 		m, client, _, _ := agentShell(t, runningOnTab3())
-		m = pressKey(t, m, "alt+o")
+		m = pressKey(t, m, "alt+i")
+		m = pressKey(t, m, "enter")
 		if got := callsOf(client, "Focus"); !reflect.DeepEqual(got, []string{"demo:home:3"}) {
 			t.Errorf("Focus calls = %v, want demo:home:3", got)
 		}
@@ -150,55 +149,22 @@ func TestTheOpenKeyFocusesTheLinkedAgent(t *testing.T) {
 	t.Run("refused", func(t *testing.T) {
 		m, client, _, _ := agentShell(t, runningOnTab3())
 		client.FocusErr = errors.New("no agent at demo:home:3")
-		m = pressKey(t, m, "alt+o")
+		m = pressKey(t, m, "alt+i")
+		m = pressKey(t, m, "enter")
 		if view := m.toast.View(); !strings.Contains(view, "no agent at demo:home:3") {
 			t.Errorf("toast = %q, want the focus error", view)
 		}
 	})
-
-	t.Run("no linked agent", func(t *testing.T) {
-		m, client, _, _ := agentShell(t)
-		m = pressKey(t, m, "alt+o")
-		if got := callsOf(client, "Focus"); len(got) != 0 {
-			t.Errorf("Focus calls = %v, want none", got)
-		}
-		if view := m.toast.View(); !strings.Contains(view, "No live agent on this issue") {
-			t.Errorf("toast = %q", view)
-		}
-	})
 }
 
-// The agent, open and agents buttons do what alt+i, alt+o and alt+g do.
-func TestClicksOnTheAgentButtonsDoWhatTheirKeysDo(t *testing.T) {
-	click := func(t *testing.T, m Model, text string) Model {
-		t.Helper()
-		x, y := testui.FindCell(t, plainShell(m), text)
-		return send(t, m, testui.Click(x, y, tea.MouseLeft))
+// The agent button does what alt+i does: it opens the agent dialog.
+func TestTheAgentButtonOpensTheAgentDialog(t *testing.T) {
+	m, _, _, _ := agentShell(t, runningOnTab3())
+	x, y := testui.FindCell(t, plainShell(m), "agent alt+i")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	if m.selMenu == nil || !strings.Contains(plainShell(m), "Agents on tm-1") {
+		t.Errorf("the agent button opened no agent dialog:\n%s", plainShell(m))
 	}
-
-	t.Run("agent", func(t *testing.T) {
-		m, _, _, _ := agentShell(t)
-		m = click(t, m, "agent alt+i")
-		if m.selMenu == nil || !strings.Contains(plainShell(m), "Start an agent on tm-1") {
-			t.Errorf("the agent button opened no intent menu:\n%s", plainShell(m))
-		}
-	})
-
-	t.Run("open", func(t *testing.T) {
-		m, client, _, _ := agentShell(t, runningOnTab3())
-		click(t, m, "open alt+o")
-		if got := callsOf(client, "Focus"); !reflect.DeepEqual(got, []string{"demo:home:3"}) {
-			t.Errorf("Focus calls = %v, want demo:home:3", got)
-		}
-	})
-
-	t.Run("agents", func(t *testing.T) {
-		m, _, _, _ := agentShell(t, runningOnTab3())
-		m = click(t, m, "agents alt+g")
-		if m.selMenu == nil || !strings.Contains(plainShell(m), "Agents on tm-1") {
-			t.Errorf("the agents button opened no agent menu:\n%s", plainShell(m))
-		}
-	})
 }
 
 // A failing poll clears the agents and logs once, at WARN, until a poll
@@ -209,7 +175,7 @@ func TestAFailingPollLogsOncePerFailure(t *testing.T) {
 
 	client.ListErr = errors.New("revier list: exit status 1")
 	m = send(t, send(t, m, agentPollTickMsg{}), agentPollTickMsg{})
-	if len(m.detail.LinkedAgents()) != 0 || strings.Contains(plainShell(m), "open alt+o") {
+	if len(m.detail.LinkedAgents()) != 0 || strings.Contains(plainShell(m), "Tab 3: running") {
 		t.Errorf("a failed poll left the agents on screen:\n%s", plainShell(m))
 	}
 	if got := strings.Count(log.String(), "level=WARN msg=\"revier agent listing failed"); got != 1 {

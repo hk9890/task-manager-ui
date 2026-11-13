@@ -125,3 +125,29 @@ func TestRenderBandsTheCursorAndTheHoverAndMutesADisabledEntry(t *testing.T) {
 		t.Errorf("the pointer lit a disabled entry: %q", search)
 	}
 }
+
+// A heading stands one cell in from the border, without the gutter, and takes
+// no cursor: an entry stands after the gutter.
+func TestAHeadingIsDrawnWithoutTheGutterAndTakesNoCursor(t *testing.T) {
+	t.Parallel()
+
+	state := State{
+		Title:   "Agents on tm-1",
+		Width:   80,
+		Entries: []Entry{{Label: "Start new", Heading: true}, {Label: "implement"}, {Label: "Close", Key: "esc"}},
+		Cursor:  0,
+		Hover:   -1,
+	}
+	if state.Entries[0].On() {
+		t.Error("a heading is on")
+	}
+	view := Render(state)
+	headingX, _ := testui.FindCell(t, view, "Start new")
+	entryX, _ := testui.FindCell(t, view, "implement")
+	if headingX != 2 || entryX != 1+gutterCells {
+		t.Errorf("the heading starts in column %d and the entry in %d, want 2 and %d", headingX, entryX, 1+gutterCells)
+	}
+	if plain := testui.Downsample(view); strings.Contains(plain, styles.Glyphs.Cursor) {
+		t.Errorf("a heading under the cursor draws the cursor:\n%s", plain)
+	}
+}

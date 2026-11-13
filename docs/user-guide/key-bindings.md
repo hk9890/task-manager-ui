@@ -29,9 +29,7 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
-- `alt+i` — in detail mode, open the intent menu: `implement`, `review` and the intents of your config. Choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent:<session>`. A start that fails shows the error
-- `alt+o` — in detail mode, bring the live revier agent that works on the issue to the front: the one that needs you first, then a running one, then an idle one
-- `alt+g` — in detail mode, open the agent menu: every agent linked to the issue. Focus or close a live one, or resume a gone one. A close of an agent that is running or waits for you asks first, then closes it with force
+- `alt+i` — in detail mode, open the agent dialog of the issue, `Agents on <id>`. It lists every agent linked to the issue first: `Focus` or `Close` a live one, `Resume` a gone one. A close of an agent that is running or waits for you asks first, then closes it with force. Under `Start new` come `implement`, `review` and the intents of your config: choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent:<session>`. A start that fails shows the error. On a closed issue the store takes no label, so the `Start new` entries are off
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
@@ -42,7 +40,7 @@ and a save in the editor keeps them. Detail lists each linked agent under
 `Agents` with its status and what it does: `running`, `idle`, `needs you`, or
 `gone` for a labelled agent that no longer runs.
 
-In the intent menu and the agent menu `up` and `down` move, `enter` or a click
+In the agent dialog `up` and `down` move, `enter` or a click
 runs the entry, and `esc` or a click outside closes the menu.
 
 A terminal must send `alt` as an escape prefix for the `alt+` keys to arrive.
@@ -147,7 +145,7 @@ The Details pane shows the issue's fields and the agents linked to it. It takes
 no focus and no key, and does not scroll: on a short screen it ends on
 `… (N more)`. Change a field in the issue editor (`alt+u`). A click on the row
 of an agent brings that agent to the front, and resumes a `gone` one first; the
-agent menu (`alt+g`) does the same from the keyboard.
+agent dialog (`alt+i`) does the same from the keyboard.
 
 The comments stand at the end of the Content pane, newest first, each under a
 bold line with its author and time, with a rule between two of them. With the
@@ -162,17 +160,15 @@ comments focused, the selected comment carries the selection bar:
 An edited comment gets a new time and your name, so it moves to the top.
 
 The buttons in the Content pane each show the key that does the same, and a
-click presses it: `open` (`alt+o`), `agents` (`alt+g`), `agent` (`alt+i`) and
-`edit` (`alt+u`) on the first line, the line of the issue's ID, `add` on the
-`Comments` heading (`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the
-first line of the selected comment. Each stands at the right end of its line.
-`open` is there only while a live agent works on the issue, and `agents` only
-while an agent is linked to it. A pane too narrow for a button leaves it out; an
-ID line too narrow for all of its buttons drops `agents` first, then `agent`,
-then `open`, so no button takes the place of another. The key still works.
+click presses it: `agent` (`alt+i`) and `edit` (`alt+u`) on the first line, the
+line of the issue's ID, `add` on the `Comments` heading (`alt+a`), and `edit`
+(`enter`) and `delete` (`alt+d`) on the first line of the selected comment. Each
+stands at the right end of its line. A pane too narrow for a button leaves it
+out; an ID line too narrow for both of its buttons drops `agent` first. The key
+still works.
 
 An agent is linked to an issue by an `agent:<session>` label, which starting it
-from the intent menu or the selection menu writes. In the In Progress column an
+from the agent dialog or the selection menu writes. In the In Progress column an
 agent whose revier session wrote a comment on the issue is linked too.
 taskmgr-ui asks `revier` for the live agents every few seconds. The Details
 pane lists the linked agents in an `Agents` group, one line each: its name, its
@@ -183,7 +179,7 @@ green while the agent runs, grey while it is idle and orange while it needs you.
 
 When revier is not on the `PATH`, or the project is no revier project, the live
 agents are not known: no labelled agent is listed, none is offered for resume,
-and no card carries the mark. The intent menu and Ask still open, and a start
+and no card carries the mark. The agent dialog and Ask still open, and a start
 fails with an error toast.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
@@ -336,7 +332,7 @@ instead.
   opens the store picker. `reload` reloads the view on screen. `config` opens the configuration
   screen, which takes keys only.
 - **Click the Dependencies or the Content pane** in detail mode to focus it. **Click a comment** to select it.
-- **Click a button** in the detail Content pane — `open`, `agent` and `edit` on the ID line, `add`,
+- **Click a button** in the detail Content pane — `agent` and `edit` on the ID line, `add`,
   and `edit` and `delete` on the selected comment — to do what the key shown beside it does.
 - In the issue editor, **click a field** to put the cursor in it and **click `Save` or `Cancel`**
   to press it. The wheel over the text moves its cursor three lines a notch.
@@ -360,7 +356,8 @@ instead.
   ask an agent about it, to search the store for it, and to close. `up`/`down` and
   `enter` or a click choose; `esc` or a click outside closes it, and the click
   outside does nothing else. Quote, ask and search are off on screens where
-  they would drop work in progress, such as the issue editor.
+  they would drop work in progress, such as the issue editor. Ask is off on a
+  closed issue, which takes no label.
 - Ask an agent opens one line for your instruction. The agent starts in the
   background, out of view, and changes the issue with taskmgr. When its turn
   ends the issue is read again and a toast shows its summary. When the agent

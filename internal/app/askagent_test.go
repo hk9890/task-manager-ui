@@ -137,7 +137,7 @@ func TestAnAgentThatWaitsForYouIsOfferedToTheFront(t *testing.T) {
 }
 
 // While the operator types a query, the offer would take the next key: a
-// warning toast points to the agent menu instead.
+// warning toast points to the agent dialog instead.
 func TestAQuestionWhileAQueryIsTypedIsAToast(t *testing.T) {
 	m, _, _, _ := agentShell(t)
 	m = pressKey(t, m, "esc")
@@ -150,8 +150,8 @@ func TestAQuestionWhileAQueryIsTypedIsAToast(t *testing.T) {
 	if m.showActionModal {
 		t.Fatal("a question while a query is typed opened the offer")
 	}
-	if view := m.toast.View(); !strings.Contains(view, "answer it from the agent menu") {
-		t.Fatalf("toast = %q, want the pointer to the agent menu", view)
+	if view := m.toast.View(); !strings.Contains(view, "answer it from the agent dialog") {
+		t.Fatalf("toast = %q, want the pointer to the agent dialog", view)
 	}
 }
 
@@ -239,5 +239,22 @@ func TestParseAskReportReadsTheLastStatusLine(t *testing.T) {
 		if ok != tc.ok || got != tc.want {
 			t.Errorf("parseAskReport(%q) = %+v, %v; want %+v, %v", tc.reply, got, ok, tc.want, tc.ok)
 		}
+	}
+}
+
+// On a closed issue the store refuses the link label: Ask is off and says
+// why.
+func TestAskIsOffOnAClosedIssue(t *testing.T) {
+	m, _, _, _ := agentShell(t)
+	m.detail.Detail.Summary.Status = domain.StatusClosed
+	m.copyText = func(string) tea.Cmd { return nil }
+	x, y := testui.FindCell(t, testui.View(m), "Ready first")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+4, y))
+	m = send(t, m, testui.Release(x+4, y))
+
+	testui.AssertContainsAll(t, plainShell(m), "Ask an agent: off, tm-1 is closed")
+	if ask := m.selMenu.entries[1].entry; !ask.Disabled {
+		t.Errorf("the ask entry %q is on for a closed issue", ask.Label)
 	}
 }

@@ -141,16 +141,6 @@ func LinkSessions(labels []string) []string {
 	return sessions
 }
 
-// FirstLive is the first agent of agents that is not Gone.
-func FirstLive(agents []Agent) (Agent, bool) {
-	for _, a := range agents {
-		if a.Status != Gone {
-			return a, true
-		}
-	}
-	return Agent{}, false
-}
-
 // goneLabelLength is how much of its session the label of a gone agent shows.
 const goneLabelLength = 8
 
