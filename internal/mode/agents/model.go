@@ -320,10 +320,10 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 		// A page step keeps the lines the two scroll markers cover on screen.
 		step := max(1, uiagents.InnerHeight(m.height)-2)
 		switch {
-		case m.keys.Match(config.DetailContext, config.DetailActionPageUp, msg):
+		case match(config.BoardActionPageUp):
 			m.scrollPane(-step)
 			return nil
-		case m.keys.Match(config.DetailContext, config.DetailActionPageDown, msg):
+		case match(config.BoardActionPageDown):
 			m.scrollPane(step)
 			return nil
 		}

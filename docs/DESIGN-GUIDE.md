@@ -416,7 +416,7 @@ store's project. It draws the list head of the board — the rule and the query 
   another activity or status reads it again, and the older message stays on screen until the answer
   comes. A failed read is tried again on the next poll, never at once. The tab's reload forgets
   every message.
-- While the pane is drawn the `page_up` and `page_down` keys of the detail context scroll it by its
+- While the pane is drawn the `page_up` and `page_down` keys of the board context scroll it by its
   height less the two scroll-marker lines, and the wheel over it scrolls it (`OnPane`); below
   `styles.SplitMinWidth` they page the list. A new selection starts the pane at its top.
 - `agents.Model.Select` clears the query, which could hide the agent asked for.
@@ -431,7 +431,7 @@ store's project. It draws the list head of the board — the rule and the query 
   the toast an empty selection raises. The legend names the keys that act on the selected row as
   they act on it: `open_detail` as `resume` and `close_agent` as `unlink` on a gone row,
   `open_issue` only on a linked one, and none of the three without a row (`footerHints`,
-  `internal/app/render.go`), then the page keys of the detail context as `message` while the
+  `internal/app/render.go`), then the page keys of the board context as `scroll` while the
   Agent pane is on screen; `type` → `filter` and Escape → `clear` follow them. The tab has no
   button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
@@ -470,8 +470,8 @@ focuses it.
   to an `alt+` chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything
   else ([CONFIGURATION.md](CONFIGURATION.md#keybindings)).
 - A built-in key that prints nothing — `backspace`, `ctrl+w`, `ctrl+u`, the scope key of the store
-  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in every
-  context but `modal`. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
+  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in the
+  `shell` and `board` contexts. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
   (`internal/mode/search/model_test.go`) fails while that list and the surfaces disagree.
 - The startup-error screen (`internal/ui/fatalerror`) is the one exception: it quits on `q` as well
   as on the quit key. It has no query line and no other action, so the key can type into nothing.

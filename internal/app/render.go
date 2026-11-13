@@ -653,7 +653,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 			}
 			// Only the scroll marker would otherwise say the pane scrolls.
 			if paneScrolls {
-				hints = append(hints, styles.KeyHint{Key: pair(config.DetailContext, config.DetailActionPageDown, config.DetailActionPageUp), Desc: "message"})
+				hints = append(hints, styles.KeyHint{Key: pair(config.BoardContext, config.BoardActionPageUp, config.BoardActionPageDown), Desc: "scroll"})
 			}
 		}
 		return append(hints,

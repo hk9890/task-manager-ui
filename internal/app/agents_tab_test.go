@@ -263,11 +263,11 @@ func TestTheAgentsTabLegendNamesThePaneKeysWhileThePaneIsShown(t *testing.T) {
 	footer := func(m Model) string { return testui.Downsample(m.renderFooter()) }
 
 	m = send(t, m, tea.WindowSizeMsg{Width: 200, Height: 40})
-	if legend := footer(m); !strings.Contains(legend, "pgdown/pgup message") {
-		t.Errorf("legend beside the pane = %q, want pgdown/pgup message", legend)
+	if legend := footer(m); !strings.Contains(legend, "pgup/pgdown scroll") {
+		t.Errorf("legend beside the pane = %q, want pgup/pgdown scroll", legend)
 	}
 	m = send(t, m, tea.WindowSizeMsg{Width: 90, Height: 40})
-	if legend := footer(m); strings.Contains(legend, "message") {
+	if legend := footer(m); strings.Contains(legend, "pgup/pgdown scroll") {
 		t.Errorf("legend without the pane = %q, names the pane keys", legend)
 	}
 }

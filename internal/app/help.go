@@ -62,7 +62,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
 			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent, asking first while it is running or needs you; unlink a gone one"},
 			{Key: board(config.BoardActionOpenIssue), Desc: "open the issue the selected agent is linked to in Detail"},
-			{Key: pair(detail(config.DetailActionPageUp), detail(config.DetailActionPageDown)), Desc: "from 100 columns, scroll the Agent pane, not the list"},
+			{Key: pair(board(config.BoardActionPageUp), board(config.BoardActionPageDown)), Desc: "scroll the Agent pane beside the list; on a screen too narrow for it, page the list"},
 		}},
 		{Title: "Issue", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionCreateIssue), Desc: "create an issue, in the issue editor"},

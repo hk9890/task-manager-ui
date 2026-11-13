@@ -179,7 +179,7 @@ func TestDefaultKeyBindingsOutsideModalAreNotReserved(t *testing.T) {
 	}
 }
 
-func TestResolveKeyBindingsRejectsReservedKeysOutsideTheModal(t *testing.T) {
+func TestResolveKeyBindingsRejectsReservedKeysInShellAndBoard(t *testing.T) {
 	t.Parallel()
 
 	contexts := []struct {
@@ -189,8 +189,6 @@ func TestResolveKeyBindingsRejectsReservedKeysOutsideTheModal(t *testing.T) {
 	}{
 		{ShellContext, ShellActionHelp, func(k *KeyBindings, keys []string) { k.Shell[ShellActionHelp] = keys }},
 		{BoardContext, BoardActionReload, func(k *KeyBindings, keys []string) { k.Board[BoardActionReload] = keys }},
-		// The Agents tab scrolls its pane with the detail page keys.
-		{DetailContext, DetailActionPageDown, func(k *KeyBindings, keys []string) { k.Detail[DetailActionPageDown] = keys }},
 	}
 	uses := map[string]string{
 		"backspace": "edits the filter",
@@ -219,8 +217,10 @@ func TestResolveKeyBindingsRejectsReservedKeysOutsideTheModal(t *testing.T) {
 		}
 	}
 
-	// A modal is above every browse surface, so its keys stay free.
+	// The detail has no query and a modal is above every browse surface, so
+	// their keys stay free.
 	modal := DefaultKeyBindings()
+	modal.Detail[DetailActionPageUp] = []string{"ctrl+u"}
 	modal.Modal[ModalActionPrev] = []string{"backspace", "ctrl+w"}
 	modal.Modal[ModalActionLeft] = []string{"ctrl+u"}
 	modal.Modal[ModalActionRight] = []string{"ctrl+t"}
