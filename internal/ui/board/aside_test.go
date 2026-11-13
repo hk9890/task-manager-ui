@@ -41,7 +41,19 @@ func TestTheAsideStandsRightOfTheColumnsUnderTheListHead(t *testing.T) {
 	if hit, ok := HitTest(state, x, y); !ok || hit.Row != 0 {
 		t.Fatalf("HitTest on the column row reported %+v, %v", hit, ok)
 	}
-	if hit, ok := HitTest(state, width-aside, y); ok {
+	if OverAside(state, x, y) {
+		t.Fatal("OverAside reports the column row")
+	}
+
+	// The aside's first cell on the row: the cell left of it is the gap.
+	ax := lipgloss.Width(lines[y][:strings.Index(lines[y], strings.Repeat("A", aside))])
+	if hit, ok := HitTest(state, ax, y); ok {
 		t.Fatalf("HitTest on the aside reported %+v", hit)
+	}
+	if !OverAside(state, ax, y) || !OverAside(state, ax+aside-1, y) {
+		t.Fatal("OverAside misses a cell the aside is drawn on")
+	}
+	if OverAside(state, ax-1, y) || OverAside(state, ax, 0) {
+		t.Fatal("OverAside reports the gap or the list head")
 	}
 }

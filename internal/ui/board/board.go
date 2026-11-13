@@ -365,6 +365,20 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	return Hit{}, false
 }
 
+// OverAside reports whether the cell x, y is on the Aside pane of state.
+func OverAside(state State, x, y int) bool {
+	if state.AsideWidth <= 0 || len(state.Columns) == 0 {
+		return false
+	}
+	f := layoutFrame(state)
+	left := (len(f.widths)) * columnGap
+	for _, width := range f.widths {
+		left += width
+	}
+	line := y - headLines
+	return x >= left && x < left+state.AsideWidth && line >= 0 && line < f.columnHeight
+}
+
 // ColumnStart is where the window of drawn columns starts once the focus is on
 // column focused: at start when that still draws the column, and otherwise
 // moved only as far as it takes. The window stays under the pointer through a

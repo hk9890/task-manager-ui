@@ -351,11 +351,13 @@ opens Detail.
   read: a backend that stamps the two differently would read the doc forever.
 - Until the read lands the pane draws the row's header over skeleton rows; a failed read draws the
   error in place of the body until a reload.
-- The page keys of the detail context scroll the preview while it is drawn (`previewKey`); below
+- The page keys of the board context scroll the preview while it is drawn (`previewKey`): the tab
+  reads every key from that context, so the reserved keys stay refused for it. Below
   `styles.SplitMinWidth` they page the list. The legend names them only while they scroll
-  (`Model.renderFooter`). Each doc opens at its top.
+  (`footerHints`). Each doc opens at its top.
 - The wheel over the preview scrolls it `previewWheelLines` lines a notch and moves no selection;
-  a click there does nothing.
+  a click there does nothing. `board.OverAside` says whether a cell is on the pane, from the
+  layout `Render` draws.
 
 ### The Agents tab
 

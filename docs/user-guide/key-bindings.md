@@ -376,8 +376,8 @@ instead.
   to press it. The wheel over the text moves its cursor three lines a notch.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.
-- **Wheel** over the detail Content pane, or on the help screen,
-  scrolls it three lines a notch. Help on a terminal under 10 rows scrolls
+- **Wheel** over the detail Content pane, the Docs Preview, or on the help screen,
+  scrolls it three lines a notch. A click on the Docs Preview does nothing. Help on a terminal under 10 rows scrolls
   fewer, so no line is skipped.
 - While a dialog is open, the mouse reaches nothing under it: a dialog takes
   keys only. On the help screen the wheel scrolls and a click does nothing.

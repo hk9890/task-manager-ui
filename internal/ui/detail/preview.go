@@ -54,6 +54,12 @@ func PreviewMaxOffset(state PreviewState) int {
 	return max(0, len(previewLines(state, state.Width-2, innerHeight))-innerHeight)
 }
 
+// PreviewPageRows is the lines a page key scrolls the pane: its rows less the
+// two the scroll marks may take.
+func PreviewPageRows(state PreviewState) int {
+	return max(1, state.Height-2-2)
+}
+
 func previewLines(state PreviewState, width, height int) []string {
 	muted := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 	if state.Empty {
@@ -70,9 +76,7 @@ func previewLines(state PreviewState, width, height int) []string {
 	switch {
 	case strings.TrimSpace(state.Error) != "":
 		message := styles.Glyphs.ToastWarn + " load failed: " + displaytext.OneLine(state.Error)
-		for _, line := range textutil.WrapAtSpaces(message, width) {
-			lines = append(lines, lipgloss.NewStyle().Foreground(styles.ErrorTextColor).Render(line))
-		}
+		lines = append(lines, textutil.WrapAtSpaces(message, width)...)
 	case state.Skeleton:
 		lines = append(lines, renderProseContentSkeleton(width, max(1, height-len(lines)), state.SkeletonPhase)...)
 	default:

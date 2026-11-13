@@ -1,7 +1,6 @@
 package app
 
 import (
-	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -528,14 +527,7 @@ func (m Model) renderFooter() string {
 	if row, ok := m.agents.SelectedRow(); ok && m.active == mode.Agents {
 		agentRow = &row
 	}
-	hints := footerHints(m.active, m.keys, agentRow)
-	// The page keys scroll the preview only while it is drawn; without it they
-	// page the list, as the move keys say.
-	if m.active == mode.Docs && m.docs.Previewing() {
-		page := m.keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp) + "/" +
-			m.keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown)
-		hints = slices.Insert(hints, 2, styles.KeyHint{Key: page, Desc: "scroll"})
-	}
+	hints := footerHints(m.active, m.keys, agentRow, m.docs.Previewing())
 	// Detail is where the launch keys work, so it is where their being off is
 	// said, before the operator presses one. It leads the legend so that it is
 	// the last hint a narrow terminal drops.
@@ -601,8 +593,9 @@ func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
 // footerHints is the legend of the active surface, the keys an operator needs
 // first leading: KeyLegend drops from the end. agentRow is the row selected on
 // the Agents tab, nil without one: the keys that act on a row are named only
-// with one, and the issue key only with a linked issue.
-func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row) []styles.KeyHint {
+// with one, and the issue key only with a linked issue. previewing says the
+// Docs tab draws its preview, which the page keys then scroll.
+func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row, previewing bool) []styles.KeyHint {
 	primary := keys.DisplayPrimary
 	pair := func(context, first, second string) string {
 		return primary(context, first) + "/" + primary(context, second)
@@ -617,14 +610,20 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 
 	switch active {
 	case mode.Docs:
-		return []styles.KeyHint{
+		hints := []styles.KeyHint{
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "docs"},
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
+		}
+		// Without the preview the page keys page the list, as the move keys say.
+		if previewing {
+			hints = append(hints, styles.KeyHint{Key: pair(config.BoardContext, config.BoardActionPageUp, config.BoardActionPageDown), Desc: "scroll"})
+		}
+		return append(hints,
 			filter, clear,
 			create,
-			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
+			styles.KeyHint{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
-		}
+		)
 	case mode.Agents:
 		hints := []styles.KeyHint{{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "agents"}}
 		if agentRow != nil {

@@ -8,7 +8,6 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
@@ -158,35 +157,25 @@ func (m *Model) scrollPreview(delta int) {
 	m.preview.offset = min(max(m.preview.offset+delta, 0), maxOffset)
 }
 
-// previewPage is the lines a page key scrolls the preview: the rows of the
-// pane less the two the scroll marks may take.
-func (m *Model) previewPage() int {
-	return max(1, uiboard.ColumnHeight(m.height)-2-2)
-}
-
-// previewKey scrolls the preview on a page key of the detail context while
-// the preview is drawn. handled is false for every other key and at every
-// width that draws the list alone, where the page keys page the list.
+// previewKey scrolls the preview on a page key of the board context while the
+// preview is drawn: the docs tab reads every key from that context, so the
+// reserved-key check of the configuration covers this one too. handled is
+// false for every other key and at every width that draws the list alone,
+// where the page keys page the list.
 func (m *Model) previewKey(msg tea.KeyPressMsg) (handled bool) {
 	if _, _, ok := m.split(); !ok || m.currentSelection() == nil {
 		return false
 	}
+	page := uidetail.PreviewPageRows(m.previewState(0))
 	switch {
-	case m.keys.Match(config.DetailContext, config.DetailActionPageDown, msg):
-		m.scrollPreview(m.previewPage())
-	case m.keys.Match(config.DetailContext, config.DetailActionPageUp, msg):
-		m.scrollPreview(-m.previewPage())
+	case m.keys.Match(config.BoardContext, config.BoardActionPageDown, msg):
+		m.scrollPreview(page)
+	case m.keys.Match(config.BoardContext, config.BoardActionPageUp, msg):
+		m.scrollPreview(-page)
 	default:
 		return false
 	}
 	return true
-}
-
-// overPreview reports whether msg is over the preview: right of the list and
-// below the list head.
-func (m *Model) overPreview(msg mode.MouseMsg) bool {
-	list, _, ok := m.split()
-	return ok && msg.X >= list && msg.Y >= m.height-uiboard.ColumnHeight(m.height)
 }
 
 func loadDocCmd(ctx context.Context, repo repository.Repository, id string, asOf time.Time) tea.Cmd {

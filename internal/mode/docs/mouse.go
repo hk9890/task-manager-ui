@@ -11,7 +11,7 @@ import (
 // selection, one click selects a doc and a second opens it. The wheel over the
 // preview scrolls the preview, and a click there does nothing.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
-	if m.overPreview(msg) {
+	if uiboard.OverAside(m.viewState(0), msg.X, msg.Y) {
 		m.list.Mouse(mode.MouseMsg{Kind: mode.MouseLeave}, m.viewState(0))
 		switch msg.Kind {
 		case mode.MouseWheelUp:

@@ -209,13 +209,13 @@ func TestBrowseLegendsNameTheFilter(t *testing.T) {
 		t.Fatalf("ResolveKeyBindings returned error: %v", err)
 	}
 	for _, active := range []mode.ID{mode.Board, mode.Docs} {
-		legend := testui.Downsample(styles.KeyLegend(footerHints(active, keys, nil), 0))
+		legend := testui.Downsample(styles.KeyLegend(footerHints(active, keys, nil, false), 0))
 		filter, clear := strings.Index(legend, "type filter"), strings.Index(legend, "esc clear")
 		if filter < 0 || clear < filter || strings.Index(legend, "new") < clear {
 			t.Errorf("%s legend %q: want type filter, then esc clear, both ahead of new", active, legend)
 		}
 	}
-	if legend := styles.KeyLegend(footerHints(mode.Detail, keys, nil), 0); strings.Contains(legend, "filter") {
+	if legend := styles.KeyLegend(footerHints(mode.Detail, keys, nil, false), 0); strings.Contains(legend, "filter") {
 		t.Errorf("detail has no filter, and its legend names one: %q", legend)
 	}
 }

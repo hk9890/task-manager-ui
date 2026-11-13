@@ -56,7 +56,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionModeCyclePrev), Desc: "previous tab"},
 		}},
 		{Title: "Docs tab", Entries: []helpscreen.Entry{
-			{Key: pair(detail(config.DetailActionPageUp), detail(config.DetailActionPageDown)), Desc: "scroll the preview beside the list; on a screen too narrow for it, page the list"},
+			{Key: pair(board(config.BoardActionPageUp), board(config.BoardActionPageDown)), Desc: "scroll the preview beside the list; on a screen too narrow for it, page the list"},
 		}},
 		{Title: "Agents tab", Entries: []helpscreen.Entry{
 			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
@@ -120,7 +120,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
 			{Key: "click", Desc: "an agent in the Details pane: select it on the Agents tab"},
 			{Key: "second click", Desc: "open the row; on the Agents tab, bring the agent to the front"},
-			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the text of the issue editor and this screen"},
+			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the docs Preview, the text of the issue editor and this screen"},
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
 		}},
