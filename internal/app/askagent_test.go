@@ -87,8 +87,8 @@ func TestAskAnAgentStartsItInTheBackgroundAndReportsItsSummary(t *testing.T) {
 	if got := hostCalls(client, "Wait", "Read", "Focus", "Close"); !reflect.DeepEqual(got, want) {
 		t.Fatalf("calls = %+v, want %+v", got, want)
 	}
-	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
-		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent-session:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent-session:s-9]", labels)
 	}
 	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 is done: Shortened the title.") {
 		t.Fatalf("toast = %q, want the summary", view)
@@ -196,8 +196,8 @@ func TestAnAskedAgentThatTookNoPromptIsLinkedAndNotWaitedOn(t *testing.T) {
 	client.StartErr = errors.New("the prompt was refused")
 	m = askOnTitle(t, m, "make the title shorter")
 
-	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
-		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent-session:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent-session:s-9]", labels)
 	}
 	if got := hostCalls(client, "Wait", "Read"); len(got) != 0 {
 		t.Fatalf("calls = %+v, want no wait and no read", got)

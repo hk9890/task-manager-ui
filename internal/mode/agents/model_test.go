@@ -55,9 +55,9 @@ func TestBuildRowsGroupsTheAgentsByTheirLink(t *testing.T) {
 		{Ref: "demo:home:9", Label: "Tab 9", Status: agent.Idle},
 	}
 	issues := []domain.IssueSummary{
-		{ID: "tm-1", Status: "open", Labels: []string{"agent:s-1", "agent:s-gone", "backend"}},
-		{ID: "tm-2", Status: "closed", Labels: []string{"agent:s-2", "agent:s-closed-gone"}},
-		{ID: "tm-3", Status: "open", Labels: []string{"agent:s-1"}},
+		{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-1", "agent-session:s-gone", "backend"}},
+		{ID: "tm-2", Status: "closed", Labels: []string{"agent-session:s-2", "agent-session:s-closed-gone"}},
+		{ID: "tm-3", Status: "open", Labels: []string{"agent-session:s-1"}},
 	}
 	comments := map[string]domain.IssueSummary{"s-3": {ID: "tm-4"}, "s-1": {ID: "tm-5"}}
 
@@ -97,7 +97,7 @@ func request(t *testing.T, m *Model, key string) mode.ActionRequestMsg {
 func TestTheKeysActOnTheSelectedAgent(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
-	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Title: "Fix", Status: "open", Labels: []string{"agent:s-1"}}}})
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Title: "Fix", Status: "open", Labels: []string{"agent-session:s-1"}}}})
 	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, "")
 
 	if got := request(t, m, "enter"); got.Action != mode.ActionOpenAgent || got.Agent.Session != "s-1" {
@@ -126,7 +126,7 @@ func TestSelectWaitsForTheRowOfTheAgent(t *testing.T) {
 	m := newTab(t)
 	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running)}, true, "")
 	m.Select("s-gone")
-	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent:s-gone"}}}})
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-gone"}}}})
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-gone" {
 		t.Fatalf("selected %q, want the gone agent", row.Agent.Session)
 	}
@@ -171,7 +171,7 @@ func TestAnEmptyTabSaysWhy(t *testing.T) {
 func TestInitReadsTheIssuesWithALinkLabel(t *testing.T) {
 	t.Parallel()
 	repo := memory.New()
-	repo.Seed(memory.Issue{ID: "tm-1", Title: "linked", Status: "open", Labels: []string{"agent:s-1"}})
+	repo.Seed(memory.Issue{ID: "tm-1", Title: "linked", Status: "open", Labels: []string{"agent-session:s-1"}})
 	repo.Seed(memory.Issue{ID: "tm-2", Title: "plain", Status: "open"})
 	m := NewModel(context.Background(), repo, nil, keys(t))
 	cmd := m.Init()

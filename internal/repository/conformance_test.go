@@ -897,7 +897,7 @@ func TestAddLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
 		}
 		for range 2 {
 			if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{
-				AddLabels: []string{"agent:s-1"},
+				AddLabels: []string{"agent-session:s-1"},
 			}); err != nil {
 				t.Fatalf("%s: UpdateIssue: %v", b.name, err)
 			}
@@ -907,8 +907,8 @@ func TestAddLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: Issue: %v", b.name, err)
 		}
-		if got := detail.Summary.Labels; !equalStrings(got, []string{"agent:s-1", "alpha"}) && !equalStrings(got, []string{"alpha", "agent:s-1"}) {
-			t.Errorf("%s: labels after the add = %v, want alpha and agent:s-1", b.name, got)
+		if got := detail.Summary.Labels; !equalStrings(got, []string{"agent-session:s-1", "alpha"}) && !equalStrings(got, []string{"alpha", "agent-session:s-1"}) {
+			t.Errorf("%s: labels after the add = %v, want alpha and agent-session:s-1", b.name, got)
 		}
 	}
 }
@@ -920,7 +920,7 @@ func TestRemoveLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
 	for _, b := range freshBackends(t) {
 		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
 			Title:  "edited",
-			Labels: []string{"alpha", "beta", "agent:s-1"},
+			Labels: []string{"alpha", "beta", "agent-session:s-1"},
 		})
 		if err != nil {
 			t.Fatalf("%s: CreateIssue: %v", b.name, err)
@@ -937,7 +937,7 @@ func TestRemoveLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
 			t.Fatalf("%s: Issue: %v", b.name, err)
 		}
 		got := slices.Sorted(slices.Values(detail.Summary.Labels))
-		if want := []string{"agent:s-1", "beta", "gamma"}; !equalStrings(got, want) {
+		if want := []string{"agent-session:s-1", "beta", "gamma"}; !equalStrings(got, want) {
 			t.Errorf("%s: labels after the edit = %v, want %v", b.name, got, want)
 		}
 	}
@@ -950,8 +950,8 @@ func TestSearchByLabelContainsConformance(t *testing.T) {
 	ctx := context.Background()
 	for _, b := range freshBackends(t) {
 		for _, input := range []domain.CreateIssueInput{
-			{Title: "linked", Labels: []string{"alpha", "agent:s-1"}},
-			{Title: "linked twice", Labels: []string{"agent:s-2", "agent:s-3"}},
+			{Title: "linked", Labels: []string{"alpha", "agent-session:s-1"}},
+			{Title: "linked twice", Labels: []string{"agent-session:s-2", "agent-session:s-3"}},
 			{Title: "unlinked", Labels: []string{"alpha"}},
 			{Title: "bare"},
 		} {
@@ -959,7 +959,7 @@ func TestSearchByLabelContainsConformance(t *testing.T) {
 				t.Fatalf("%s: CreateIssue %q: %v", b.name, input.Title, err)
 			}
 		}
-		closed, err := b.repo.CreateIssue(ctx, domain.CreateIssueInput{Title: "linked and closed", Labels: []string{"agent:s-4"}})
+		closed, err := b.repo.CreateIssue(ctx, domain.CreateIssueInput{Title: "linked and closed", Labels: []string{"agent-session:s-4"}})
 		if err != nil {
 			t.Fatalf("%s: CreateIssue: %v", b.name, err)
 		}
@@ -971,10 +971,10 @@ func TestSearchByLabelContainsConformance(t *testing.T) {
 			query domain.SearchIssuesQuery
 			want  []string
 		}{
-			{domain.SearchIssuesQuery{LabelContains: "AGENT:"}, []string{"linked", "linked twice"}},
-			{domain.SearchIssuesQuery{LabelContains: "agent:", IncludeClosed: true}, []string{"linked", "linked and closed", "linked twice"}},
-			{domain.SearchIssuesQuery{LabelContains: "agent:", Labels: []string{"alpha"}}, []string{"linked"}},
-			{domain.SearchIssuesQuery{LabelContains: "agent:", Text: "twice"}, []string{"linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "AGENT-SESSION:"}, []string{"linked", "linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent-session:", IncludeClosed: true}, []string{"linked", "linked and closed", "linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent-session:", Labels: []string{"alpha"}}, []string{"linked"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent-session:", Text: "twice"}, []string{"linked twice"}},
 		} {
 			page, err := b.repo.Search(ctx, tc.query)
 			if err != nil {

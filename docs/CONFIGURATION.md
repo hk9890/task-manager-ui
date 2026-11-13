@@ -62,7 +62,7 @@ The model is intentionally small and only covers app-shell concerns:
 - `Agent.Intents`
   - The `Start new` entries of the agent dialog that `launch_agent` opens in Detail, in menu
     order. An intent starts an agent through the agent host in front, with its `prompt` as the
-    first prompt, and labels the issue `agent:<session>`.
+    first prompt, and labels the issue `agent-session:<session>`.
   - Defaults to `implement` and `review`, each a short prompt that names `{{issue.id}}`.
   - Each intent has a `name` (required, unique) and a `prompt` (required, one line: revier
     submits a prompt as one line). The prompt takes the
@@ -258,7 +258,8 @@ entry, every `env` entry, and `workdir`, and so does the `prompt` of an intent:
 
 - `{{issue.id}}`
 - `{{issue.title}}`
-- `{{issue.labels}}` (comma-joined label list)
+- `{{issue.labels}}` (comma-joined label list, without the `agent-session:<session>` labels
+  that link an agent)
 - `{{issue.assignee}}`
 - `{{project.root}}`
 

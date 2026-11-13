@@ -77,6 +77,9 @@ func TestTheAgentsTabClosesTheSelectedAgent(t *testing.T) {
 	m = pressKey(t, m, "alt+x")
 	testui.AssertContainsAll(t, plainShell(m), "Close agent", "Tab 3 is running. Close it anyway?")
 	m = pressKey(t, m, "y")
+	if got := labelsOf(t, m, "tm-1"); len(got) != 0 {
+		t.Errorf("labels of tm-1 after the close = %v, want the link label removed", got)
+	}
 
 	m = pressKey(t, m, "down")
 	m = pressKey(t, m, "alt+x")

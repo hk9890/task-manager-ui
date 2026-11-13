@@ -164,12 +164,12 @@ func TestUpdateKeyReadsTheIssueAgainAndSaveWritesTitleAndDescription(t *testing.
 // changes the labels keeps it in the store.
 func TestTheEditorHidesAndKeepsTheLinkLabels(t *testing.T) {
 	m, gw := editorShell(t)
-	if err := gw.UpdateIssue(context.Background(), "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent:s-1"}}); err != nil {
+	if err := gw.UpdateIssue(context.Background(), "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent-session:s-1"}}); err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
 
 	m = openEditor(t, m, "alt+u")
-	if view := plainShell(m); strings.Contains(view, "agent:") {
+	if view := plainShell(m); strings.Contains(view, "agent-session:") {
 		t.Fatalf("the editor shows the link label:\n%s", view)
 	}
 	for range 5 {
@@ -181,7 +181,7 @@ func TestTheEditorHidesAndKeepsTheLinkLabels(t *testing.T) {
 	m = pressKey(t, m, "ctrl+s")
 
 	labels := slices.Sorted(slices.Values(issueState(gw, "tm-1").Summary.Labels))
-	if want := []string{"agent:s-1", "api"}; !slices.Equal(labels, want) {
+	if want := []string{"agent-session:s-1", "api"}; !slices.Equal(labels, want) {
 		t.Errorf("the store holds the labels %v, want %v; toast %q", labels, want, m.toast.View())
 	}
 }

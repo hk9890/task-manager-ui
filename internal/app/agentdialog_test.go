@@ -15,6 +15,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -23,7 +24,7 @@ import (
 // again, as a start on a store that is not watched does.
 func withLinkLabel(t *testing.T, m Model, session string) Model {
 	t.Helper()
-	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent:" + session}}); err != nil {
+	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent-session:" + session}}); err != nil {
 		t.Fatalf("fixture: %v", err)
 	}
 	return pressKey(t, m, "alt+r")
@@ -53,7 +54,7 @@ func TestAStartedAgentShowsInTheAgentsGroupByItsLabel(t *testing.T) {
 
 	view := plainShell(m)
 	testui.AssertContainsAll(t, view, "Agents", "Tab 9: running")
-	if strings.Contains(view, "agent:s-9") {
+	if strings.Contains(view, "agent-session:s-9") {
 		t.Errorf("Detail draws the link label:\n%s", view)
 	}
 }
@@ -117,6 +118,72 @@ func TestTheAgentDialogClosesAnIdleAgentAtOnce(t *testing.T) {
 	}
 	if !strings.Contains(m.toast.View(), "Closed Tab 3") {
 		t.Errorf("toast = %q, want the close reported", m.toast.View())
+	}
+}
+
+// A close from the dialog unlinks the agent: its link label leaves every
+// open issue that carries it, and every other label stays. A closed issue
+// keeps it: the store refuses every change to one.
+func TestClosingAnAgentRemovesItsLinkLabelFromTheOpenIssues(t *testing.T) {
+	idle := agent.Agent{Ref: "demo:home:3", Label: "Tab 3", Status: agent.Idle, Session: "s-3"}
+	m, _, _, _ := agentShell(t, idle)
+	gw := m.services.Repo.(*fakes.TrackedRepository)
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Also linked", Labels: []string{"agent-session:s-3"}})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Done", Status: "closed", Labels: []string{"agent-session:s-3"}})
+	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{"backend", "agent-session:s-30"}}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	m = withLinkLabel(t, m, "s-3")
+
+	m = pressKey(t, m, "alt+i")
+	testui.AssertContainsAll(t, plainShell(m), "Focus Tab 3", "Close Tab 3")
+	m = pressKey(t, m, "down")
+	m = pressKey(t, m, "enter")
+
+	if got, want := labelsOf(t, m, "tm-1"), []string{"backend", "agent-session:s-30"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("labels of tm-1 = %v, want %v", got, want)
+	}
+	if got := labelsOf(t, m, "tm-2"); len(got) != 0 {
+		t.Errorf("labels of tm-2 = %v, want none", got)
+	}
+	if got, want := labelsOf(t, m, "tm-3"), []string{"agent-session:s-3"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("labels of the closed tm-3 = %v, want %v", got, want)
+	}
+	if !strings.Contains(m.toast.View(), "Closed Tab 3") {
+		t.Errorf("toast = %q, want the close reported", m.toast.View())
+	}
+	if strings.Contains(plainShell(m), "Tab 3: idle") {
+		t.Errorf("Detail still lists the unlinked agent:\n%s", plainShell(m))
+	}
+}
+
+// A close that fails unlinks nothing; a removal that fails says the agent is
+// closed but still linked.
+func TestAFailedCloseOrUnlinkKeepsTheLinkLabel(t *testing.T) {
+	idle := agent.Agent{Ref: "demo:home:3", Label: "Tab 3", Status: agent.Idle, Session: "s-3"}
+	m, client, _, _ := agentShell(t, idle)
+	m = withLinkLabel(t, m, "s-3")
+	client.CloseErr = errors.New("revier is down")
+
+	m = pressKey(t, m, "alt+i")
+	m = pressKey(t, m, "down")
+	m = pressKey(t, m, "enter")
+	if got := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(got, []string{"agent-session:s-3"}) {
+		t.Errorf("labels after a failed close = %v, want the link label kept", got)
+	}
+	if !strings.Contains(m.toast.View(), "Could not close Tab 3") {
+		t.Errorf("toast = %q, want the failed close reported", m.toast.View())
+	}
+
+	client.CloseErr = nil
+	failing := fakes.NewErrorInjecting(m.services.Repo)
+	failing.SetError(fakes.MethodUpdateIssue, errors.New("store is locked"))
+	m.services.Repo = failing
+	m = pressKey(t, m, "alt+i")
+	m = pressKey(t, m, "down")
+	m = pressKey(t, m, "enter")
+	if !strings.Contains(m.toast.View(), "Closed Tab 3, but could not unlink it from tm-1: store is locked") {
+		t.Errorf("toast = %q, want the failed unlink reported", m.toast.View())
 	}
 }
 
@@ -291,8 +358,8 @@ func TestAnIntentStartsAnAgentInFrontAndLinksItToTheIssue(t *testing.T) {
 	if got := startCalls(client); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Start calls = %+v, want %+v", got, want)
 	}
-	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
-		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent-session:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent-session:s-9]", labels)
 	}
 	if m.selMenu != nil {
 		t.Fatal("the menu stayed open after the start")
@@ -401,8 +468,8 @@ func TestAStartThatFailsAfterTheSessionIsKnownStillLinksTheAgent(t *testing.T) {
 	m = pressKey(t, m, "alt+i")
 	m = pressKey(t, m, "enter")
 
-	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent:s-9"}) {
-		t.Fatalf("labels of tm-1 = %v, want [agent:s-9]", labels)
+	if labels := labelsOf(t, m, "tm-1"); !reflect.DeepEqual(labels, []string{"agent-session:s-9"}) {
+		t.Fatalf("labels of tm-1 = %v, want [agent-session:s-9]", labels)
 	}
 	if view := m.toast.View(); !strings.Contains(view, "Started Tab 9 on tm-1, but: the focus was refused") {
 		t.Fatalf("toast = %q, want the partial failure", view)

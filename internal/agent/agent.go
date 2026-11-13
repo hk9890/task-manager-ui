@@ -125,12 +125,12 @@ type Host interface {
 	Close(ctx context.Context, a Agent, force bool) error
 }
 
-// linkLabelPrefix starts the issue label that links an agent's session to the
+// LinkLabelPrefix starts the issue label that links an agent's session to the
 // issue it was started on.
-const linkLabelPrefix = "agent:"
+const LinkLabelPrefix = "agent-session:"
 
 // linkSessionPattern and maxLabelLength are what the store takes of a label
-// after linkLabelPrefix: the rest of its grammar, ^[a-z0-9][a-z0-9:._/-]*$,
+// after LinkLabelPrefix: the rest of its grammar, ^[a-z0-9][a-z0-9:._/-]*$,
 // and its length.
 var linkSessionPattern = regexp.MustCompile(`^[a-z0-9:._/-]+$`)
 
@@ -139,10 +139,10 @@ const maxLabelLength = 64
 // LinkLabel is the issue label that links the agent on session to the issue.
 // It fails for a session the store would refuse in a label.
 func LinkLabel(session string) (string, error) {
-	label := linkLabelPrefix + session
+	label := LinkLabelPrefix + session
 	if !linkSessionPattern.MatchString(session) || len(label) > maxLabelLength {
 		return "", fmt.Errorf("the agent session %q makes no valid issue label "+
-			"(at most %d characters of a-z, 0-9 and :._/-)", session, maxLabelLength-len(linkLabelPrefix))
+			"(at most %d characters of a-z, 0-9 and :._/-)", session, maxLabelLength-len(LinkLabelPrefix))
 	}
 	return label, nil
 }
@@ -150,7 +150,7 @@ func LinkLabel(session string) (string, error) {
 // IsLinkLabel reports whether label links an agent's session to its issue.
 // A link label is kept in the store and hidden from the operator.
 func IsLinkLabel(label string) bool {
-	return strings.HasPrefix(label, linkLabelPrefix)
+	return strings.HasPrefix(label, LinkLabelPrefix)
 }
 
 // VisibleLabels is labels without the link labels: the ones the operator
@@ -163,7 +163,7 @@ func VisibleLabels(labels []string) []string {
 func LinkSessions(labels []string) []string {
 	var sessions []string
 	for _, label := range labels {
-		if session, ok := strings.CutPrefix(label, linkLabelPrefix); ok && session != "" {
+		if session, ok := strings.CutPrefix(label, LinkLabelPrefix); ok && session != "" {
 			sessions = append(sessions, session)
 		}
 	}

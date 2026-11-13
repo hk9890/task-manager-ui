@@ -63,10 +63,14 @@ type agentResumedMsg struct {
 	err   error
 }
 
-// agentClosedMsg carries the result of closing an agent.
+// agentClosedMsg carries the result of closing an agent: err when the close
+// failed, and else the issues its link label was removed from, and unlinkErr
+// when a removal failed.
 type agentClosedMsg struct {
-	agent agent.Agent
-	err   error
+	agent     agent.Agent
+	err       error
+	unlinked  []string
+	unlinkErr error
 }
 
 // storeChangedMsg reports that the active store changed on disk.

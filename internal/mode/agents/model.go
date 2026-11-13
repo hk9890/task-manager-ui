@@ -23,10 +23,6 @@ import (
 	uiagents "github.com/hk9890/task-manager-ui/internal/ui/agents"
 )
 
-// linkLabelText is what every link label contains: the read keeps the
-// issues with one, and agent.LinkSessions picks the link labels out of them.
-const linkLabelText = "agent:"
-
 // linkedIssuesMsg carries the issues that carry a link label.
 type linkedIssuesMsg struct {
 	issues []domain.IssueSummary
@@ -89,7 +85,7 @@ func (m *Model) load() tea.Cmd {
 	m.loading = true
 	ctx, repo := m.ctx, m.repo
 	return func() tea.Msg {
-		page, err := repo.Search(ctx, domain.SearchIssuesQuery{LabelContains: linkLabelText, IncludeClosed: true})
+		page, err := repo.Search(ctx, domain.SearchIssuesQuery{LabelContains: agent.LinkLabelPrefix, IncludeClosed: true})
 		issues := make([]domain.IssueSummary, 0, len(page.Results))
 		for _, result := range page.Results {
 			issues = append(issues, result.Issue)

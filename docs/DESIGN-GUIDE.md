@@ -353,7 +353,7 @@ agents.
 - The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
   the front and resumes a gone one first (`ActionOpenAgent`). `close_agent` closes it, and asks
   first when it is running or needs you (`ActionCloseAgent`, `Model.requestAgentClose`); a gone
-  one raises a warning toast. `open_issue` opens the linked issue in Detail, and Escape there
+  one raises a warning toast. A close unlinks the agent, as the agent dialog's does. `open_issue` opens the linked issue in Detail, and Escape there
   returns to the tab; on an agent linked to none it raises the toast an empty selection raises.
   The legend names the four; the tab has no button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
@@ -752,7 +752,11 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   does. The issue and its agents are taken when it opens. Its entries, in order:
   - `Focus <title>` and `Close <title>` for each live linked agent, `Resume <title>` for each gone
     one. A close of an agent that is running or needs you asks first and then forces the close; an
-    idle one closes at once. A resume reopens the conversation and brings it to the front.
+    idle one closes at once. A close that succeeds unlinks the agent: its link label leaves every
+    open issue that carries it (`Model.closeAgent`), so it is no `gone` row afterwards. A closed
+    issue keeps the label, because the store refuses the change. A removal that fails raises an
+    error toast that names the issue. An agent that ends by itself keeps its label, is `gone` and
+    can be resumed. A resume reopens the conversation and brings it to the front.
   - The heading `Start new`, then one entry per configured intent. A heading is a muted bold line
     without the gutter that takes no cursor and no click (`selectmenu.Entry.Heading`). On a closed
     issue the store refuses the link label: the heading reads `Start new: off, the issue is closed`

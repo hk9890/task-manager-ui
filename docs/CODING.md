@@ -57,8 +57,12 @@ mise run ci          # the merge gate; see What the tools enforce
      switch ends the wait and drops the answer. The agent is never closed by the app.
    - The agents of an issue are `agent.Linked`: its link labels and its comment sessions, merged
      with the last poll. A link label no live agent holds is `agent.Gone`.
+   - A close from the app removes the link label from the open issues after the host closes the
+     agent, as `RemoveLabels`, in one scoped command (`Model.closeAgent`,
+     `internal/app/agents.go`).
    - A link label stays in the store and off the screen: draw labels through
-     `agent.VisibleLabels`.
+     `agent.VisibleLabels`. The `{{issue.labels}}` placeholder leaves them out too
+     (`contextFor`, `internal/launcher/service.go`).
    - No write replaces the label set of an issue. The issue editor shows the visible labels only
      and writes what changed as `AddLabels` and `RemoveLabels` (`issueUpdate`,
      `internal/app/issue_editor.go`); a set would drop every link label, and every label written

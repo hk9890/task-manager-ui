@@ -1,6 +1,7 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/repository"
 	"github.com/hk9890/task-manager-ui/internal/ui/modal"
 	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
@@ -260,11 +262,54 @@ func (m *Model) confirmAgentClose() tea.Cmd {
 	return m.closeAgent(a, true)
 }
 
+// closeAgent closes a, and then unlinks it: it removes the link label of its
+// session from every open issue that carries it. The store refuses every
+// change to a closed issue, so a closed one keeps its label.
 func (m *Model) closeAgent(a agent.Agent, force bool) tea.Cmd {
-	ctx, host := m.ctx, m.services.Agents
-	return func() tea.Msg {
-		return agentClosedMsg{agent: a, err: host.Close(ctx, a, force)}
+	ctx, host, repo := m.ctx, m.services.Agents, m.services.Repo
+	return m.scoped(func() tea.Msg {
+		if err := host.Close(ctx, a, force); err != nil {
+			return agentClosedMsg{agent: a, err: err}
+		}
+		unlinked, err := unlinkAgent(ctx, repo, a.Session)
+		return agentClosedMsg{agent: a, unlinked: unlinked, unlinkErr: err}
+	})
+}
+
+// unlinkAgent removes the link label of session from the open issues that
+// carry it, and returns the IDs of the issues it was removed from.
+func unlinkAgent(ctx context.Context, repo repository.Repository, session string) ([]string, error) {
+	label, err := agent.LinkLabel(session)
+	if err != nil {
+		// No issue carries a label the store refuses: the agent was never linked.
+		return nil, nil
 	}
+	page, err := repo.Search(ctx, domain.SearchIssuesQuery{Labels: []string{label}})
+	if err != nil {
+		return nil, err
+	}
+	var unlinked []string
+	for _, result := range page.Results {
+		id := result.Issue.ID
+		if err := repo.UpdateIssue(ctx, id, domain.UpdateIssueInput{RemoveLabels: []string{label}}); err != nil {
+			return unlinked, fmt.Errorf("%s: %w", id, err)
+		}
+		unlinked = append(unlinked, id)
+	}
+	return unlinked, nil
+}
+
+// handleAgentClosed reports a close. An agent closed but not unlinked is
+// reported as an error: its issue shows it gone.
+func (m *Model) handleAgentClosed(msg agentClosedMsg) tea.Cmd {
+	var reload tea.Cmd
+	if len(msg.unlinked) > 0 {
+		reload = m.reloadAfterLink(msg.unlinked...)
+	}
+	if msg.unlinkErr != nil {
+		return batchCmds(reload, m.pollAgentsCmd(), m.showToast(fmt.Sprintf("Closed %s, but could not unlink it from %s", displaytext.OneLine(msg.agent.Title()), displaytext.OneLine(msg.unlinkErr.Error())), toaster.StyleError))
+	}
+	return batchCmds(reload, m.reportAgentAction("close", "Closed", msg.agent, msg.err))
 }
 
 // reportAgentAction reports a resume or a close of a, and on success polls

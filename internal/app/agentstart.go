@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -88,16 +89,16 @@ func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 	}
 }
 
-// reloadAfterLink reloads the browse surfaces, and Detail when it shows the
-// issue a link label was written to, on a store that is not watched: on a
-// watched one the watch reloads after a write.
-func (m *Model) reloadAfterLink(issueID string) tea.Cmd {
+// reloadAfterLink reloads the browse surfaces, and Detail when it shows an
+// issue a link label was written to or removed from, on a store that is not
+// watched: on a watched one the watch reloads after a write.
+func (m *Model) reloadAfterLink(issueIDs ...string) tea.Cmd {
 	if m.storeWatched() {
 		return nil
 	}
 	m.markBrowseSurfacesDirty()
 	reload := m.maybeAutoRefreshActiveSurfaceCmd()
-	if m.detail.Detail.Summary.ID == issueID {
+	if issueID := m.detail.Detail.Summary.ID; slices.Contains(issueIDs, issueID) {
 		reload = batchCmds(reload, m.reloadDetailAfterMutationCmd(issueID))
 	}
 	return reload

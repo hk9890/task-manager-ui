@@ -72,6 +72,34 @@ func TestServiceLaunchInterpolatesIssueContextAndDelegatesRunner(t *testing.T) {
 	}
 }
 
+// {{issue.labels}} leaves the agent link labels out, in a launcher and in an
+// intent prompt both: they link an agent, the operator never wrote them.
+func TestIssueLabelsLeaveTheLinkLabelsOut(t *testing.T) {
+	t.Parallel()
+
+	issue := domain.IssueDetail{Summary: domain.IssueSummary{
+		ID:     "tm-1",
+		Labels: []string{"agent-session:s-1", "infra", "agent:old", "agent-session:s-2"},
+	}}
+	if got, want := launcher.Interpolate("{{issue.labels}}", issue, "/repo"), "infra,agent:old"; got != want {
+		t.Errorf("Interpolate = %q, want %q", got, want)
+	}
+
+	runner := &fakes.FakeProcessRunner{}
+	service, err := launcher.NewService([]launcher.Definition{{
+		Action: "editor", Command: "nvim", Args: []string{"{{issue.labels}}"},
+	}}, "/repo", runner)
+	if err != nil {
+		t.Fatalf("NewService returned error: %v", err)
+	}
+	if err := service.Launch(context.Background(), "editor", issue); err != nil {
+		t.Fatalf("Launch returned error: %v", err)
+	}
+	if calls := runner.Calls(); len(calls) != 1 || len(calls[0].Args) != 1 || calls[0].Args[0] != "infra,agent:old" {
+		t.Errorf("launch calls = %#v, want one with the args [infra,agent:old]", calls)
+	}
+}
+
 func TestServiceLaunchDefaultsWorkDirToProjectRoot(t *testing.T) {
 	t.Parallel()
 

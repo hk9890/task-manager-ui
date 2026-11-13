@@ -376,7 +376,7 @@ func TestTheAgentsGroupNamesTheAgentAndHidesTheLinkLabels(t *testing.T) {
 	state := DetailsPaneState{
 		Detail: domain.IssueDetail{Summary: domain.IssueSummary{
 			ID: "tm-1", Type: "task", Status: "open",
-			Labels: []string{"backend", "agent:s-1", "agent:s-2"},
+			Labels: []string{"backend", "agent-session:s-1", "agent-session:s-2"},
 		}},
 		Width:  metadataRailWidth,
 		Height: 40,
@@ -391,7 +391,7 @@ func TestTheAgentsGroupNamesTheAgentAndHidesTheLinkLabels(t *testing.T) {
 			t.Errorf("the pane does not draw %q:\n%s", want, view)
 		}
 	}
-	if strings.Contains(view, "agent:") || strings.Contains(view, "tests") || strings.Contains(view, "Tab 1") {
+	if strings.Contains(view, "agent-session:") || strings.Contains(view, "tests") || strings.Contains(view, "Tab 1") {
 		t.Errorf("the pane draws a link label, the activity or the label of a named agent:\n%s", view)
 	}
 }

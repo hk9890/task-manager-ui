@@ -20,7 +20,7 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 		"s-comment": {Ref: "p:t:2", Session: "s-comment", Label: "Tab 2", Status: Running},
 		"s-other":   {Ref: "p:t:3", Session: "s-other", Label: "Tab 3", Status: NeedsYou},
 	}
-	labels := []string{"backend", "agent:s-label", "agent:0123456789abcdef"}
+	labels := []string{"backend", "agent-session:s-label", "agent-session:0123456789abcdef"}
 	comments := []string{"s-comment", "s-label", "s-old", ""}
 
 	got := Linked(live, labels, comments)
@@ -37,7 +37,7 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 // A nil live list is not known, so a link label no live agent holds is not
 // Gone; a known list with no agent makes it Gone.
 func TestLinkedReportsNoGoneAgentWhileTheLiveListIsNotKnown(t *testing.T) {
-	labels := []string{"agent:s-1"}
+	labels := []string{"agent-session:s-1"}
 	if got := Linked(nil, labels, nil); len(got) != 0 {
 		t.Fatalf("Linked(nil) = %+v, want no agent", got)
 	}
@@ -49,29 +49,44 @@ func TestLinkedReportsNoGoneAgentWhileTheLiveListIsNotKnown(t *testing.T) {
 
 // A session the store would refuse in a label makes no link label.
 func TestLinkLabelRefusesASessionTheStoreRefuses(t *testing.T) {
-	if got, err := LinkLabel("0f3c-9a.b_c/d:e"); err != nil || got != "agent:0f3c-9a.b_c/d:e" {
-		t.Fatalf("LinkLabel = %q, %v; want agent:0f3c-9a.b_c/d:e", got, err)
+	if got, err := LinkLabel("0f3c-9a.b_c/d:e"); err != nil || got != "agent-session:0f3c-9a.b_c/d:e" {
+		t.Fatalf("LinkLabel = %q, %v; want agent-session:0f3c-9a.b_c/d:e", got, err)
 	}
-	for _, session := range []string{"", "Upper", "with space", strings.Repeat("a", 59)} {
+	for _, session := range []string{"", "Upper", "with space", strings.Repeat("a", 51)} {
 		if got, err := LinkLabel(session); err == nil {
 			t.Errorf("LinkLabel(%q) = %q, want an error", session, got)
 		}
 	}
-	if _, err := LinkLabel(strings.Repeat("a", 58)); err != nil {
+	if _, err := LinkLabel(strings.Repeat("a", 50)); err != nil {
 		t.Errorf("LinkLabel of a 64-character label = %v, want nil", err)
 	}
 }
 
 func TestVisibleLabelsHidesTheLinkLabels(t *testing.T) {
-	labels := []string{"agent:s-1", "backend", "agentic", "agent:s-2"}
+	labels := []string{"agent-session:s-1", "backend", "agentic", "agent-session:s-2"}
 	if got, want := VisibleLabels(labels), []string{"backend", "agentic"}; !slices.Equal(got, want) {
 		t.Fatalf("VisibleLabels = %v, want %v", got, want)
 	}
-	if want := []string{"agent:s-1", "backend", "agentic", "agent:s-2"}; !slices.Equal(labels, want) {
+	if want := []string{"agent-session:s-1", "backend", "agentic", "agent-session:s-2"}; !slices.Equal(labels, want) {
 		t.Fatalf("VisibleLabels changed its input to %v", labels)
 	}
 	if got, want := LinkSessions(labels), []string{"s-1", "s-2"}; !slices.Equal(got, want) {
 		t.Fatalf("LinkSessions = %v, want %v", got, want)
+	}
+}
+
+// A label with the old prefix agent: links nothing: it is a label as any
+// other, and the operator sees it.
+func TestTheOldPrefixIsNoLinkLabel(t *testing.T) {
+	labels := []string{"agent:s-1", "agent-session:s-2"}
+	if IsLinkLabel("agent:s-1") {
+		t.Error("IsLinkLabel(agent:s-1) = true, want false")
+	}
+	if got, want := VisibleLabels(labels), []string{"agent:s-1"}; !slices.Equal(got, want) {
+		t.Errorf("VisibleLabels = %v, want %v", got, want)
+	}
+	if got, want := LinkSessions(labels), []string{"s-2"}; !slices.Equal(got, want) {
+		t.Errorf("LinkSessions = %v, want %v", got, want)
 	}
 }
 

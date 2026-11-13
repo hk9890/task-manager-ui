@@ -713,7 +713,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentResumedMsg:
 		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.err))
 	case agentClosedMsg:
-		return m, batchCmds(modeCmd, m.reportAgentAction("close", "Closed", msg.agent, msg.err))
+		return m, batchCmds(modeCmd, m.handleAgentClosed(msg))
 	case agentFocusedMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Could not bring the agent to the front: %v", msg.err), toaster.StyleError))

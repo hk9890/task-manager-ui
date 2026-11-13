@@ -104,8 +104,8 @@ func TestALinkLabelMarksTheCardInAnyColumn(t *testing.T) {
 	m.SetSize(200, 30)
 	feedDashboardData(m, repository.DashboardData{
 		ReadyExplain: domain.ReadyExplainResult{Ready: []domain.IssueSummary{
-			{ID: "TM-1", Title: "Started", Type: "task", Status: "open", Priority: 2, Labels: []string{"backend", "agent:s-1"}},
-			{ID: "TM-2", Title: "Ended", Type: "task", Status: "open", Priority: 2, Labels: []string{"agent:s-gone"}},
+			{ID: "TM-1", Title: "Started", Type: "task", Status: "open", Priority: 2, Labels: []string{"backend", "agent-session:s-1"}},
+			{ID: "TM-2", Title: "Ended", Type: "task", Status: "open", Priority: 2, Labels: []string{"agent-session:s-gone"}},
 		}},
 	})
 	m.SetLiveAgents(map[string]agent.Status{"s-1": agent.NeedsYou})
