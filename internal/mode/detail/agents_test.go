@@ -74,7 +74,44 @@ func TestClicksOnTheAgentButtonsSendTheirRequests(t *testing.T) {
 	testui.AssertActionRequest(t, click("agent alt+i"), mode.Detail, mode.ActionLaunchAgent)
 	testui.AssertActionRequest(t, click("open alt+o"), mode.Detail, mode.ActionFocusAgent)
 	if view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0)); !strings.Contains(view, "Tab 3: running") {
-		t.Errorf("the Metadata pane does not list the linked agent:\n%s", view)
+		t.Errorf("the Details pane does not list the linked agent:\n%s", view)
+	}
+}
+
+// A click on the row of an agent in the Details pane asks the shell for that
+// agent, and gives the pane no focus; the wheel there scrolls nothing. The
+// row under the pointer is lit.
+func TestAClickOnAnAgentRowAsksForThatAgent(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	m := commentsBySessions(t, "s-1", "s-2")
+	m.SetLiveAgents(map[string]agent.Agent{
+		"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"},
+		"s-2": {Label: "Tab 4", Status: agent.Idle, Session: "s-2"},
+	})
+	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "Tab 4: idle")
+
+	m.HandleMouse(mode.MouseMsg{Kind: mode.MouseMove, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)
+	view := m.View(commentsWidth, commentsHeight, false, 0)
+	if testui.RowBand(t, view, "Tab 4: idle") == "" || testui.RowBand(t, view, "Tab 3: running") != "" {
+		t.Errorf("the pointer on Tab 4 does not light that row alone:\n%s", view)
+	}
+
+	focus := m.FocusPane
+	cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)
+	if cmd == nil {
+		t.Fatal("a click on an agent row asks for nothing")
+	}
+	request, ok := cmd().(mode.ActionRequestMsg)
+	if !ok || request.Action != mode.ActionOpenAgent || request.Agent != "s-2" {
+		t.Errorf("a click on Tab 4 sent %#v, want ActionOpenAgent for s-2", request)
+	}
+	if m.FocusPane != focus {
+		t.Errorf("a click on an agent row moved the focus to %d", m.FocusPane)
+	}
+
+	if cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseWheelDown, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight); cmd != nil || m.ContentScrollOffset != 0 {
+		t.Errorf("the wheel on an agent row: cmd %v, content offset %d", cmd != nil, m.ContentScrollOffset)
 	}
 }
 

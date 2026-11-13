@@ -143,9 +143,11 @@ spinner stands in the first cell of the menu bar.
 - `end` — jump to bottom
 - `enter` (Dependencies focused) — open the highlighted related issue
 
-The Metadata pane only shows the issue's fields. It takes no focus, no key and
-no click, and does not scroll: on a short screen it ends on `… (N more)`. Change
-a field in the issue editor (`alt+u`).
+The Details pane shows the issue's fields and the agents linked to it. It takes
+no focus and no key, and does not scroll: on a short screen it ends on
+`… (N more)`. Change a field in the issue editor (`alt+u`). A click on the row
+of an agent brings that agent to the front, and resumes a `gone` one first; the
+agent menu (`alt+g`) does the same from the keyboard.
 
 The comments stand at the end of the Content pane, newest first, each under a
 bold line with its author and time, with a rule between two of them. With the
@@ -172,7 +174,7 @@ then `open`, so no button takes the place of another. The key still works.
 An agent is linked to an issue by an `agent:<session>` label, which starting it
 from the intent menu or the selection menu writes. In the In Progress column an
 agent whose revier session wrote a comment on the issue is linked too.
-taskmgr-ui asks `revier` for the live agents every few seconds. The Metadata
+taskmgr-ui asks `revier` for the live agents every few seconds. The Details
 pane lists the linked agents in an `Agents` group, one line each: its name, its
 status — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier
 does not list — and what it does, when revier says. On the board, a card of any

@@ -359,9 +359,9 @@ func TestSelectCommentIsScrolledToByTheNextClampScroll(t *testing.T) {
 	}
 }
 
-// The Metadata pane only shows: no key and no click gives it the focus, and
+// No key and no click gives the Details pane the focus, and
 // the wheel does not scroll it.
-func TestTheMetadataPaneNeverTakesTheFocus(t *testing.T) {
+func TestTheDetailsPaneNeverTakesTheFocus(t *testing.T) {
 	t.Parallel()
 
 	// The screen of a 120x30 terminal, inside the margin.
@@ -372,7 +372,7 @@ func TestTheMetadataPaneNeverTakesTheFocus(t *testing.T) {
 		view := testui.AnsiEscapePattern.ReplaceAllString(m.View(width, height, false, 0), "")
 		for _, field := range []string{"Status", "Priority"} {
 			if strings.Contains(view, bar+field) {
-				t.Fatalf("the Metadata pane draws a cursor on %s:\n%s", field, view)
+				t.Fatalf("the Details pane draws a cursor on %s:\n%s", field, view)
 			}
 		}
 	}
@@ -398,10 +398,10 @@ func TestTheMetadataPaneNeverTakesTheFocus(t *testing.T) {
 	for _, kind := range []mode.MouseKind{mode.MouseClick, mode.MouseWheelDown} {
 		x, y := testui.FindCell(t, m.View(width, height, false, 0), "Priority")
 		if cmd := m.HandleMouse(mode.MouseMsg{Kind: kind, X: x, Y: y, At: mouseStart}, width, height); cmd != nil {
-			t.Fatalf("mouse event %d on the Metadata pane produced %#v", kind, cmd())
+			t.Fatalf("mouse event %d on the Details pane produced %#v", kind, cmd())
 		}
 		if m.FocusPane != uidetail.FocusPaneDependencies || m.ContentScrollOffset != 0 {
-			t.Fatalf("mouse event %d on the Metadata pane: focus %d, content offset %d", kind, m.FocusPane, m.ContentScrollOffset)
+			t.Fatalf("mouse event %d on the Details pane: focus %d, content offset %d", kind, m.FocusPane, m.ContentScrollOffset)
 		}
 	}
 }

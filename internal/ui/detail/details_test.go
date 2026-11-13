@@ -329,7 +329,7 @@ func TestRenderUsesTwoColumnInspectorAtBreakpoint(t *testing.T) {
 		Width: InspectorTwoColumnMinWidth,
 	})
 
-	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Metadata") {
+	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Details") {
 		t.Fatalf("expected three-pane layout headings at width %d, got:\n%s", InspectorTwoColumnMinWidth, view)
 	}
 }
@@ -352,7 +352,7 @@ func TestRenderResponsiveLayoutBelowLegacyBreakpoints(t *testing.T) {
 		Width: InspectorTwoColumnMinWidth - 1,
 	})
 
-	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Metadata") {
+	if !strings.Contains(view, "Dependencies") || !strings.Contains(view, "Content") || !strings.Contains(view, "Details") {
 		t.Fatalf("expected responsive detail layout headings below breakpoint, got:\n%s", view)
 	}
 	if strings.Index(view, "╭─ Content") > strings.Index(view, "╭─ Dependencies") {
@@ -431,7 +431,7 @@ func TestRenderWideLayoutWithoutBrowserFallsBackToPairedContentMetadata(t *testi
 	if strings.Contains(view, "Issue Browser") {
 		t.Fatalf("expected no special left browser without parent-group context, got:\n%s", view)
 	}
-	if !strings.Contains(view, "Metadata") {
+	if !strings.Contains(view, "Details") {
 		t.Fatalf("expected paired content/metadata layout without browser panel, got:\n%s", view)
 	}
 }
@@ -874,7 +874,7 @@ func TestColdStartSkeletonContainsAllThreePaneSectionHeaders(t *testing.T) {
 				Height:      24,
 			})
 
-			for _, header := range []string{"Dependencies", "Content", "Metadata"} {
+			for _, header := range []string{"Dependencies", "Content", "Details"} {
 				if !strings.Contains(view, header) {
 					t.Errorf("expected pane header %q in cold-start skeleton at %s, got:\n%s",
 						header, tc.name, view)

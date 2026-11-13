@@ -64,7 +64,7 @@ type State struct {
 	// button is lit.
 	Hover *Hit
 	// Agents is the agents linked to the issue; the open button acts on the
-	// first live one. The Metadata pane lists them.
+	// first live one. The Details pane lists them.
 	Agents []agent.Agent
 }
 
@@ -77,13 +77,16 @@ const (
 	// FocusPaneComments is the comments of the Content pane: a stop of its own
 	// after Content, with a cursor on one comment.
 	FocusPaneComments
+	// FocusPaneDetails is the Details pane. It never has the focus: only
+	// HitTest reports it, on the row of an agent.
+	FocusPaneDetails
 
 	// Backward-compatible alias.
 	FocusPaneBrowser = FocusPaneDependencies
 )
 
 // ScrollOffsets describes max scroll bounds for each pane that scrolls. The
-// Metadata pane does not.
+// Details pane does not.
 type ScrollOffsets struct {
 	Dependencies int
 	Content      int
@@ -235,13 +238,7 @@ func renderResponsiveLayout(detail domain.IssueDetail, state State, width, heigh
 
 	contentBox := RenderContentPane(state.contentPane(width, contentHeight))
 	dependenciesBox := renderDependenciesPane(detail, state, dependenciesWidth, bottomHeight)
-	metadataBox := RenderMetadataPane(MetadataPaneState{
-		Detail:   detail,
-		Width:    metadataWidth,
-		Height:   bottomHeight,
-		Skeleton: state.Skeleton,
-		Agents:   state.Agents,
-	})
+	metadataBox := RenderDetailsPane(state.detailsPane(metadataWidth, bottomHeight))
 
 	contentLines := strings.Split(contentBox, "\n")
 	dependencyLines := strings.Split(dependenciesBox, "\n")
@@ -361,13 +358,7 @@ func renderThreePane(detail domain.IssueDetail, state State, width, height int) 
 
 	contentBox := RenderContentPane(state.contentPane(contentWidth, height))
 
-	metaBox := RenderMetadataPane(MetadataPaneState{
-		Detail:   detail,
-		Width:    metadataWidth,
-		Height:   height,
-		Skeleton: state.Skeleton,
-		Agents:   state.Agents,
-	})
+	metaBox := RenderDetailsPane(state.detailsPane(metadataWidth, height))
 
 	leftLines := strings.Split(leftBox, "\n")
 	contentLines := strings.Split(contentBox, "\n")
@@ -425,6 +416,21 @@ type ContentPaneState struct {
 // contentPane is the Content pane of state at the size the layout gives it.
 // Render, HitTest and the scroll bounds build the same value, so a click lands
 // on what is drawn under it.
+// detailsPane is the Details pane of the state, width by height cells.
+func (state State) detailsPane(width, height int) DetailsPaneState {
+	pane := DetailsPaneState{
+		Detail:   state.Detail,
+		Width:    width,
+		Height:   height,
+		Skeleton: state.Skeleton,
+		Agents:   state.Agents,
+	}
+	if state.Hover != nil {
+		pane.Hover = state.Hover.Agent
+	}
+	return pane
+}
+
 func (state State) contentPane(width, height int) ContentPaneState {
 	pane := ContentPaneState{
 		Detail:          state.Detail,
@@ -473,8 +479,8 @@ func RenderContentPane(state ContentPaneState) string {
 	})
 }
 
-// MetadataPaneState is the state RenderMetadataPane draws from.
-type MetadataPaneState struct {
+// DetailsPaneState is the state RenderDetailsPane draws from.
+type DetailsPaneState struct {
 	Detail domain.IssueDetail
 	Width  int
 	Height int
@@ -482,14 +488,18 @@ type MetadataPaneState struct {
 	// numeric values, matching the Content pane's loading-state treatment.
 	Skeleton bool
 	// Agents is the agents linked to the issue, drawn as a group of
-	// their own right after Core, so a short pane keeps it.
+	// their own right after Core, so a short pane keeps it. A click on the
+	// row of one acts on that agent.
 	Agents []agent.Agent
+	// Hover is the session of the agent whose row is under the pointer, or "".
+	Hover string
 }
 
-// RenderMetadataPane renders the shared detail Metadata pane section. The pane
-// only shows: it takes no focus and does not scroll, so a pane too short for
-// its lines ends on the "more" indicator.
-func RenderMetadataPane(state MetadataPaneState) string {
+// RenderDetailsPane renders the Details pane of the issue: its fields and
+// the agents linked to it. It takes no focus and does not scroll, so a pane
+// too short for its lines ends on the "more" indicator. The row of an agent
+// is clickable, and the one under the pointer draws the hover band.
+func RenderDetailsPane(state DetailsPaneState) string {
 	width, height := state.Width, state.Height
 	if width <= 0 {
 		width = defaultDetailWidth
@@ -498,18 +508,31 @@ func RenderMetadataPane(state MetadataPaneState) string {
 		height = defaultDetailHeight
 	}
 
+	lines, sessions := detailsPaneLines(state, width)
+	if state.Hover != "" {
+		for idx, session := range sessions {
+			if session == state.Hover {
+				lines[idx] = styles.RowHighlight(lines[idx], width-2, false, true)
+			}
+		}
+	}
+	view, _ := sliceWithOffset(lines, 0, max(1, height-2), width-2)
+	return styles.FormSection(styles.FormSectionConfig{
+		Width:   width,
+		Height:  height,
+		TopLeft: "Details",
+		Content: view,
+	})
+}
+
+// detailsPaneLines is the lines of the Details pane before the window, and
+// the session of the agent each line stands for, "" for none.
+func detailsPaneLines(state DetailsPaneState, width int) (lines, sessions []string) {
 	groups := metadataGroups(state.Detail, state.Skeleton)
 	if agents, ok := agentsGroup(state.Agents); ok {
 		groups = slices.Insert(groups, 1, agents)
 	}
-	metadata := renderMetadataGroups(groups, width-2)
-	metaView, _ := sliceWithOffset(metadata, 0, max(1, height-2), width-2)
-	return styles.FormSection(styles.FormSectionConfig{
-		Width:   width,
-		Height:  height,
-		TopLeft: "Metadata",
-		Content: metaView,
-	})
+	return renderMetadataGroups(groups, width-2)
 }
 
 func splitThreePaneWidths(total int) (left, content, metadata int) {
@@ -846,7 +869,7 @@ func renderCompact(detail domain.IssueDetail, width int) string {
 	metadata := renderMetadataRail(detail, width, false)
 	if len(metadata) > 0 {
 		out = append(out, "")
-		out = append(out, "Metadata")
+		out = append(out, "Details")
 		out = append(out, metadata...)
 	}
 

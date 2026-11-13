@@ -87,7 +87,7 @@ func renderProseContentSkeleton(width, n, phase int) []string {
 
 // skeletonDetail returns a synthetic IssueDetail for cold-start skeleton
 // rendering.  Only Summary.ID is set; everything else is empty/zero so the
-// Dependencies and Metadata panes render natural empty frames.
+// Dependencies and Details panes render natural empty frames.
 func skeletonDetail(targetID string) domain.IssueDetail {
 	return domain.IssueDetail{
 		Summary: domain.IssueSummary{

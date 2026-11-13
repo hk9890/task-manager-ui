@@ -15,6 +15,9 @@ import (
 type metadataField struct {
 	label string
 	value string
+	// session is the agent a row of the Agents group stands for; "" on
+	// every other row.
+	session string
 }
 
 type metadataGroup struct {
@@ -30,22 +33,30 @@ const (
 )
 
 func renderMetadataRail(detail domain.IssueDetail, width int, skeleton bool) []string {
-	return renderMetadataGroups(metadataGroups(detail, skeleton), width)
+	lines, _ := renderMetadataGroups(metadataGroups(detail, skeleton), width)
+	return lines
 }
 
-func renderMetadataGroups(groups []metadataGroup, width int) []string {
+// renderMetadataGroups draws the groups, and reports for each line the
+// session of the agent it stands for, "" for a line that stands for none.
+func renderMetadataGroups(groups []metadataGroup, width int) (lines, sessions []string) {
 	if len(groups) == 0 || width < 1 {
-		return nil
+		return nil, nil
 	}
 
 	out := make([]string, 0, 24)
+	sessions = make([]string, 0, 24)
+	add := func(line, session string) {
+		out = append(out, line)
+		sessions = append(sessions, session)
+	}
 	for i, group := range groups {
 		if i > 0 {
-			out = append(out, renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-metadataIndent)), width))
+			add(renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-metadataIndent)), width), "")
 		}
 
 		if group.title != "" {
-			out = append(out, renderMetadataPrefixedLine(group.title, width))
+			add(renderMetadataPrefixedLine(group.title, width), "")
 		}
 
 		labelWidth := 0
@@ -56,15 +67,15 @@ func renderMetadataGroups(groups []metadataGroup, width int) []string {
 		}
 
 		for _, field := range group.fields {
-			out = append(out, renderMetadataPrefixedLine(fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value), width))
+			add(renderMetadataPrefixedLine(fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value), width), field.session)
 		}
 
 		for _, label := range group.labels {
-			out = append(out, renderMetadataPrefixedLine("• "+label, width))
+			add(renderMetadataPrefixedLine("• "+label, width), "")
 		}
 	}
 
-	return out
+	return out, sessions
 }
 
 func renderMetadataPrefixedLine(content string, width int) string {
@@ -174,8 +185,9 @@ func agentsGroup(agents []agent.Agent) (metadataGroup, bool) {
 	group := metadataGroup{title: "Agents"}
 	for _, a := range agents {
 		group.fields = append(group.fields, metadataField{
-			label: displaytext.OneLine(a.Label),
-			value: displaytext.OneLine(agentValue(a)),
+			label:   displaytext.OneLine(a.Label),
+			value:   displaytext.OneLine(agentValue(a)),
+			session: a.Session,
 		})
 	}
 	return group, true

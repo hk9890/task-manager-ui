@@ -10,8 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -165,4 +168,50 @@ func TestTheAgentMenuKeyWithoutAnAgentWarns(t *testing.T) {
 	if m.selMenu != nil || !strings.Contains(m.toast.View(), "No agent on this issue") {
 		t.Errorf("menu %v, toast %q", m.selMenu != nil, m.toast.View())
 	}
+}
+
+// A click on the row of an agent in the Details pane does what its entry in
+// the agent menu does: a live one comes to the front, a gone one is resumed
+// first. A request for an agent no longer linked warns and asks the host
+// nothing.
+func TestAClickOnAnAgentRowFocusesOrResumesThatAgent(t *testing.T) {
+	click := func(t *testing.T, m Model, text string) Model {
+		t.Helper()
+		x, y := testui.FindCell(t, plainShell(m), text)
+		return send(t, m, testui.Click(x, y, tea.MouseLeft))
+	}
+
+	t.Run("live", func(t *testing.T) {
+		m, client, _, _ := agentShell(t, runningOnTab3())
+		click(t, m, "Tab 3: running")
+		want := []fakes.AgentHostCall{{Method: "Focus", Arg: "demo:home:3"}}
+		if got := hostCalls(client, "Focus", "Resume"); !reflect.DeepEqual(got, want) {
+			t.Errorf("calls = %+v, want %+v", got, want)
+		}
+	})
+
+	t.Run("gone", func(t *testing.T) {
+		m, client, _, _ := agentShell(t)
+		client.Resumed = agent.Agent{Ref: "demo:home:5", Session: "s-gone-0123", Label: "Tab 5", Status: agent.Idle}
+		m = withLinkLabel(t, m, "s-gone-0123")
+		m = click(t, m, "Session s-gone-0: gone")
+		want := []fakes.AgentHostCall{{Method: "Resume", Arg: "s-gone-0123"}, {Method: "Focus", Arg: "demo:home:5"}}
+		if got := hostCalls(client, "Resume", "Focus"); !reflect.DeepEqual(got, want) {
+			t.Errorf("calls = %+v, want %+v", got, want)
+		}
+		if !strings.Contains(m.toast.View(), "Resumed Session s-gone-0") {
+			t.Errorf("toast = %q, want the resume reported", m.toast.View())
+		}
+	})
+
+	t.Run("no longer linked", func(t *testing.T) {
+		m, client, _, _ := agentShell(t, runningOnTab3())
+		m = send(t, m, mode.ActionRequestMsg{Mode: mode.Detail, Action: mode.ActionOpenAgent, Agent: "s-other"})
+		if got := hostCalls(client, "Focus", "Resume"); len(got) != 0 {
+			t.Errorf("calls = %+v, want none", got)
+		}
+		if !strings.Contains(m.toast.View(), "no longer linked") {
+			t.Errorf("toast = %q, want a warning", m.toast.View())
+		}
+	})
 }

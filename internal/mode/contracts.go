@@ -133,13 +133,16 @@ type ActionRequestMsg struct {
 	// the request does not depend on a SelectionChangedMsg arriving first. The
 	// editor actions leave it nil.
 	Selection *Selection
+	// Agent is the session of the agent an ActionOpenAgent acts on; "" for
+	// every other action.
+	Agent string
 }
 
 // RequestActionCmd returns the Cmd that asks the shell for a shell-owned action
 // on behalf of the mode with this id.
 //
-// It and RequestOpenDetailCmd are the constructors of the whole contract, so
-// no mode builds the message inline.
+// It, RequestOpenDetailCmd and RequestOpenAgentCmd are the constructors of
+// the whole contract, so no mode builds the message inline.
 func RequestActionCmd(id ID, action Action) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: action}
@@ -151,6 +154,14 @@ func RequestActionCmd(id ID, action Action) tea.Cmd {
 func RequestOpenDetailCmd(id ID, selection *Selection) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: ActionOpenDetail, Selection: selection}
+	}
+}
+
+// RequestOpenAgentCmd returns the Cmd that asks the shell to bring the agent
+// of session to the front, on behalf of the mode with this id.
+func RequestOpenAgentCmd(id ID, session string) tea.Cmd {
+	return func() tea.Msg {
+		return ActionRequestMsg{Mode: id, Action: ActionOpenAgent, Agent: session}
 	}
 }
 
@@ -181,6 +192,11 @@ const (
 	ActionLaunchAgent Action = "launch_agent"
 	ActionFocusAgent  Action = "focus_agent"
 	ActionAgentMenu   Action = "agent_menu"
+
+	// ActionOpenAgent is a click on the row of an agent in the Details pane
+	// of Detail: the shell brings that agent to the front, and resumes it
+	// first when it is gone.
+	ActionOpenAgent Action = "open_agent"
 )
 
 // MouseKind is what the pointer did.

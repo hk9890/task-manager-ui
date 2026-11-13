@@ -112,6 +112,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		{Title: "Mouse", Entries: []helpscreen.Entry{
 			{Key: "click", Desc: "select a row or a comment, switch to a tab, focus a pane or a field of the issue editor"},
 			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
+			{Key: "click", Desc: "an agent in the Details pane: bring it to the front, resuming a gone one first"},
 			{Key: "second click", Desc: "open the row"},
 			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the text of the issue editor and this screen"},
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},

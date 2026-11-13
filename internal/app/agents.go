@@ -106,6 +106,22 @@ func (m *Model) focusOneAgent(a agent.Agent) tea.Cmd {
 	}
 }
 
+// openAgent brings the agent of session, linked to the issue open in Detail,
+// to the front: a live one at once, a gone one after its resume. The click on
+// its row in the Details pane asks for it.
+func (m *Model) openAgent(session string) tea.Cmd {
+	for _, a := range m.detail.LinkedAgents() {
+		switch {
+		case a.Session != session || m.services.Agents == nil:
+		case a.Status == agent.Gone:
+			return m.resumeAgent(a)
+		default:
+			return m.focusOneAgent(a)
+		}
+	}
+	return m.showToast("That agent is no longer linked to this issue", toaster.StyleWarn)
+}
+
 // openAgentMenu opens the menu of the agents linked to the issue open in
 // Detail, in the middle of the screen: focus or close each live one, resume
 // each gone one. The agents are taken when the menu opens.

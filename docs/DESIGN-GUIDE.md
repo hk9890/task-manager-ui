@@ -121,7 +121,7 @@ The rest is the same in every set, and each has one definition:
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
 | `─` in `BorderDefaultColor` | the rule under the Content header and between two comments | `contentHeaderRule` in `internal/ui/detail/details.go` |
-| `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
+| `• ` | a list item of the Details pane | `internal/ui/detail/metadata.go` |
 | ` • ` | separator between legend hints | `legendSeparator` in `internal/ui/styles/legend.go` |
 | `·` | separator between fields, between menu-bar buttons and between the buttons in a pane | inline at the call site; `buttonSeparator` in `internal/ui/detail/buttons.go` |
 
@@ -176,10 +176,12 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
 ### A button in a pane
 
 A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
-has them all in the Content pane: `open`, `agents`, `agent` and `edit` on the ID line, the first
+has its buttons in the Content pane: `open`, `agents`, `agent` and `edit` on the ID line, the first
 line of the pane, `add` on the Comments heading, and `edit` and `delete` on the header line of the
 selected comment. `open` is drawn only while a live agent is linked to the issue, `agents` only
-while any agent is (`State.Agents`).
+while any agent is (`State.Agents`). The Details pane may hold buttons and clickable rows too; its
+one clickable row today is the row of an agent
+([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
 
 - Draw it with `paneButton` (`internal/ui/detail/buttons.go`): the two runs and the roles of a
   menu-bar button, `" label "` in `ShellActionColor` and `"key "` in `ShellFooterHelpColor`.
@@ -200,6 +202,26 @@ while any agent is (`State.Agents`).
   lands on the button that is drawn.
 - A pane border holds no button.
 - A pane in skeleton state draws no button and reports none.
+
+### A clickable row in the Details pane
+
+The Details pane of Detail shows the fields of the issue and the agents linked to it, and it may
+carry buttons and actions on what it shows. It takes no focus, so a click there acts at once: one
+click runs the row, no first click selects it.
+
+- A row of the `Agents` group is clickable. A click brings that agent to the front, and resumes a
+  gone one first (`ActionOpenAgent`, `Model.openAgent`, `internal/app/agents.go`). The agent is
+  named by its session in the request (`mode.RequestOpenAgentCmd`), so the click acts on the row
+  that is drawn. A request for an agent that is no longer linked raises a warning toast.
+- The keyboard path to the same action is the agent menu (`agent_menu`): its `Focus <label>` and
+  `Resume <label>` entries do what the click does. Every new action in the pane needs a key or a
+  menu entry that does the same, as a button in a pane does.
+- Under the pointer the row draws the hover band, `styles.RowHighlight` with `RowHoverBgColor`,
+  across the inner width of the pane, as a reference row of the Dependencies pane does.
+- `HitTest` reports `FocusPaneDetails` and the session in `Hit.Agent` on such a row only, read
+  through `detailsPaneLines`, the lines `RenderDetailsPane` draws. Every other line of the pane,
+  its border, the `… (N more)` row and the pane in skeleton state report nothing.
+- The wheel over the pane scrolls nothing.
 
 ## The screen margin
 
@@ -560,12 +582,13 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   comment line starts with the 2-cell gutter whatever the selection, so the line count does not
   follow the cursor (`renderComments`, `internal/ui/detail/comments.go`). The bar is drawn only
   while the comments have the focus (`FocusPaneComments`).
-- The Metadata pane of Detail only shows. It is no focus stop (`focusStops`,
-  `internal/mode/detail/model.go`), so its border never takes the focus colour; `HitTest` reports
-  nothing on it; it has no cursor and no scroll offset. A pane too short for its lines ends on
-  `… (N more)` (`RenderMetadataPane`). Its `Agents` group, drawn only with a linked agent
-  and right after `Core` so a short pane keeps it, only shows too: `open` and `agents` on the ID line act on the agents. Every action on the issue is a key and a button of the
-  Content pane ([A button in a pane](#a-button-in-a-pane)).
+- The Details pane of Detail is no focus stop (`focusStops`, `internal/mode/detail/model.go`), so
+  its border never takes the focus colour; it has no cursor and no scroll offset. A pane too short
+  for its lines ends on `… (N more)` (`RenderDetailsPane`). Its `Agents` group is drawn only with
+  a linked agent, right after `Core` so a short pane keeps it, and its rows take a click
+  ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)). Every action on
+  the issue itself is a key and a button of the Content pane
+  ([A button in a pane](#a-button-in-a-pane)).
 - A move of the comment cursor scrolls the Content pane with two calls, the last line of the
   comment and then its first: a comment that fits is drawn whole and a taller one starts at its
   header line (`scrollToComment`, `internal/mode/detail/model.go`).
@@ -630,6 +653,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - A click on a button in a pane sends the request its key sends (`buttonActions`,
   `internal/mode/detail/mouse.go`). A click on a comment gives the comments the focus and puts
   the cursor on it; a second click does nothing more, and the click does not scroll the pane.
+  A click on the row of an agent in the Details pane brings that agent to the front; the agent
+  menu is its key ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
 - The configuration screen takes no mouse event: `handleMouse` returns before the header and the
   surface are measured. Text selection still works there, because it runs before the routing.
 - The issue editor takes the event at the same place, before the header is measured
@@ -703,7 +728,7 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   one, and Close. The `agents` button of the ID line opens it too. A close of an agent that is running or needs you asks first
   and then forces the close; an idle one closes at once. A resume reopens the conversation and
   brings it to the front. Without a linked agent the key raises a warning toast.
-- The Agents group of the Metadata pane is each linked agent's label, then its status word —
+- The Agents group of the Details pane is each linked agent's label, then its status word —
   `running`, `idle`, `needs you`, `gone` — and ` · ` and what it does, when the host says. A
   link label no live agent holds is `gone` after a poll that answered. Before the first answer
   and after a failed poll the live agents are not known, so such a label draws no row and the

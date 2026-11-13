@@ -88,7 +88,7 @@ func TestModelDetailModeSupportsScrollingLongContent(t *testing.T) {
 	m = applyMessages(t, m, runBatch(cmd))
 
 	viewTop := testui.View(m)
-	if !strings.Contains(viewTop, "Metadata") || !strings.Contains(viewTop, "Core") || !strings.Contains(viewTop, "Type    : task") {
+	if !strings.Contains(viewTop, "Details") || !strings.Contains(viewTop, "Core") || !strings.Contains(viewTop, "Type    : task") {
 		t.Fatalf("expected metadata section in initial detail view, got:\n%s", viewTop)
 	}
 

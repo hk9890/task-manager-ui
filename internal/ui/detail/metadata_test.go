@@ -328,12 +328,12 @@ func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
 func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	t.Parallel()
 
-	state := MetadataPaneState{
+	state := DetailsPaneState{
 		Detail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Type: "task", Status: "in_progress"}},
 		Width:  metadataRailWidth,
 		Height: 40,
 	}
-	if view := testui.Downsample(RenderMetadataPane(state)); strings.Contains(view, "Agents") {
+	if view := testui.Downsample(RenderDetailsPane(state)); strings.Contains(view, "Agents") {
 		t.Errorf("a pane with no linked agent draws an Agents group:\n%s", view)
 	}
 
@@ -342,7 +342,7 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 		{Label: "Tab 1\x1b", Status: agent.Running, Session: "s-1"},
 		{Label: "Tab 10", Status: agent.Idle, Session: "s-10"},
 	}
-	view := RenderMetadataPane(state)
+	view := RenderDetailsPane(state)
 	if strings.Contains(view, "Tab 1\x1b") {
 		t.Errorf("an agent host value reaches the screen uncleaned:\n%q", view)
 	}
@@ -362,7 +362,7 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	}
 
 	state.Height = 12
-	if view := testui.Downsample(RenderMetadataPane(state)); !strings.Contains(view, "Tab 10: idle") {
+	if view := testui.Downsample(RenderDetailsPane(state)); !strings.Contains(view, "Tab 10: idle") {
 		t.Errorf("a short pane cuts the Agents group:\n%s", view)
 	}
 }
@@ -372,7 +372,7 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 func TestTheAgentsGroupSaysTheActivityAndHidesTheLinkLabels(t *testing.T) {
 	t.Parallel()
 
-	state := MetadataPaneState{
+	state := DetailsPaneState{
 		Detail: domain.IssueDetail{Summary: domain.IssueSummary{
 			ID: "tm-1", Type: "task", Status: "open",
 			Labels: []string{"backend", "agent:s-1", "agent:s-2"},
@@ -384,7 +384,7 @@ func TestTheAgentsGroupSaysTheActivityAndHidesTheLinkLabels(t *testing.T) {
 			{Label: "Session s-2", Status: agent.Gone, Session: "s-2"},
 		},
 	}
-	view := testui.Downsample(RenderMetadataPane(state))
+	view := testui.Downsample(RenderDetailsPane(state))
 	for _, want := range []string{"Tab 1      : running · tests", "Session s-2: gone", "• backend"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the pane does not draw %q:\n%s", want, view)

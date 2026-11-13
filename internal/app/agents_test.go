@@ -75,7 +75,7 @@ func callsOf(client *fakes.FakeAgentHost, method string) []string {
 
 // The first poll runs when the store is bound; a tick polls again, for the
 // project root. An agent that comes up between two polls shows on the ID line
-// and in the Metadata pane.
+// and in the Details pane.
 func TestAPollTickShowsTheAgentThatCommentedOnTheIssue(t *testing.T) {
 	m, client, _, _ := agentShell(t)
 	if view := plainShell(m); strings.Contains(view, "open alt+o") || strings.Contains(view, "Agents") {

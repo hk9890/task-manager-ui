@@ -514,8 +514,8 @@ func (m *Model) focusPane() detail.FocusPane {
 }
 
 // focusStops is the panes left and right walk, in that order. The comments are
-// a stop of their own while the issue has one. The Metadata pane is no stop:
-// it only shows.
+// a stop of their own while the issue has one. The Details pane is no stop:
+// its agent rows take a click, and the agent menu is their keyboard path.
 func (m *Model) focusStops() []detail.FocusPane {
 	stops := []detail.FocusPane{detail.FocusPaneDependencies, detail.FocusPaneContent}
 	if len(m.Detail.Comments) > 0 {
@@ -581,7 +581,7 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 	return m.BrowserSelectedIndex != previous
 }
 
-// RenderDetail returns detail used for content/metadata panes while keeping
+// RenderDetail returns detail used for content/details panes while keeping
 // dependency-browser context anchored to the selected issue.
 func (m *Model) RenderDetail() domain.IssueDetail {
 	content := m.Detail
