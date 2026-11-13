@@ -203,6 +203,14 @@ type Model struct {
 	agentPollFailing  bool
 	projectLookupWait int
 
+	// agentStarts is the starts of an agent in flight, from an intent or the
+	// selection menu's ask, and agentResumes the sessions a resume is in
+	// flight for. A start or a resume waits for the agent's harness, which
+	// takes seconds, so the header spinner turns while either is not empty.
+	// Neither is cleared by a store switch: the result of each still comes.
+	agentStarts  int
+	agentResumes map[string]bool
+
 	spinnerFrame int
 
 	// spinnerTicking is true while a loading.TickMsg is scheduled. The tick used
@@ -711,6 +719,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentAnsweredMsg:
 		return m, batchCmds(modeCmd, m.handleAgentAnswered(msg))
 	case agentResumedMsg:
+		delete(m.agentResumes, msg.agent.Session)
 		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.err))
 	case agentClosedMsg:
 		return m, batchCmds(modeCmd, m.handleAgentClosed(msg))

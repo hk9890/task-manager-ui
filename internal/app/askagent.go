@@ -71,18 +71,15 @@ func (m *Model) submitAgentAsk(values map[string]string) tea.Cmd {
 // selection and the instruction, and links it to the issue with the label of
 // its session, as startAgent does.
 func (m *Model) askAgent(ask agentAsk, instruction string) tea.Cmd {
+	if off := m.agentsOff(); off != "" {
+		return m.showToast(off, toaster.StyleWarn)
+	}
 	host, repo, root := m.services.Agents, m.services.Repo, m.services.ProjectRoot
-	if host == nil {
-		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
-	}
-	m.projectRootMissing = projectRootMissing(root)
-	if m.projectRootMissing {
-		return m.showToast("Agents are off: project path not accessible: "+root, toaster.StyleWarn)
-	}
 	issueID := ask.issue.ID
 	spec := agent.Spec{Root: root, Prompt: askPrompt(issueID, ask.text, instruction)}
 	asking := m.showToast("Asking an agent on "+displaytext.OneLine(issueID)+"…", toaster.StyleInfo)
 	epoch := m.storeEpoch
+	m.agentStarts++
 	start := func() tea.Msg {
 		return agentAskStartedMsg(startAndLink(host, repo, epoch, issueID, spec))
 	}
@@ -105,6 +102,7 @@ func askPrompt(issueID, text, instruction string) string {
 // and not waited on: it has no turn. After a store switch the start is
 // reported and not waited on: the wait belongs to the store it began on.
 func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
+	m.agentStarts = max(m.agentStarts-1, 0)
 	issueID := displaytext.OneLine(msg.issueID)
 	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not ask an agent on %s: %v", issueID, msg.err), toaster.StyleError)

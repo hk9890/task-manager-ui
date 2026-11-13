@@ -38,6 +38,7 @@ func (m *Model) startAgent(issue domain.IssueDetail, intent config.Intent) tea.C
 	issueID := issue.Summary.ID
 	starting := m.showToast(fmt.Sprintf("Starting an agent to %s %s…", displaytext.OneLine(intent.Name), displaytext.OneLine(issueID)), toaster.StyleInfo)
 	epoch := m.storeEpoch
+	m.agentStarts++
 	start := func() tea.Msg {
 		return agentStartedMsg(startAndLink(host, repo, epoch, issueID, spec))
 	}
@@ -74,6 +75,7 @@ func startAndLink(host agent.Host, repo repository.Repository, epoch int, issueI
 // failed start and a failed link both, and reloads the issue the label was
 // written to when its store is still the active one.
 func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
+	m.agentStarts = max(m.agentStarts-1, 0)
 	issueID := displaytext.OneLine(msg.issueID)
 	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not start an agent on %s: %v", issueID, msg.err), toaster.StyleError)

@@ -175,12 +175,17 @@ func renderLine(state State, l line, width int) string {
 }
 
 // agentLine is the name of a, its status in the colour of the status, and
-// what it does, cut to room cells.
+// what it does, cut to room cells. The name is cut first, so the status the
+// tab sorts by stays while there is room for it and one cell of the name.
 func agentLine(a agent.Agent, room int) string {
-	name := textutil.TruncateString(displaytext.OneLine(a.Title()), room)
+	status := "  " + agent.StatusWord(a.Status)
+	nameRoom := room
+	if room > lipgloss.Width(status) {
+		nameRoom = room - lipgloss.Width(status)
+	}
+	name := textutil.TruncateString(displaytext.OneLine(a.Title()), nameRoom)
 	out := lipgloss.NewStyle().Bold(true).Foreground(styles.TextPrimaryColor).Render(name)
 	left := room - lipgloss.Width(name)
-	status := "  " + agent.StatusWord(a.Status)
 	if left < lipgloss.Width(status) {
 		return out
 	}

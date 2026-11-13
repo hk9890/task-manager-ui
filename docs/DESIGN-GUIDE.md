@@ -347,23 +347,30 @@ agents.
   unlink of its label.
 - A row is two lines. The first is the agent's title (`agent.Agent.Title`: the harness's name, or
   the label without one), bold, its status word in the colour of `styles.AgentStatusStyle` (`gone`
-  muted), and ` · ` and what it does, muted. The second, muted, is the label when the title is a
+  muted), and ` · ` and what it does, muted. A long title is cut before the status, never the
+  status (`agentLine`, `internal/ui/agents/agents.go`). The second, muted, is the label when the title is a
   name, and the ID and the title of the linked issue. The selection gutter and the band stand on
   both lines.
 - Without a row the box says `No agents` and, on the next line, why: no agent host, no project
   path, the path not accessible, no project of the host, the error of the last poll, or that the
   host has not answered yet (`Model.agentsAbsent`).
 - The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
-  the front and resumes a gone one first (`ActionOpenAgent`). `close_agent` closes it, and asks
+  the front and resumes a gone one first (`ActionOpenAgent`). A resume raises an info toast,
+  `Resuming <title>…`, and turns the header spinner until it ends; an Enter on the same session
+  while it is in flight starts nothing (`Model.resumeAgent`). `close_agent` closes it, and asks
   first when it is running or needs you (`ActionCloseAgent`, `Model.requestAgentClose`). On a gone
   one it unlinks the agent without a host call (`Model.unlinkGoneAgent`), and a success toast says
   `Unlinked <title>`. A close unlinks the agent, as the agent dialog's does. `open_issue` opens the
   linked issue in Detail, and Escape there returns to the tab; on an agent linked to none it raises
-  the toast an empty selection raises. The legend names the four, `close_agent` as `unlink` while
-  a gone row is selected (`footerHints`, `internal/app/render.go`); the tab has no button.
+  the toast an empty selection raises. The legend names the keys that act on the selected row as
+  they act on it: `open_detail` as `resume` and `close_agent` as `unlink` on a gone row,
+  `open_issue` only on a linked one, and none of the three without a row (`footerHints`,
+  `internal/app/render.go`); the tab has no button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
-  none, so the issue keys act on that issue. The selection stays on its agent when a poll moves the
-  rows. A failed poll empties the tab but keeps that agent, and the next poll that answers selects
+  none, so the issue keys act on that issue. A read that changes that issue, its status say,
+  announces it again. Until the live agents and the linked issues are both known the selection
+  stays on the top row, so the tab opens on the agent that needs the operator most. The
+  selection stays on its agent when a poll moves the rows. A failed poll empties the tab but keeps that agent, and the next poll that answers selects
   it again. A Detail opened with `open_issue` keeps its issue while a poll moves or removes the row
   under it: the shell holds that issue as a drill-in (`ActionOpenDetail` in `Model.update`).
 - One click selects a row, a second brings its agent to the front; the wheel moves the selection.
@@ -788,7 +795,9 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - The Agents group of the Details pane is each linked agent's status word — `running`, `idle`,
   `needs you`, `gone` (`agent.StatusWord`) — padded to the longest in the group, then its title
   (`agent.Agent.Title`). The pane width cuts a long title, never the status. What it does is on
-  the Agents tab. A link label no live agent holds is `gone` after a poll that answered. Before the first answer
+  the Agents tab. A live agent whose session wrote a comment on the issue is in the group on an
+  issue of any status (`agent.Linked`); the board and the Agents tab take a comment link on an In
+  Progress issue only. A link label no live agent holds is `gone` after a poll that answered. Before the first answer
   and after a failed poll the live agents are not known, so such a label draws no row and the
   agent dialog offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
 - The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
@@ -851,7 +860,9 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - Long work renders the spinner: advance the frame with `loading.NextFrame`, draw it with
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
 - The shell says work is in flight with the spinner cell in front of the tabs
-  (`Model.headerSpinnerCell`), drawn while `Model.workInFlight` reports a surface loading; idle draws nothing.
+  (`Model.headerSpinnerCell`), drawn while `Model.workInFlight` reports a surface loading, or an
+  agent start or resume in flight: each waits for the agent's harness, which takes seconds; idle
+  draws nothing.
   In Detail, which has no tab line, the glyph stands in the menu bar's first cell
   ([The shell chrome](#the-shell-chrome)).
 - A cold start draws skeleton rows (`issuerow.RenderCompactSkeleton`) rather than an empty frame.

@@ -2,6 +2,8 @@ package agents
 
 import (
 	"context"
+	"errors"
+	"log/slog"
 	"reflect"
 	"testing"
 	"time"
@@ -174,6 +176,54 @@ func TestSelectOfAnAgentWithoutARowKeepsTheSelection(t *testing.T) {
 	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.NeedsYou)}, true, "")
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-1" {
 		t.Errorf("after the rows reordered selected %q, want s-1", row.Agent.Session)
+	}
+}
+
+// Before the linked issues are read the rows are not in their last order:
+// the selection stays on the top row, so once they come it is on the agent
+// that needs the operator most, not on the one that was first before.
+func TestTheFirstSelectionIsTheTopRowOnceTheRowsSettle(t *testing.T) {
+	t.Parallel()
+	m := newTab(t)
+	m.SetCommentLinks(map[string]domain.IssueSummary{"s-work": {ID: "tm-2", Status: "in_progress"}})
+	m.SetAgents([]agent.Agent{live("s-7", "7", agent.NeedsYou), live("s-work", "work", agent.Running)}, true, "")
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-work" {
+		t.Fatalf("fixture: before the read selected %q, want s-work on top", row.Agent.Session)
+	}
+
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-7"}}}})
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-7" {
+		t.Fatalf("after the read selected %q, want s-7, the top row", row.Agent.Session)
+	}
+	// From here the selection follows its agent.
+	m.SetAgents([]agent.Agent{live("s-7", "7", agent.Running), live("s-work", "work", agent.NeedsYou)}, true, "")
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-7" {
+		t.Errorf("after the rows reordered selected %q, want s-7", row.Agent.Session)
+	}
+}
+
+// A read of the linked issues that fails keeps the rows of the last one that
+// succeeded and ends the read, so the next reload reads again.
+func TestAFailedReadKeepsTheRowsAndReadsAgain(t *testing.T) {
+	t.Parallel()
+	m := NewModel(context.Background(), memory.New(), slog.New(slog.DiscardHandler), keys(t))
+	m.SetSize(80, 24)
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-1"}}}})
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, "")
+	before := titles(m.rows)
+
+	if m.Reload() == nil {
+		t.Fatal("fixture: Reload started no read")
+	}
+	m.Update(linkedIssuesMsg{err: errors.New("store locked")})
+	if got := titles(m.rows); !reflect.DeepEqual(got, before) {
+		t.Errorf("rows after a failed read = %v, want %v", got, before)
+	}
+	if m.IsLoading() {
+		t.Error("the failed read is still in flight")
+	}
+	if m.Reload() == nil {
+		t.Error("Reload after a failed read starts no read")
 	}
 }
 

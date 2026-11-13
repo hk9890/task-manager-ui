@@ -10,6 +10,7 @@ import (
 	"context"
 	"log/slog"
 	"maps"
+	"reflect"
 	"slices"
 	"strings"
 
@@ -269,7 +270,7 @@ func (m *Model) move(delta int) tea.Cmd {
 // key is given up; once they are settled, an agent without a row is gone
 // from the tab and the selection stays on the row at its place.
 func (m *Model) rebuild() tea.Cmd {
-	before := m.selectedIssueID()
+	before := m.selectedIssue()
 	m.rows = buildRows(m.live, m.liveKnown, m.issues, m.commentLinks)
 	rowOf := func(key string) int {
 		if key == "" {
@@ -286,11 +287,16 @@ func (m *Model) rebuild() tea.Cmd {
 		m.selected = at
 	}
 	m.selected = min(max(m.selected, 0), max(len(m.rows)-1, 0))
-	if m.chosen == "" || (m.settled() && rowOf(m.chosen) < 0) {
+	// Before the rows settle their order is not final: the selection stays on
+	// the first row, whichever agent comes there, unless the operator or
+	// Select chose one.
+	if m.settled() && (m.chosen == "" || rowOf(m.chosen) < 0) {
 		m.chosen = m.selectedKey()
 	}
 	m.offset = uiagents.EnsureVisible(m.rows, m.selected, m.offset, m.height)
-	if m.selectedIssueID() == before {
+	// A read that changed the selected issue, its status say, announces it
+	// too: the shell's issue keys and Ask read the selection.
+	if reflect.DeepEqual(m.selectedIssue(), before) {
 		return nil
 	}
 	return m.selectionChangedCmd()
@@ -303,11 +309,10 @@ func (m *Model) settled() bool {
 	return m.liveKnown && m.issuesKnown && !m.loading
 }
 
-// SelectedGone reports whether the selected row is a gone agent, which
-// close_agent unlinks rather than closes.
-func (m *Model) SelectedGone() bool {
-	row, ok := m.selectedRow()
-	return ok && row.Agent.Status == agent.Gone
+// SelectedRow is the selected row, for the legend: ok is false while the tab
+// has no row.
+func (m *Model) SelectedRow() (uiagents.Row, bool) {
+	return m.selectedRow()
 }
 
 func (m *Model) selectedRow() (uiagents.Row, bool) {
@@ -324,11 +329,11 @@ func (m *Model) selectedKey() string {
 	return ""
 }
 
-func (m *Model) selectedIssueID() string {
-	if row, ok := m.selectedRow(); ok && row.Issue != nil {
-		return row.Issue.ID
+func (m *Model) selectedIssue() *domain.IssueSummary {
+	if row, ok := m.selectedRow(); ok {
+		return row.Issue
 	}
-	return ""
+	return nil
 }
 
 // selectionChangedCmd announces the issue of the selected row, nil for an

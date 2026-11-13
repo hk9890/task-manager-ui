@@ -88,7 +88,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionLaunchNvim), Desc: "launch nvim on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchOpencode), Desc: "launch opencode on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchShell), Desc: "launch the shell command on the issue, in the background"},
-			{Key: shell(config.ShellActionLaunchAgent), Desc: "the agents of the issue: focus, close or resume one, or start a new one"},
+			{Key: shell(config.ShellActionLaunchAgent), Desc: "the agents of the issue: focus or close a live one, resume or unlink a gone one, or start a new one"},
 		}},
 		{Title: "Menu bar and stores", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionStorePicker), Desc: "list the task stores on this machine and open one"},

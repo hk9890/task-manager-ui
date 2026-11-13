@@ -266,3 +266,140 @@ func TestAskIsOffOnAClosedIssue(t *testing.T) {
 		t.Errorf("the ask entry %q is on for a closed issue", ask.Label)
 	}
 }
+
+// Outside Detail the issue of the selection says whether it is closed: the
+// Agents tab lists an agent linked to a closed issue.
+func TestAskIsOffOnAClosedIssueOfTheAgentsTab(t *testing.T) {
+	m, _ := agentsTab(t)
+	if err := m.services.Repo.CloseIssue(m.ctx, "tm-1", domain.CloseIssueInput{Reason: "done"}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+	m = pressKey(t, m, "alt+r")
+	if sel := m.currentSelection(); sel == nil || sel.Issue.Status != domain.StatusClosed {
+		t.Fatalf("fixture: the selection is %+v, want closed tm-1", sel)
+	}
+	m.copyText = func(string) tea.Cmd { return nil }
+	x, y := testui.FindCell(t, testui.View(m), "Ready first")
+	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
+	m = send(t, m, testui.Drag(x+4, y))
+	m = send(t, m, testui.Release(x+4, y))
+
+	testui.AssertContainsAll(t, plainShell(m), "Ask an agent: off, tm-1 is closed")
+	if ask := m.selMenu.entries[1].entry; !ask.Disabled {
+		t.Errorf("the ask entry %q is on for a closed issue", ask.Label)
+	}
+}
+
+// A start that fails before the agent has a session links nothing and waits
+// on nothing.
+func TestAnAskWhoseStartFailsIsReportedAndNotWaitedOn(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.StartErr = errors.New("revier is not running")
+	m = askOnTitle(t, m, "make the title shorter")
+
+	if view := m.toast.View(); !strings.Contains(view, "Could not ask an agent on tm-1: revier is not running") {
+		t.Errorf("toast = %q, want the failed start", view)
+	}
+	if got := hostCalls(client, "Wait", "Read"); len(got) != 0 {
+		t.Errorf("calls = %+v, want no wait and no read", got)
+	}
+	if labels := labelsOf(t, m, "tm-1"); len(labels) != 0 {
+		t.Errorf("labels of tm-1 = %v, want none", labels)
+	}
+	if m.workInFlight() {
+		t.Error("the spinner still turns after the start ended")
+	}
+}
+
+// A wait that fails is reported: the agent did not report back.
+func TestAnAskedAgentWhoseWaitFailsIsReported(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	client.WaitErr = errors.New("the turn timed out")
+	m = askOnTitle(t, m, "make the title shorter")
+
+	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 did not report back: the turn timed out") {
+		t.Errorf("toast = %q, want the failed wait", view)
+	}
+	if got := hostCalls(client, "Read"); len(got) != 0 {
+		t.Errorf("Read calls = %+v, want none", got)
+	}
+}
+
+// askStarted runs an ask on tm-1 up to the start's result and hands the
+// shell that result: the returned command, not run, is the wait.
+func askStarted(t *testing.T, m Model) (Model, tea.Cmd) {
+	t.Helper()
+	m, submit := askCmdOnTitle(t, m, "make the title shorter")
+	next, start := m.Update(submit())
+	m = next.(Model)
+	if !m.workInFlight() {
+		t.Error("the spinner does not turn while the start is in flight")
+	}
+	for _, msg := range runBatch(start) {
+		if started, ok := msg.(agentAskStartedMsg); ok {
+			next, wait := m.Update(started)
+			return next.(Model), wait
+		}
+	}
+	t.Fatal("the ask started no agent")
+	return m, nil
+}
+
+// An agent that started but was not linked is reported, and still waited on:
+// it works on the issue.
+func TestAnAskedAgentThatIsNotLinkedIsReportedAndWaitedOn(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	failing := fakes.NewErrorInjecting(m.services.Repo)
+	failing.SetError(fakes.MethodUpdateIssue, errors.New("store locked"))
+	m.services.Repo = failing
+
+	m, wait := askStarted(t, m)
+	if view := m.toast.View(); !strings.Contains(view, "Tab 9 works on tm-1, but could not be linked to it: store locked") {
+		t.Errorf("toast = %q, want the failed link", view)
+	}
+	if m.workInFlight() {
+		t.Error("the spinner still turns after the start ended")
+	}
+	applyMessages(t, m, runBatch(wait))
+	if got := hostCalls(client, "Wait"); len(got) != 1 {
+		t.Errorf("Wait calls = %+v, want one", got)
+	}
+}
+
+// An agent that took no prompt and was not linked is reported with both
+// errors, and not waited on.
+func TestAnAskedAgentThatTookNoPromptAndIsNotLinkedReportsBoth(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+	client.StartErr = errors.New("the prompt was refused")
+	failing := fakes.NewErrorInjecting(m.services.Repo)
+	failing.SetError(fakes.MethodUpdateIssue, errors.New("store locked"))
+	m.services.Repo = failing
+
+	m, wait := askStarted(t, m)
+	want := "Started Tab 9 on tm-1, but could not ask it: the prompt was refused; and could not link it: store locked"
+	if view := m.toast.View(); !strings.Contains(view, want) {
+		t.Errorf("toast = %q, want %q", view, want)
+	}
+	applyMessages(t, m, runBatch(wait))
+	if got := hostCalls(client, "Wait"); len(got) != 0 {
+		t.Errorf("Wait calls = %+v, want none", got)
+	}
+}
+
+// A start that returns after a store switch and could not be linked says so,
+// and names the store it began in.
+func TestAnAskStartedInTheStoreLeftThatIsNotLinkedIsReported(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	m = send(t, m, agentAskStartedMsg{epoch: m.storeEpoch - 1, issueID: "tm-1", agent: startedOnTab9(), linkErr: errors.New("store locked")})
+
+	want := "Tab 9 works on tm-1 in the store you left, but could not be linked to it: store locked"
+	if view := m.toast.View(); !strings.Contains(view, want) {
+		t.Errorf("toast = %q, want %q", view, want)
+	}
+	if got := hostCalls(client, "Wait"); len(got) != 0 {
+		t.Errorf("Wait calls = %+v, want none", got)
+	}
+}

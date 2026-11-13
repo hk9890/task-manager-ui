@@ -111,17 +111,20 @@ columns; this tab is where they are browsed. Docs mode reuses the board keymap:
 Every agent of the project, in two groups: `Linked`, the agents linked to an
 issue, and `Not linked`, the live agents linked to none. Each agent is two lines:
 its name, its status and what it does, then its tab and the ID and title of its
-issue. A labelled agent that no longer runs is `gone`; it is listed only on an
+issue. A long name is cut; the status stays. A labelled agent that no longer runs is `gone`; it is listed only on an
 open issue. Without an agent the tab says why: no agent host, no project path,
 or the error revier gave.
 
 - `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
-- `enter` — bring the selected agent to the front; resume a `gone` one first
+- `enter` — bring the selected agent to the front; resume a `gone` one first,
+  and the legend reads `enter resume`. A resume takes seconds: a toast says it
+  started, the spinner turns until it ends, and a second `enter` meanwhile opens
+  no second tab
 - `alt+x` — close the selected agent; one that runs or needs you asks first.
   On a `gone` agent it unlinks the agent from its open issues, and the legend
   reads `alt+x unlink`
 - `alt+o` — open the issue the selected agent is linked to in detail mode;
-  `esc` there returns to the tab
+  `esc` there returns to the tab. The legend names it only on a linked agent
 - `alt+r` — read the linked issues again
 
 A click selects an agent and a second click brings it to the front. Edit,
@@ -195,8 +198,9 @@ out; an ID line too narrow for both of its buttons drops `agent` first. The key
 still works.
 
 An agent is linked to an issue by an `agent-session:<session>` label, which starting it
-from the agent dialog or the selection menu writes. In the In Progress column an
-agent whose revier session wrote a comment on the issue is linked too.
+from the agent dialog or the selection menu writes. A live agent whose revier
+session wrote a comment on the issue is linked too: in detail mode on an issue of
+any status, on the board and the Agents tab only in the In Progress column.
 taskmgr-ui asks `revier` for the live agents every few seconds. The Details
 pane lists the linked agents in an `Agents` group, one line each: its status
 — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier does not

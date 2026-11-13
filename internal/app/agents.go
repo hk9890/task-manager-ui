@@ -105,6 +105,22 @@ func (m Model) agentsAbsent(pollErr error) string {
 	return ""
 }
 
+// agentsOff says why no agent can start in the store's project: no host, no
+// project path, or a path that is not accessible; "" when one can.
+func (m *Model) agentsOff() string {
+	root := m.services.ProjectRoot
+	m.projectRootMissing = projectRootMissing(root)
+	switch {
+	case m.services.Agents == nil:
+		return "No agent host: agents are off"
+	case root == "":
+		return "Agents are off: the store has no project path"
+	case m.projectRootMissing:
+		return "Agents are off: project path not accessible: " + root
+	}
+	return ""
+}
+
 // selectAgent switches to the Agents tab with the agent of session selected.
 // The click on its row in the Details pane asks for it.
 func (m *Model) selectAgent(session string) tea.Cmd {
@@ -153,12 +169,8 @@ func (m *Model) openAgentDialog() tea.Cmd {
 	if !ok {
 		return m.showToast("No selected issue to start an agent on", toaster.StyleWarn)
 	}
-	if m.services.Agents == nil {
-		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
-	}
-	m.projectRootMissing = projectRootMissing(m.services.ProjectRoot)
-	if m.projectRootMissing {
-		return m.showToast("Agents are off: project path not accessible: "+m.services.ProjectRoot, toaster.StyleWarn)
+	if off := m.agentsOff(); off != "" {
+		return m.showToast(off, toaster.StyleWarn)
 	}
 	linked := m.detail.LinkedAgents()
 	intents := m.services.Config.Agent.Intents
@@ -221,16 +233,28 @@ func linkedAgentActions(a agent.Agent) []selectionAction {
 }
 
 // resumeAgent reopens the conversation of a gone agent in the store's
-// project and brings it to the front.
+// project and brings it to the front. The harness of the new tab takes
+// seconds to come up, so an info toast says the resume started, and a second
+// resume of the session while one is in flight starts nothing: it would open
+// a second tab on the same conversation.
 func (m *Model) resumeAgent(gone agent.Agent) tea.Cmd {
+	label := displaytext.OneLine(gone.Title())
+	if m.agentResumes[gone.Session] {
+		return m.showToast("Already resuming "+label+"…", toaster.StyleInfo)
+	}
+	if m.agentResumes == nil {
+		m.agentResumes = make(map[string]bool)
+	}
+	m.agentResumes[gone.Session] = true
 	ctx, host, root := m.ctx, m.services.Agents, m.services.ProjectRoot
-	return func() tea.Msg {
+	resume := func() tea.Msg {
 		resumed, err := host.Resume(ctx, root, gone.Session)
 		if err == nil {
 			err = host.Focus(ctx, resumed)
 		}
 		return agentResumedMsg{agent: gone, err: err}
 	}
+	return batchCmds(m.showToast("Resuming "+label+"…", toaster.StyleInfo), resume)
 }
 
 // requestAgentClose closes an idle agent at once. It asks first before it

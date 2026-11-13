@@ -17,7 +17,11 @@ import (
 // fakeRevier logs every call and the physical directory it ran in to
 // $REVIER_LOG. `status` resolves to $REVIER_PROJECT_PATH; `list` prints one
 // local agent in panel 7 of target home, and first another in panel 7 of
-// target work; with $REVIER_LIST_FAILS set it fails. `agent new` prints the address of demo:home:7, or of
+// target work; with $REVIER_LIST_FAILS set it fails, and its first
+// $REVIER_SESSION_LATE calls leave out the agent of target home, as revier
+// does while a new tab has no session yet. `agent prompt` fails with
+// $REVIER_PROMPT_FAILS set, `agent focus` with $REVIER_FOCUS_FAILS.
+// `agent new` prints the address of demo:home:7, or of
 // demo:home:8 with --resume. The first `agent wait --until idle` fails, as it
 // does before the harness of a new tab has started; with
 // $REVIER_WAIT_TIMES_OUT set every wait exits 2. A wait until stopped prints
@@ -29,6 +33,12 @@ printf '%s | %s\n' "$*" "$(pwd -P)" >> "$REVIER_LOG"
 case "$1" in
 status) printf 'project   demo\npath      %s\nruntime   kitty\n' "$REVIER_PROJECT_PATH" ;;
 list) [ -z "$REVIER_LIST_FAILS" ] || { echo "no project demo" >&2; exit 1; }
+	lists=$(( $(cat "$REVIER_LOG.lists" 2>/dev/null || echo 0) + 1 ))
+	echo "$lists" > "$REVIER_LOG.lists"
+	if [ "$lists" -le "${REVIER_SESSION_LATE:-0}" ]; then
+		printf '[{"project":{"name":"demo"},"agents":[{"panel":"7","target":"work","ref":{"host":"kitty","id":"2"},"state":{"status":"running","session":"s-work"}}]}]\n'
+		exit 0
+	fi
 	printf '[{"project":{"name":"demo"},"agents":[{"panel":"7","target":"work","ref":{"host":"kitty","id":"2"},"state":{"status":"running","session":"s-work"}},{"panel":"7","target":"home","ref":{"host":"kitty","id":"1"},"state":{"status":"idle","session":"s-7"}}]}]\n' ;;
 agent)
 	case "$2" in
@@ -50,6 +60,8 @@ agent)
 	*)
 		[ "$3" = "demo:home:7" ] || { [ "$3" = "demo:home:8" ] && [ -e "$REVIER_LOG.harness" ]; } || { echo "no agent at $3" >&2; exit 1; }
 		case "$2" in
+		prompt) [ -z "$REVIER_PROMPT_FAILS" ] || { echo "the prompt was refused" >&2; exit 1; } ;;
+		focus) [ -z "$REVIER_FOCUS_FAILS" ] || { echo "no window to raise" >&2; exit 1; } ;;
 		read) echo 'all done' ;;
 		close) [ "$4" = "--force" ] || { echo "the agent is running" >&2; exit 1; } ;;
 		esac ;;
@@ -233,6 +245,89 @@ func TestStartFailsOnAHarnessWaitThatTimesOut(t *testing.T) {
 	// The tab is closed again: no label links it, so nothing could reach it.
 	if last := calls[len(calls)-1]; last != "agent close demo:home:7 --force" {
 		t.Errorf("last revier call = %q, want the force close of the new tab", last)
+	}
+}
+
+// listCalls counts the revier list calls in calls.
+func listCalls(calls []string) int {
+	lists := 0
+	for _, call := range calls {
+		if strings.HasPrefix(call, "list ") {
+			lists++
+		}
+	}
+	return lists
+}
+
+// revier may list a new tab before it names its session: Start lists again
+// until it does.
+func TestStartListsAgainUntilTheSessionIsNamed(t *testing.T) {
+	root := t.TempDir()
+	h, log := withFakeRevier(t, root)
+	t.Setenv("REVIER_SESSION_LATE", "2")
+
+	started, err := h.Start(context.Background(), agent.Spec{Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if started != tab7 {
+		t.Errorf("started = %+v, want %+v", started, tab7)
+	}
+	if lists := listCalls(readCalls(t, log)); lists != 3 {
+		t.Errorf("revier list ran %d times, want 3", lists)
+	}
+}
+
+// A tab whose session revier never names is closed again: no label could
+// link it, so nothing would reach it.
+func TestStartClosesATabWhoseSessionIsNeverNamed(t *testing.T) {
+	root := t.TempDir()
+	h, log := withFakeRevier(t, root)
+	t.Setenv("REVIER_SESSION_LATE", "99")
+
+	_, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "hi"})
+	if err == nil || !strings.Contains(err.Error(), "revier lists no session for the agent at demo:home:7") {
+		t.Fatalf("expected the no-session error, got %v", err)
+	}
+	calls := readCalls(t, log)
+	if lists := listCalls(calls); lists != sessionAttempts {
+		t.Errorf("revier list ran %d times, want %d", lists, sessionAttempts)
+	}
+	if last := calls[len(calls)-1]; last != "agent close demo:home:7 --force" {
+		t.Errorf("last revier call = %q, want the force close of the new tab", last)
+	}
+}
+
+// A prompt or a focus that fails returns the agent Start opened with the
+// error, and leaves its tab open: the caller links it, and it may work on
+// the issue.
+func TestAFailedPromptOrFocusReturnsTheOpenedAgent(t *testing.T) {
+	for _, tc := range []struct {
+		env, want string
+		status    agent.Status
+	}{
+		{"REVIER_PROMPT_FAILS", "the prompt was refused", agent.Idle},
+		{"REVIER_FOCUS_FAILS", "no window to raise", agent.Running},
+	} {
+		t.Run(tc.env, func(t *testing.T) {
+			root := t.TempDir()
+			h, log := withFakeRevier(t, root)
+			t.Setenv(tc.env, "1")
+
+			started, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "hi", Focus: true})
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected the error %q, got %v", tc.want, err)
+			}
+			want := agent.Agent{Ref: "demo:home:7", Session: "s-7", Label: "Tab 7", Status: tc.status}
+			if started != want {
+				t.Errorf("started = %+v, want %+v", started, want)
+			}
+			for _, call := range readCalls(t, log) {
+				if strings.HasPrefix(call, "agent close") {
+					t.Errorf("Start closed the opened agent: %q", call)
+				}
+			}
+		})
 	}
 }
 

@@ -123,3 +123,17 @@ func TestEnsureVisibleShowsTheWholeSelectedRow(t *testing.T) {
 		}
 	}
 }
+
+// A name that fills the row is cut so the status stays: the tab sorts by it,
+// and `needs you` is what the operator must act on.
+func TestALongNameKeepsTheStatus(t *testing.T) {
+	t.Parallel()
+	long := agent.Agent{
+		Ref: "demo:home:3", Session: "s-3", Label: "Tab 3", Status: agent.NeedsYou, Activity: "waiting",
+		Name: "Implement the agent dialog for long running background tasks in detail view",
+	}
+	view := testui.Downsample(Render(State{Rows: []Row{{Agent: long}}, Width: 60, Height: 10, Hover: -1}))
+	if !strings.Contains(view, "…  needs you") {
+		t.Errorf("the row of a long name is not cut before its status:\n%s", view)
+	}
+}

@@ -29,6 +29,12 @@ import (
 // fake lists are agents; log holds every record.
 func agentShell(t *testing.T, agents ...agent.Agent) (Model, *fakes.FakeAgentHost, *fakes.FakeLauncher, *bytes.Buffer) {
 	t.Helper()
+	return agentShellAt(t, t.TempDir(), agents...)
+}
+
+// agentShellAt is agentShell with root as the project path of the store.
+func agentShellAt(t *testing.T, root string, agents ...agent.Agent) (Model, *fakes.FakeAgentHost, *fakes.FakeLauncher, *bytes.Buffer) {
+	t.Helper()
 
 	gw := fakes.NewTracked()
 	seedReady(gw, "tm-1", "Ready first", "task", 1)
@@ -44,7 +50,7 @@ func agentShell(t *testing.T, agents ...agent.Agent) (Model, *fakes.FakeAgentHos
 	}
 	client := &fakes.FakeAgentHost{Agents: agents}
 	services.Agents = client
-	services.ProjectRoot = t.TempDir()
+	services.ProjectRoot = root
 	log := &bytes.Buffer{}
 	services.Logger = slog.New(slog.NewTextHandler(log, &slog.HandlerOptions{Level: slog.LevelDebug}))
 
