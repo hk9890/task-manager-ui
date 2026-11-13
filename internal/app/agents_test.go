@@ -25,7 +25,8 @@ import (
 )
 
 // agentShell is a shell in Detail on tm-1 at 100x60, over a fake launcher and
-// a fake agent host. The session s-1 wrote a comment on tm-1. The agents the
+// a fake agent host. tm-1 is In Progress, and the session s-1 wrote a comment
+// on it, so a live agent on s-1 is linked to it. The agents the
 // fake lists are agents; log holds every record.
 func agentShell(t *testing.T, agents ...agent.Agent) (Model, *fakes.FakeAgentHost, *fakes.FakeLauncher, *bytes.Buffer) {
 	t.Helper()
@@ -37,7 +38,7 @@ func agentShellAt(t *testing.T, root string, agents ...agent.Agent) (Model, *fak
 	t.Helper()
 
 	gw := fakes.NewTracked()
-	seedReady(gw, "tm-1", "Ready first", "task", 1)
+	seedInProgress(gw, "tm-1", "Ready first", "task", 1)
 	gw.Memory.SeedComments("tm-1", memoryrepo.Comment{
 		ID: "c-1", Author: "claude", Session: "s-1", Body: "hello",
 		CreatedAt: time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC),

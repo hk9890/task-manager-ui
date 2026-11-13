@@ -18,7 +18,7 @@ chords and on keys that print nothing.
 - `tab`, `ctrl+pgdown` — next view tab (Board → Docs → Agents → Board)
 - `shift+tab`, `ctrl+pgup` — previous view tab
 - `alt+f` — open the store search, from a tab or from detail
-- `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs or Agents to Board, or dismiss toast state
+- `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs or Agents to Board, or dismiss toast state. A toast that stays until dismissed takes the first `esc` and does nothing else
 - `alt+r` — manually reload detail mode from the repository immediately (detail mode only)
 - `alt+n` — create an issue, in the [issue editor](#issue-editor)
 - `alt+u` — edit the selected issue, its description included
@@ -122,7 +122,8 @@ or the error revier gave.
   no second tab
 - `alt+x` — close the selected agent; one that runs or needs you asks first.
   On a `gone` agent it unlinks the agent from its open issues, and the legend
-  reads `alt+x unlink`
+  reads `alt+x unlink`. A closed or unlinked agent leaves the tab and the
+  Details pane at once
 - `alt+o` — open the issue the selected agent is linked to in detail mode;
   `esc` there returns to the tab. The legend names it only on a linked agent
 - `alt+r` — read the linked issues again
@@ -199,8 +200,8 @@ still works.
 
 An agent is linked to an issue by an `agent-session:<session>` label, which starting it
 from the agent dialog or the selection menu writes. A live agent whose revier
-session wrote a comment on the issue is linked too: in detail mode on an issue of
-any status, on the board and the Agents tab only in the In Progress column.
+session wrote a comment on the issue is linked too, but only while the issue is
+In Progress: in detail mode, on the board and on the Agents tab.
 taskmgr-ui asks `revier` for the live agents every few seconds. The Details
 pane lists the linked agents in an `Agents` group, one line each: its status
 — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier does not
@@ -391,7 +392,9 @@ instead.
   closed issue, which takes no label.
 - Ask an agent opens one line for your instruction. The agent starts in the
   background, out of view, and changes the issue with taskmgr. When its turn
-  ends the issue is read again and a toast shows its summary. When the agent
+  ends the issue is read again and a toast shows its summary, over up to three
+  lines. A summary longer than that is cut, and the toast stays until `esc` or
+  the next toast. When the agent
   has a question, a dialog offers to bring it to the front. The agent stays
   open, linked to the issue. Switch stores before its turn ends and no summary
   comes.

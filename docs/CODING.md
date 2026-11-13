@@ -57,14 +57,15 @@ mise run ci          # the merge gate; see What the tools enforce
      `internal/app/askagent.go`): `Host.Start` without the focus and the link label in the
      unscoped start command, then `Host.Wait` and `Host.Read` in one scoped command on the
      store's context, so a store switch ends the wait and drops the answer. The agent is never closed by the app.
-   - The agents of an issue are `agent.Linked`: its link labels and its comment sessions, merged
-     with the last poll. A link label no live agent holds is `agent.Gone`. Detail leaves a gone
+   - The agents of an issue are `agent.Linked`: its link labels and, on an In Progress issue, its
+     comment sessions, merged with the last poll. A link label no live agent holds is `agent.Gone`. Detail leaves a gone
      agent of a closed issue out (`linkedAgents`, `internal/mode/detail/model.go`), as the Agents
      tab does.
    - A close from the app removes the link label from the open issues after the host closes the
      agent, as `RemoveLabels`, in one scoped command (`Model.closeAgent`,
      `internal/app/agents.go`). An unlink of a gone agent is the same removal without the host
-     call (`Model.unlinkGoneAgent`).
+     call (`Model.unlinkGoneAgent`). Either, on success, takes the agent off Detail and the Agents
+     tab before the reload lands (`Model.dropAgent`).
    - A link label stays in the store and off the screen: draw labels through
      `agent.VisibleLabels`. The `{{issue.labels}}` placeholder leaves them out too
      (`contextFor`, `internal/launcher/service.go`).

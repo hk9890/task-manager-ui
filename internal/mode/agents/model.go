@@ -52,6 +52,9 @@ type Model struct {
 	issuesKnown  bool
 	commentLinks map[string]domain.IssueSummary
 	loading      bool
+	// dropped is the sessions the app closed or unlinked whose link label a
+	// read may still carry on an open issue: a read begun before the unlink.
+	dropped map[string]bool
 
 	rows     []uiagents.Row
 	selected int
@@ -132,6 +135,43 @@ func (m *Model) SetCommentLinks(links map[string]domain.IssueSummary) tea.Cmd {
 	return m.rebuild()
 }
 
+// DropAgent takes the agent a off the tab at once, after the app closed or
+// unlinked it: until a read without its link label lands, the label would
+// draw it gone.
+func (m *Model) DropAgent(a agent.Agent) tea.Cmd {
+	m.live = slices.DeleteFunc(slices.Clone(m.live), func(live agent.Agent) bool { return live.Key() == a.Key() })
+	if a.Session != "" {
+		if m.dropped == nil {
+			m.dropped = make(map[string]bool)
+		}
+		m.dropped[a.Session] = true
+		m.issues = m.withoutDropped(m.issues)
+	}
+	return m.rebuild()
+}
+
+// withoutDropped is issues without the link labels of the dropped sessions on
+// the open ones. A session no open issue carries is no longer dropped: the
+// store's unlink has landed.
+func (m *Model) withoutDropped(issues []domain.IssueSummary) []domain.IssueSummary {
+	issues = slices.Clone(issues)
+	for session := range m.dropped {
+		label := agent.LinkLabelPrefix + session
+		carried := false
+		for i, issue := range issues {
+			if issue.Status == domain.StatusClosed || !slices.Contains(issue.Labels, label) {
+				continue
+			}
+			carried = true
+			issues[i].Labels = slices.DeleteFunc(slices.Clone(issue.Labels), func(l string) bool { return l == label })
+		}
+		if !carried {
+			delete(m.dropped, session)
+		}
+	}
+	return issues
+}
+
 // Select puts the selection on the agent of session, now when its row is
 // there and otherwise once a poll or a read brings it.
 func (m *Model) Select(session string) tea.Cmd {
@@ -148,7 +188,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.logger.Warn("reading the issues linked to agents failed", "error", msg.err.Error())
 			return nil
 		}
-		m.issues, m.issuesKnown = msg.issues, true
+		m.issues, m.issuesKnown = m.withoutDropped(msg.issues), true
 		return m.rebuild()
 	case mode.MouseMsg:
 		return m.mouse(msg)

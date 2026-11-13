@@ -277,3 +277,30 @@ func TestInitReadsTheIssuesWithALinkLabel(t *testing.T) {
 		t.Error("the read is still in flight after its result")
 	}
 }
+
+// A dropped agent leaves the tab at once, and a read begun before its unlink
+// that still carries its link label draws it no gone row. A read without the
+// label ends the drop: a later label of the session links it again.
+func TestADroppedAgentIsNoGoneRowUntilItsUnlinkLands(t *testing.T) {
+	t.Parallel()
+	m := newTab(t)
+	linked := []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-1"}}}
+	m.Update(linkedIssuesMsg{issues: linked})
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, "")
+
+	m.DropAgent(live("s-1", "1", agent.Idle))
+	if got, want := titles(m.rows), []string{"Tab 2@"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("rows after the drop = %v, want %v", got, want)
+	}
+	m.SetAgents([]agent.Agent{live("s-2", "2", agent.Idle)}, true, "")
+	m.Update(linkedIssuesMsg{issues: linked})
+	if got, want := titles(m.rows), []string{"Tab 2@"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rows after a stale read = %v, want %v", got, want)
+	}
+
+	m.Update(linkedIssuesMsg{})
+	m.Update(linkedIssuesMsg{issues: linked})
+	if got, want := titles(m.rows), []string{"Session s-1@tm-1", "Tab 2@"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("rows after the label came back = %v, want %v", got, want)
+	}
+}

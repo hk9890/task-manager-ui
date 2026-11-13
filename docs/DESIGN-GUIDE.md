@@ -419,8 +419,9 @@ focuses it.
   dialog's input, or the issue editor. Help and a drag selection drop it, as they drop a key.
 - On a tab or the store search, Escape clears a non-empty query before it leaves the surface or
   hides a toast: the shell calls `Browse.ClearQuery` and acts on Escape itself only when that
-  reports nothing cleared. One thing comes first: an Escape that arrives while the issue editor is
-  still opening cancels that open and leaves the query as it is (`pendingEditor`, `handleShellKey`).
+  reports nothing cleared. Two things come first: an Escape that arrives while the issue editor is
+  still opening cancels that open and leaves the query as it is (`pendingEditor`, `handleShellKey`),
+  and an Escape under a held toast hides that toast and does nothing else.
 - A tab's query is a filter over the rows in memory: `Query.Filter` keeps the rows where every word
   is in the title or the ID, in their order. The model keeps the loaded rows and the matching rows
   apart (`issues` and `shown` in `internal/mode/board/model.go`); selection, scroll, hit test and
@@ -774,7 +775,10 @@ The selection menu is the one exception: no key selects text, so no key reaches 
     without a host call (`Model.unlinkGoneAgent`). A closed issue lists no gone agent, so no
     Unlink is offered where the store would refuse it. A close of an agent that is running or needs you asks first and then forces the close; an
     idle one closes at once. A close that succeeds unlinks the agent: its link label leaves every
-    open issue that carries it (`Model.closeAgent`), so it is no `gone` row afterwards. A closed
+    open issue that carries it (`Model.closeAgent`), so it is no `gone` row afterwards. A close or
+    an unlink that succeeds takes the agent off the Details pane and the Agents tab at once
+    (`Model.dropAgent`), before the reload drops its label: until then the label would draw it
+    `gone`, and Enter would resume the agent just closed. A closed
     issue keeps the label, because the store refuses the change. A removal that fails raises an
     error toast that names the issue. An agent that ends by itself keeps its label, is `gone` and
     can be resumed or unlinked. A resume reopens the conversation and brings it to the front.
@@ -790,14 +794,14 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   start; a start that fails, and a label that is not written, raise an error toast
   (`Model.handleAgentStarted`). A start that fails after the agent has its session, at the prompt,
   still links the agent. A store switch does not drop the toast of a start, and each
-  toast names the issue; the link label goes to the store the start began on. Without an agent host or the project path, and without a
+  toast names the issue. Every toast and dialog entry names an agent by `agent.Agent.Title`, as its row does; the link label goes to the store the start began on. Without an agent host or the project path, and without a
   linked agent and an intent both, the key raises a warning toast instead of the dialog.
 - The Agents group of the Details pane is each linked agent's status word — `running`, `idle`,
   `needs you`, `gone` (`agent.StatusWord`) — padded to the longest in the group, then its title
   (`agent.Agent.Title`). The pane width cuts a long title, never the status. What it does is on
   the Agents tab. A live agent whose session wrote a comment on the issue is in the group on an
-  issue of any status (`agent.Linked`); the board and the Agents tab take a comment link on an In
-  Progress issue only. A link label no live agent holds is `gone` after a poll that answered. Before the first answer
+  In Progress issue only (`linkedAgents`), as on the board and the Agents tab; a link label links
+  it on an issue of any status. A link label no live agent holds is `gone` after a poll that answered. Before the first answer
   and after a failed poll the live agents are not known, so such a label draws no row and the
   agent dialog offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
 - The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
@@ -812,6 +816,12 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.
+- The done and failed report of an asked agent is a report toast (`Model.showReport`,
+  `toaster.Model.ShowReport`): its message wraps at spaces over up to three lines instead of
+  being cut at the box. A report that does not fit them is cut with `…` and is held
+  (`toaster.Model.Held`): no timer hides it, the next toast replaces it, and the first Escape
+  hides it and does nothing else. Every other toast is cut to one line per line feed and
+  closes after three seconds.
 - A toast draws at most `maxMessageLines` lines (`internal/ui/toaster/toaster.go`): a line feed
   in a path or an error text is a line of the box. `capLines` gives the last of them to the cut
   mark, a line that holds only `…`.

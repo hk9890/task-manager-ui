@@ -107,7 +107,7 @@ func (m *Model) handleAgentAskStarted(msg agentAskStartedMsg) tea.Cmd {
 	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not ask an agent on %s: %v", issueID, msg.err), toaster.StyleError)
 	}
-	label := displaytext.OneLine(msg.agent.Label)
+	label := displaytext.OneLine(msg.agent.Title())
 	var reload tea.Cmd
 	if msg.linkErr == nil {
 		reload = m.reloadAfterStart(agentStart(msg))
@@ -161,7 +161,7 @@ func (m *Model) handleAgentAnswered(msg agentAnsweredMsg) tea.Cmd {
 		}
 	}
 
-	label, issueID := displaytext.OneLine(msg.agent.Label), displaytext.OneLine(msg.issueID)
+	label, issueID := displaytext.OneLine(msg.agent.Title()), displaytext.OneLine(msg.issueID)
 	var report tea.Cmd
 	if msg.err != nil {
 		report = m.showToast(fmt.Sprintf("%s on %s did not report back: %v", label, issueID, msg.err), toaster.StyleError)
@@ -176,9 +176,9 @@ func (m *Model) handleAgentAnswered(msg agentAnsweredMsg) tea.Cmd {
 	case !ok:
 		report = m.showToast(fmt.Sprintf("%s on %s finished", label, issueID), toaster.StyleInfo)
 	case parsed.Status == askDone:
-		report = m.showToast(withSummary(fmt.Sprintf("%s on %s is done", label, issueID), parsed.Summary), toaster.StyleSuccess)
+		report = m.showReport(withSummary(fmt.Sprintf("%s on %s is done", label, issueID), parsed.Summary), toaster.StyleSuccess)
 	case parsed.Status == askFailed:
-		report = m.showToast(withSummary(fmt.Sprintf("%s on %s failed", label, issueID), parsed.Summary), toaster.StyleError)
+		report = m.showReport(withSummary(fmt.Sprintf("%s on %s failed", label, issueID), parsed.Summary), toaster.StyleError)
 	default:
 		report = m.offerAgentFocus(msg.agent, withSummary(fmt.Sprintf("%s on %s asks", label, issueID), parsed.Summary))
 	}

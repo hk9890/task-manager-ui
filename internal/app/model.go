@@ -953,6 +953,16 @@ func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())
 }
 
+// showReport shows a report the operator reads to its end, over up to three
+// lines. One that is cut to fit them stays until Escape or the next toast.
+func (m *Model) showReport(message string, style toaster.Style) tea.Cmd {
+	m.toast = m.toast.ShowReport(displaytext.Lines(message), style, m.width)
+	if m.toast.Held() {
+		return nil
+	}
+	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())
+}
+
 // issueScopedShellActions are the shell actions that act on the currently
 // selected issue. A surface that has no issue selection swallows them rather
 // than letting currentSelection() answer from a tab that is not on screen.
@@ -1150,6 +1160,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 		// that open and keeps the current mode: it does not pop Detail to the
 		// Board while the load is in progress.
 		if hadPendingEditor {
+			return m, modeCmd
+		}
+		// A held toast stays until Escape, so it takes the first one.
+		if m.toast.Held() {
+			m.toast = m.toast.Hide()
 			return m, modeCmd
 		}
 		// The picker is a surface above the shell, so leaving it restores the

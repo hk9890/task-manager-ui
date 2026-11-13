@@ -33,6 +33,11 @@ type Model struct {
 	// a stale dismiss timer (from an earlier toast) cannot hide a newer toast
 	// that replaced it within the dismiss window.
 	seq int
+	// wrap is true for a report: its message wraps over up to reportLines
+	// lines instead of being cut at the width of the box.
+	wrap bool
+	// held is true for a report cut to fit: it stays until it is dismissed.
+	held bool
 }
 
 // New creates a toaster model.
@@ -46,8 +51,32 @@ func (m Model) Show(message string, style Style) Model {
 	m.message = message
 	m.style = style
 	m.visible = true
+	m.wrap, m.held = false, false
 	m.seq++
 	return m
+}
+
+// ShowReport is Show for a report the operator reads to its end, such as the
+// summary of an asked agent: its message wraps over up to reportLines lines
+// on a screen width cells wide. A report that does not fit them is cut, and
+// is held: it stays on screen until it is dismissed (Held).
+func (m Model) ShowReport(message string, style Style, width int) Model {
+	m = m.Show(message, style)
+	m.wrap = true
+	m.held = len(textutil.WrapAtSpaces(capLines(message), textWidth(width))) > reportLines
+	return m
+}
+
+// Held reports whether the toast on screen stays until it is dismissed: no
+// timer hides it.
+func (m Model) Held() bool {
+	return m.visible && m.held
+}
+
+// textWidth is the cells a toast on a screen width cells wide has for its
+// message.
+func textWidth(width int) int {
+	return max(width-toastChromeWidth-glyphCells, 1)
 }
 
 // Seq returns the current toast identity. Callers schedule a DismissMsg with
@@ -60,6 +89,7 @@ func (m Model) Seq() int {
 func (m Model) Hide() Model {
 	m.visible = false
 	m.message = ""
+	m.held = false
 	return m
 }
 
@@ -82,6 +112,9 @@ const (
 // line of the box, so without a bound one message can cover the screen.
 const maxMessageLines = 6
 
+// reportLines is the most lines the message of a report wraps over.
+const reportLines = 3
+
 // View renders the toast box at its natural width. Overlay is what the shell
 // draws with, and it bounds the box to the terminal.
 func (m Model) View() string {
@@ -102,8 +135,11 @@ func (m Model) view(maxWidth int) string {
 	}
 
 	message := capLines(m.message)
-	if maxWidth > toastChromeWidth {
-		message = clipLines(message, maxWidth-toastChromeWidth-glyphCells)
+	switch {
+	case maxWidth > toastChromeWidth && m.wrap:
+		message = wrapLines(message, textWidth(maxWidth))
+	case maxWidth > toastChromeWidth:
+		message = clipLines(message, textWidth(maxWidth))
 	}
 
 	s := lipgloss.NewStyle().
@@ -165,6 +201,17 @@ func clipLines(message string, width int) string {
 	lines := strings.Split(message, "\n")
 	for i, line := range lines {
 		lines[i] = textutil.TruncateString(line, width)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// wrapLines wraps message at its spaces to width cells over at most
+// reportLines lines. The last line takes the rest and is cut with the mark.
+func wrapLines(message string, width int) string {
+	lines := textutil.WrapAtSpaces(message, width)
+	if len(lines) > reportLines {
+		rest := strings.Join(lines[reportLines-1:], " ")
+		lines = append(lines[:reportLines-1], textutil.TruncateString(rest, width))
 	}
 	return strings.Join(lines, "\n")
 }

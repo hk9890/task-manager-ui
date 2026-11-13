@@ -326,7 +326,15 @@ func (m *Model) handleAgentUnlinked(msg agentUnlinkedMsg) tea.Cmd {
 	if msg.err != nil {
 		return batchCmds(reload, m.showToast(fmt.Sprintf("Could not unlink %s: %s", label, displaytext.OneLine(msg.err.Error())), toaster.StyleError))
 	}
-	return batchCmds(reload, m.showToast("Unlinked "+label, toaster.StyleSuccess))
+	return batchCmds(reload, m.dropAgent(msg.agent), m.showToast("Unlinked "+label, toaster.StyleSuccess))
+}
+
+// dropAgent takes an agent the app closed and unlinked off the Details pane
+// and the Agents tab at once: until the reload lands, its link label would
+// draw it gone, and Enter on that row would resume it.
+func (m *Model) dropAgent(a agent.Agent) tea.Cmd {
+	m.detail.DropAgent(a)
+	return m.scoped(m.agents.DropAgent(a))
 }
 
 // unlinkAgent removes the link label of session from the open issues that
@@ -362,7 +370,10 @@ func (m *Model) handleAgentClosed(msg agentClosedMsg) tea.Cmd {
 	if msg.unlinkErr != nil {
 		return batchCmds(reload, m.pollAgentsCmd(), m.showToast(fmt.Sprintf("Closed %s, but could not unlink it from %s", displaytext.OneLine(msg.agent.Title()), displaytext.OneLine(msg.unlinkErr.Error())), toaster.StyleError))
 	}
-	return batchCmds(reload, m.reportAgentAction("close", "Closed", msg.agent, msg.err))
+	if msg.err != nil {
+		return batchCmds(reload, m.reportAgentAction("close", "Closed", msg.agent, msg.err))
+	}
+	return batchCmds(reload, m.dropAgent(msg.agent), m.reportAgentAction("close", "Closed", msg.agent, nil))
 }
 
 // reportAgentAction reports a resume or a close of a, and on success polls

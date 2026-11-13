@@ -6,15 +6,17 @@ import (
 	"testing"
 
 	"github.com/hk9890/task-manager-ui/internal/agent"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// commentsBySessions is a loaded detail whose comments were written by these
-// sessions, in order; "" is a comment no agent wrote.
+// commentsBySessions is a loaded In Progress detail whose comments were
+// written by these sessions, in order; "" is a comment no agent wrote.
 func commentsBySessions(t *testing.T, sessions ...string) *Model {
 	t.Helper()
 	m := commentsDetail(t, len(sessions))
+	m.Detail.Summary.Status = domain.StatusInProgress
 	for idx, session := range sessions {
 		m.Detail.Comments[idx].Session = session
 	}
@@ -46,9 +48,34 @@ func TestLinkedAgentsAreTheLiveAgentsThatCommentedInOrderOfNeed(t *testing.T) {
 
 	m.Reset()
 	m.ApplyLoadedDetail("tm-1", issueWithComments(1))
+	m.Detail.Summary.Status = domain.StatusInProgress
 	m.Detail.Comments[0].Session = "s-attn"
 	if linked := m.LinkedAgents(); len(linked) != 1 || linked[0].Label != "Tab 9" {
 		t.Errorf("after Reset the linked agents are %+v, want the live agents kept", linked)
+	}
+}
+
+// A comment links its agent on an In Progress issue only, as on the board
+// and the Agents tab; a link label links it on an issue of any status.
+func TestACommentLinksItsAgentOnAnInProgressIssueOnly(t *testing.T) {
+	t.Parallel()
+
+	live := map[string]agent.Agent{
+		"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"},
+		"s-2": {Label: "Tab 4", Status: agent.Idle, Session: "s-2"},
+	}
+	for _, status := range []string{"open", "blocked", domain.StatusClosed} {
+		m := commentsBySessions(t, "s-1")
+		m.Detail.Summary.Status = status
+		m.Detail.Summary.Labels = []string{"agent-session:s-2"}
+		m.SetLiveAgents(live)
+		var labels []string
+		for _, linked := range m.LinkedAgents() {
+			labels = append(labels, linked.Label)
+		}
+		if want := []string{"Tab 4"}; !reflect.DeepEqual(labels, want) {
+			t.Errorf("linked agents of a %s issue = %v, want %v", status, labels, want)
+		}
 	}
 }
 

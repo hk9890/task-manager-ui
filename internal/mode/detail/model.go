@@ -1,6 +1,7 @@
 package detail
 
 import (
+	"maps"
 	"slices"
 	"sort"
 	"strings"
@@ -175,18 +176,37 @@ func (m *Model) SetLiveAgents(agents map[string]agent.Agent) {
 	m.liveAgents = agents
 }
 
+// DropAgent takes the agent a off the issue at once, after the app closed or
+// unlinked it: until the reload of the issue lands, its link label would
+// draw it gone. The reload replaces the labels with the store's.
+func (m *Model) DropAgent(a agent.Agent) {
+	if a.Session == "" {
+		return
+	}
+	m.Detail.Summary.Labels = slices.DeleteFunc(slices.Clone(m.Detail.Summary.Labels), func(label string) bool {
+		return label == agent.LinkLabelPrefix+a.Session
+	})
+	if _, live := m.liveAgents[a.Session]; live {
+		m.liveAgents = maps.Clone(m.liveAgents)
+		delete(m.liveAgents, a.Session)
+	}
+}
+
 // LinkedAgents is the agents linked to the issue open in Detail, by its link
-// labels and its comment sessions (agent.Linked). The first is the one that
-// needs the operator most; the gone ones are last. A closed issue has no gone
-// agent, as on the Agents tab: the store refuses the unlink of its label.
+// labels and, on an In Progress issue, its comment sessions (agent.Linked),
+// as on the board and the Agents tab. The first is the one that needs the
+// operator most; the gone ones are last. A closed issue has no gone agent, as
+// on the Agents tab: the store refuses the unlink of its label.
 func (m *Model) LinkedAgents() []agent.Agent {
 	return linkedAgents(m.liveAgents, m.Detail)
 }
 
 func linkedAgents(live map[string]agent.Agent, d domain.IssueDetail) []agent.Agent {
-	sessions := make([]string, 0, len(d.Comments))
-	for _, comment := range d.Comments {
-		sessions = append(sessions, comment.Session)
+	var sessions []string
+	if d.Summary.Status == domain.StatusInProgress {
+		for _, comment := range d.Comments {
+			sessions = append(sessions, comment.Session)
+		}
 	}
 	linked := agent.Linked(live, d.Summary.Labels, sessions)
 	if d.Summary.Status == domain.StatusClosed {

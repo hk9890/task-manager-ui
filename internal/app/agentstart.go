@@ -80,7 +80,7 @@ func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 	if msg.err != nil && msg.agent.Session == "" {
 		return m.showToast(fmt.Sprintf("Could not start an agent on %s: %v", issueID, msg.err), toaster.StyleError)
 	}
-	label := displaytext.OneLine(msg.agent.Label)
+	label := displaytext.OneLine(msg.agent.Title())
 	switch {
 	case msg.linkErr != nil && msg.err != nil:
 		return m.showToast(fmt.Sprintf("Started %s on %s, but: %v; and could not link it: %v", label, issueID, msg.err, msg.linkErr), toaster.StyleError)
