@@ -12,6 +12,7 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 var mouseStart = time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
@@ -27,7 +28,8 @@ func mouseDocs(t *testing.T) *Model {
 	}
 	m.shown = m.issues
 	m.total = len(m.issues)
-	m.SetSize(100, 24)
+	// One column: the preview draws the selected doc's title a second time.
+	m.SetSize(styles.SplitMinWidth-1, 24)
 	return m
 }
 

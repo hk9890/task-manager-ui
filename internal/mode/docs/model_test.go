@@ -17,6 +17,7 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // seedMixed seeds two docs and one task so every assertion also proves the
@@ -37,6 +38,22 @@ func newModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
 	m := NewModel(context.Background(), gw, nil, keys)
 	m.SetSize(120, 30)
 	return m
+}
+
+// selectionChanged is the SelectionChangedMsg cmd sends, alone or in a batch
+// with the read of the preview.
+func selectionChanged(cmd tea.Cmd) (mode.SelectionChangedMsg, bool) {
+	msg := cmd()
+	if batch, ok := msg.(tea.BatchMsg); ok {
+		for _, each := range batch {
+			if changed, ok := each().(mode.SelectionChangedMsg); ok {
+				return changed, true
+			}
+		}
+		return mode.SelectionChangedMsg{}, false
+	}
+	changed, ok := msg.(mode.SelectionChangedMsg)
+	return changed, ok
 }
 
 // resolve runs cmd and feeds the resulting message back into the model,
@@ -127,7 +144,7 @@ func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected a selection-changed command after moving down")
 	}
-	selection, ok := cmd().(mode.SelectionChangedMsg)
+	selection, ok := selectionChanged(cmd)
 	if !ok {
 		t.Fatalf("expected SelectionChangedMsg, got %T", cmd())
 	}
@@ -339,6 +356,8 @@ func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
 		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("Doc %02d", i), Status: "open", Type: "doc", Priority: 2})
 	}
 	m := loadedModel(t, gw)
+	// One column: with the preview drawn the page keys scroll the preview.
+	m.SetSize(styles.SplitMinWidth-1, 30)
 	page := uiboard.ContentRows(m.height) / issuerow.Height
 
 	steps := []struct {

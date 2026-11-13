@@ -1,6 +1,7 @@
 package app
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -528,6 +529,13 @@ func (m Model) renderFooter() string {
 		agentRow = &row
 	}
 	hints := footerHints(m.active, m.keys, agentRow)
+	// The page keys scroll the preview only while it is drawn; without it they
+	// page the list, as the move keys say.
+	if m.active == mode.Docs && m.docs.Previewing() {
+		page := m.keys.DisplayPrimary(config.DetailContext, config.DetailActionPageUp) + "/" +
+			m.keys.DisplayPrimary(config.DetailContext, config.DetailActionPageDown)
+		hints = slices.Insert(hints, 2, styles.KeyHint{Key: page, Desc: "scroll"})
+	}
 	// Detail is where the launch keys work, so it is where their being off is
 	// said, before the operator presses one. It leads the legend so that it is
 	// the last hint a narrow terminal drops.

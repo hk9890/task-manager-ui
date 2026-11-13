@@ -55,6 +55,9 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionModeCycleNext), Desc: "next tab: Board, Docs, Agents"},
 			{Key: shell(config.ShellActionModeCyclePrev), Desc: "previous tab"},
 		}},
+		{Title: "Docs tab", Entries: []helpscreen.Entry{
+			{Key: pair(detail(config.DetailActionPageUp), detail(config.DetailActionPageDown)), Desc: "scroll the preview beside the list; on a screen too narrow for it, page the list"},
+		}},
 		{Title: "Agents tab", Entries: []helpscreen.Entry{
 			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
 			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent, asking first while it is running or needs you; unlink a gone one"},

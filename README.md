@@ -8,7 +8,8 @@ What it does:
 
 - **Board** — issues in Not Ready, Ready, In Progress and Done columns, with the Done column paging
   in closed history as you scroll.
-- **Docs tab** — every `doc`-type issue, open and closed, in one column.
+- **Docs tab** — every `doc`-type issue, open and closed, in one column, with a preview of the
+  selected doc beside it on a wide terminal.
 - **Type to filter** — on the Board and Docs tabs every key you type narrows the rows to the
   titles and IDs that match, and marks the match.
 - **Search** — `alt+f` searches the whole store as you type, widens to closed work, and drills

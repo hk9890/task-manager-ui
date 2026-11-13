@@ -172,6 +172,11 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   `rowlist.List` (`internal/mode/rowlist`) for the selection, the scroll offset, the move keys and
   the mouse. The Agents tab is the exception: its rows are agents in two groups with
   headings, not issues, so `ui/agents` draws its own box and counts its own `RowLines`.
+- A pane beside a list is `board.State.Aside`, drawn `AsideWidth` cells wide right of the columns,
+  under the list head, at `board.ColumnHeight`; the columns share what it leaves, and `HitTest`
+  reports no column on it. Size the two with `styles.SplitWidths`: the list a third of the screen,
+  held between 40 and 56 cells, `styles.SplitGap` between them, and the list alone below
+  `styles.SplitMinWidth`. [The Docs tab](#the-docs-tab) is the one user.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ### A button in a pane
@@ -330,6 +335,27 @@ and the key legend below (`Model.renderFooter`).
   each of which takes keys before the shell switch and moves between its fields with them. From
   the store search and from Detail they leave it for a tab, although Detail does not draw the
   strip. A browse surface must not claim either key.
+
+### The Docs tab
+
+The Docs tab (`internal/mode/docs`) lists every doc, open and closed, in one board column. From
+`styles.SplitMinWidth` columns the Preview pane of the selected doc stands beside it
+(`detail.RenderPreview`): the meta row, the title and the rule of the Content pane, then the
+description and the notes as markdown. It has no button, no comment and no focus; Enter still
+opens Detail.
+
+- The preview follows the selection. The model reads the doc with `Repository.Issue` and keeps each
+  read by ID, stamped with the `UpdatedAt` its row had when the read started (`docRead`,
+  `internal/mode/docs/preview.go`): a row with a later stamp is read again, and a read that lands
+  after the selection moved on is kept for that doc and not drawn. Stamp with the row, not the
+  read: a backend that stamps the two differently would read the doc forever.
+- Until the read lands the pane draws the row's header over skeleton rows; a failed read draws the
+  error in place of the body until a reload.
+- The page keys of the detail context scroll the preview while it is drawn (`previewKey`); below
+  `styles.SplitMinWidth` they page the list. The legend names them only while they scroll
+  (`Model.renderFooter`). Each doc opens at its top.
+- The wheel over the preview scrolls it `previewWheelLines` lines a notch and moves no selection;
+  a click there does nothing.
 
 ### The Agents tab
 

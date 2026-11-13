@@ -98,10 +98,12 @@ selection comes near the end of the loaded rows.
 
 One column listing every `doc`-type issue, open and closed — closing a doc
 archives it. Docs are not work, so they never reach the Ready or In Progress
-columns; this tab is where they are browsed. Docs mode reuses the board keymap:
+columns; this tab is where they are browsed. On a terminal 100 columns wide or
+more, a Preview pane beside the list shows the selected doc as you move. Docs
+mode reuses the board keymap:
 
 - `up`, `down` — move up or down
-- `pgup`, `pgdown` — move one page
+- `pgup`, `pgdown` — scroll the preview a page; without the preview, move one page
 - `home`, `end` — move to the first or the last doc
 - `enter` — open selected doc in detail mode
 - `alt+r` — manually reload the docs list immediately

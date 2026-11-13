@@ -89,6 +89,11 @@ type State struct {
 	// Hover is the cell under the pointer, as HitTest reported it; nil when the
 	// pointer is elsewhere. Its row draws the hover band.
 	Hover *Hit
+	// Aside is a pane drawn to the right of the columns, under the list head,
+	// AsideWidth cells wide and as tall as a column. The columns share what it
+	// leaves. HitTest reports no column on it.
+	Aside      string
+	AsideWidth int
 }
 
 // Render renders a multi-column board dashboard using section borders.
@@ -159,6 +164,9 @@ func Render(state State) string {
 		}))
 	}
 
+	if state.AsideWidth > 0 {
+		renderedCols = append(renderedCols, state.Aside)
+	}
 	columns := lipgloss.JoinHorizontal(lipgloss.Top, joinWithGap(renderedCols, strings.Repeat(" ", columnGap))...)
 	return renderHead(state, f) + "\n" + columns
 }
@@ -190,6 +198,15 @@ const (
 	queryIndent = 1
 )
 
+// ColumnHeight is the height of a column, borders included, in a frame of
+// height lines. The Aside pane is drawn at this height too.
+func ColumnHeight(height int) int {
+	if height <= 0 {
+		height = defaultBoardHeight
+	}
+	return max(3, height-headLines)
+}
+
 // ContentRows is the number of content lines a column holds in a frame of
 // height lines: what the head and the column's two borders leave.
 func ContentRows(height int) int {
@@ -218,6 +235,10 @@ func layoutFrame(state State) frame {
 		height = defaultBoardHeight
 	}
 
+	if state.AsideWidth > 0 {
+		width -= state.AsideWidth + columnGap
+	}
+
 	var f frame
 	f.start, f.end = visibleColumnRange(width, len(state.Columns), state.ColumnStart)
 	count := f.end - f.start
@@ -227,7 +248,7 @@ func layoutFrame(state State) frame {
 		available = minRenderableWidth
 	}
 	f.widths = distributeWidths(available, count)
-	f.columnHeight = max(3, height-headLines)
+	f.columnHeight = ColumnHeight(height)
 	f.innerHeight = max(1, f.columnHeight-2)
 	return f
 }
