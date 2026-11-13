@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/hk9890/task-manager-ui/internal/agent"
 )
 
 // recordedStatus is revier status output for a project at /home/ada/demo.
@@ -15,8 +17,9 @@ attached  1 window
 `
 
 // recordedList is revier list --json --conversations output with a local
-// agent in each state, one whose harness names no session, and one on a
-// link's remote host, which has no ref.
+// agent in each state, one whose harness names no session, one without a
+// target, one in a state revier does not document, and one on a link's remote
+// host, which has no ref.
 const recordedList = `[
   {
     "project": {"name": "demo", "path": "/home/ada/demo"},
@@ -25,9 +28,10 @@ const recordedList = `[
     "home": {"host": "kitty", "id": "12"},
     "targets": [{"name": "home", "host": "kitty", "ref": {"host": "kitty", "id": "12"}, "available": true}],
     "agents": [
-      {"panel": "7", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "running", "activity": "Editing model.go", "session": "s-7"}},
-      {"panel": "9", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "attention", "session": "s-9"}},
+      {"panel": "7", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "running", "activity": "Editing model.go", "session": "s-7", "name": "fix-the-board"}},
+      {"panel": "9", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "attention", "session": "s-9"}},
       {"panel": "11", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "shell", "status": "idle"}},
+      {"panel": "13", "target": "home", "ref": {"host": "kitty", "id": "12"}, "state": {"harness": "claude", "status": "starting", "session": "s-13"}},
       {"panel": "3", "state": {"harness": "claude", "status": "running", "session": "s-remote"}}
     ]
   }
@@ -64,10 +68,11 @@ func TestParseAgentsReadsTheLocalAgents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Agent{
-		{Panel: "7", Status: "running", Session: "s-7", Activity: "Editing model.go"},
-		{Panel: "9", Status: "attention", Session: "s-9"},
-		{Panel: "11", Status: "idle"},
+	want := []agent.Agent{
+		{Ref: "demo:home:7", Label: "Tab 7", Name: "fix-the-board", Status: agent.Running, Session: "s-7", Activity: "Editing model.go"},
+		{Ref: "demo:home:9", Label: "Tab 9", Status: agent.NeedsYou, Session: "s-9"},
+		{Ref: "demo:11", Label: "Tab 11", Status: agent.Idle},
+		{Ref: "demo:home:13", Label: "Tab 13", Status: "starting", Session: "s-13"},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("agents = %+v\nwant %+v", got, want)
@@ -90,8 +95,12 @@ func TestParseAgentsRefusesOutputThatIsNotTheList(t *testing.T) {
 	}
 }
 
-func TestAddressJoinsProjectAndPanel(t *testing.T) {
-	if got := Address("demo", "7"); got != "demo:7" {
-		t.Fatalf("Address = %q, want demo:7", got)
+// A tab outside the home window names its target: each target numbers its
+// panels on its own.
+func TestLabelOfNamesTheTargetOutsideTheHomeWindow(t *testing.T) {
+	for addr, want := range map[string]string{"demo:home:7": "Tab 7", "demo:7": "Tab 7", "demo:work:7": "Tab work/7"} {
+		if got := labelOf(addr); got != want {
+			t.Errorf("labelOf(%q) = %q, want %q", addr, got, want)
+		}
 	}
 }

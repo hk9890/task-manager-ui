@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -76,6 +77,7 @@ func resolveConfigPath(override string) (string, error) {
 
 type overrideModel struct {
 	Launcher    *overrideLauncher   `yaml:"launcher"`
+	Agent       *overrideAgent      `yaml:"agent"`
 	KeyBindings *KeyBindingOverride `yaml:"keybindings"`
 	UI          *overrideUI         `yaml:"ui"`
 }
@@ -90,6 +92,15 @@ type overrideLauncherDefinition struct {
 	Args    []string `yaml:"args"`
 	Env     []string `yaml:"env"`
 	WorkDir *string  `yaml:"workdir"`
+}
+
+type overrideAgent struct {
+	Intents []overrideIntent `yaml:"intents"`
+}
+
+type overrideIntent struct {
+	Name   string  `yaml:"name"`
+	Prompt *string `yaml:"prompt"`
 }
 
 type overrideUI struct {
@@ -176,6 +187,19 @@ func filterBindingOverrideMap(input map[string][]string, allowed map[string]stru
 }
 
 func validateOverride(override overrideModel) error {
+	if override.Agent != nil {
+		seen := make(map[string]struct{}, len(override.Agent.Intents))
+		for i, intent := range override.Agent.Intents {
+			name := strings.TrimSpace(intent.Name)
+			if name == "" {
+				return fmt.Errorf("agent.intents[%d].name is required", i)
+			}
+			if _, exists := seen[name]; exists {
+				return fmt.Errorf("agent.intents contains duplicate name %q", name)
+			}
+			seen[name] = struct{}{}
+		}
+	}
 	if override.Launcher == nil {
 		return nil
 	}
@@ -195,12 +219,21 @@ func validateOverride(override overrideModel) error {
 	return nil
 }
 
+// removedAgentAction is the action of the built-in agent launcher, which the
+// agent intents replaced. An override of it that only set some fields kept
+// the built-in command and has none now.
+const removedAgentAction = "agent"
+
 func validateResolved(cfg Model) (ResolvedKeyBindings, error) {
 	seen := make(map[string]struct{}, len(cfg.Launcher.Definitions))
 	for i, definition := range cfg.Launcher.Definitions {
 		action := strings.TrimSpace(definition.Action)
 		if action == "" {
 			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].action is required", i)
+		}
+		if strings.TrimSpace(definition.Command) == "" && action == removedAgentAction {
+			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].command is required for action %q: "+
+				"the built-in agent launcher was removed; delete this override and set the agent prompts in agent.intents", i, action)
 		}
 		if strings.TrimSpace(definition.Command) == "" {
 			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions[%d].command is required for action %q", i, action)
@@ -209,6 +242,18 @@ func validateResolved(cfg Model) (ResolvedKeyBindings, error) {
 			return ResolvedKeyBindings{}, fmt.Errorf("launcher.definitions contains duplicate action %q", action)
 		}
 		seen[action] = struct{}{}
+	}
+
+	// revier submits a prompt as one line, so a line break would send the
+	// rest as a second prompt.
+	for i, intent := range cfg.Agent.Intents {
+		prompt := strings.TrimSpace(intent.Prompt)
+		if prompt == "" {
+			return ResolvedKeyBindings{}, fmt.Errorf("agent.intents[%d].prompt is required for intent %q", i, intent.Name)
+		}
+		if strings.ContainsAny(prompt, "\r\n") {
+			return ResolvedKeyBindings{}, fmt.Errorf("agent.intents[%d].prompt for intent %q must be one line", i, intent.Name)
+		}
 	}
 
 	resolved, err := ResolveKeyBindings(cfg.KeyBindings)
@@ -224,6 +269,9 @@ func merge(base Model, override overrideModel) Model {
 
 	if override.Launcher != nil && len(override.Launcher.Definitions) > 0 {
 		merged.Launcher.Definitions = mergeLauncherDefinitions(merged.Launcher.Definitions, override.Launcher.Definitions)
+	}
+	if override.Agent != nil && len(override.Agent.Intents) > 0 {
+		merged.Agent.Intents = mergeIntents(merged.Agent.Intents, override.Agent.Intents)
 	}
 	merged.KeyBindings = MergeKeyBindings(merged.KeyBindings, override.KeyBindings)
 
@@ -290,14 +338,36 @@ func mergeLauncherDefinitions(base []LauncherDefinition, overrides []overrideLau
 	return merged
 }
 
+// mergeIntents replaces the prompt of an intent the override names, and
+// appends an intent it adds.
+func mergeIntents(base []Intent, overrides []overrideIntent) []Intent {
+	merged := append([]Intent(nil), base...)
+	for _, override := range overrides {
+		name := strings.TrimSpace(override.Name)
+		idx := slices.IndexFunc(merged, func(intent Intent) bool { return intent.Name == name })
+		if idx < 0 {
+			merged = append(merged, Intent{Name: name})
+			idx = len(merged) - 1
+		}
+		if override.Prompt != nil {
+			merged[idx].Prompt = *override.Prompt
+		}
+	}
+	return merged
+}
+
 var allowedMappingKeys = map[string]map[string]struct{}{
 	"": {
 		"launcher":    {},
+		"agent":       {},
 		"keybindings": {},
 		"ui":          {},
 	},
 	"launcher": {
 		"definitions": {},
+	},
+	"agent": {
+		"intents": {},
 	},
 	"ui": {
 		"show_mode_switcher_help": {},
@@ -317,6 +387,10 @@ var allowedMappingKeys = map[string]map[string]struct{}{
 }
 
 var allowedSequenceMappingKeys = map[string]map[string]struct{}{
+	"agent.intents": {
+		"name":   {},
+		"prompt": {},
+	},
 	"launcher.definitions": {
 		"action":  {},
 		"command": {},

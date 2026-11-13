@@ -38,11 +38,13 @@ func (r *Repository) UpdateIssue(ctx context.Context, id string, input domain.Up
 		return err
 	}
 	in := tasks.UpdateInput{
-		Title:       input.Title,
-		Description: input.Description,
-		Priority:    input.Priority,
-		Assignee:    input.Assignee,
-		ClearLabels: input.ClearLabels,
+		Title:        input.Title,
+		Description:  input.Description,
+		Priority:     input.Priority,
+		Assignee:     input.Assignee,
+		ClearLabels:  input.ClearLabels,
+		AddLabels:    input.AddLabels,
+		RemoveLabels: input.RemoveLabels,
 	}
 	if input.Status != nil {
 		s := tasks.Status(*input.Status)

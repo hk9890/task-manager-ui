@@ -11,11 +11,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/logging"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	agentsmode "github.com/hk9890/task-manager-ui/internal/mode/agents"
 	boardmode "github.com/hk9890/task-manager-ui/internal/mode/board"
 	configscreenmode "github.com/hk9890/task-manager-ui/internal/mode/configscreen"
 	"github.com/hk9890/task-manager-ui/internal/mode/detail"
@@ -112,7 +114,7 @@ type Model struct {
 	selectedByMode map[mode.ID]*mode.Selection
 
 	// drillSelection is the issue Detail drilled into from its Dependencies
-	// rail. While it is set and Detail is active it IS the shell's selection:
+	// rail, or opened from the Agents tab. While it is set and Detail is active it IS the shell's selection:
 	// the browse tab's row is not what the operator is looking at, so acting on
 	// it would edit, close, comment on or launch against the wrong issue. It is
 	// cleared whenever the shell leaves Detail or a browse tab moves its own
@@ -121,6 +123,7 @@ type Model struct {
 
 	board  *boardmode.Model
 	docs   *docsmode.Model
+	agents *agentsmode.Model
 	search *searchmode.Model
 
 	// storePicker is the full-screen store list. pickerReturn is the mode the
@@ -161,13 +164,19 @@ type Model struct {
 	showHelp   bool
 	helpOffset int
 
-	// The action modal carries the store form or the comment delete question.
-	// commentDelete is the comment the question is about, and empty while the
-	// store form is open.
+	// The action modal carries the store form, the comment delete question,
+	// the agent close question, the ask question or the focus offer of an
+	// agent that asks. commentDelete is the comment the delete question is
+	// about, and empty while another is open. agentClose, agentAsk and
+	// agentFocusOffer are what their question is about, and nil while another
+	// is open.
 	actionModal     modal.Model
 	showActionModal bool
 	storeForm       storeForm
 	commentDelete   commentDelete
+	agentClose      *agent.Agent
+	agentAsk        *agentAsk
+	agentFocusOffer *agent.Agent
 
 	focusKnown      bool
 	terminalFocused bool
@@ -184,17 +193,35 @@ type Model struct {
 	storeChanges   <-chan struct{}
 	storeChangeSeq int
 
-	// revierProject is the revier project of the store's project path, ""
-	// until a poll resolves it. agentPollInFlight is true while a poll runs,
-	// so ticks do not pile polls up behind a slow revier. agentPollFailing is
-	// true from a failed poll to the next one that succeeds: a failure is
-	// logged once, not every tick. projectLookupWait is the ticks left before
-	// a project lookup that failed is tried again: outside a revier project
-	// every lookup fails, and each one runs revier.
-	revierProject     string
+	// agentPollInFlight is true while a poll runs, so ticks do not pile polls
+	// up behind a slow agent host. agentPollFailing is true from a failed poll
+	// to the next one that succeeds: a failure is logged once, not every
+	// tick. projectLookupWait is the ticks left before a poll is tried again
+	// after the host said the project root is no project of its own: outside
+	// one every poll fails, and each one runs the host.
 	agentPollInFlight bool
 	agentPollFailing  bool
 	projectLookupWait int
+
+	// liveAgents is the agents of the last poll that answered, with each
+	// agent the app started since put in and each it closed taken out.
+	// liveAgentsKnown is false before the first answer and after a failed
+	// poll, and agentPollErr is the error of that poll. agentPollStale is
+	// set when the app started or closed an agent while a poll was in
+	// flight: that poll began before the change, so its result is dropped
+	// and another poll runs.
+	liveAgents      []agent.Agent
+	liveAgentsKnown bool
+	agentPollErr    error
+	agentPollStale  bool
+
+	// agentStarts is the starts of an agent in flight, from an intent or the
+	// selection menu's ask, and agentResumes the sessions a resume is in
+	// flight for. A start or a resume waits for the agent's harness, which
+	// takes seconds, so the header spinner turns while either is not empty.
+	// Neither is cleared by a store switch: the result of each still comes.
+	agentStarts  int
+	agentResumes map[string]bool
 
 	spinnerFrame int
 
@@ -292,7 +319,8 @@ func NewModelWithOptions(services Services, runtime RuntimeOptions) (Model, erro
 
 // bindStore makes services the active store. It cancels the previous store's
 // context, derives a new one, and rebuilds every surface that reads a store —
-// board, docs, search, detail — with the state the shell keeps about them.
+// board, docs, agents, search, detail — with the state the shell keeps about
+// them.
 //
 // It is the one construction path for those surfaces, at startup and on every
 // switch, so a switch cannot keep a field that a per-mode Reset() forgot to
@@ -313,13 +341,15 @@ func (m *Model) bindStore(services Services) {
 	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
 	m.search = searchmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "search"), m.keys)
+	m.agents = agentsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "agents"), m.keys)
 	m.detail = detail.Model{Keys: m.keys}
 	// The agents belong to the previous store's project. The poll a caller
 	// starts after the bind resolves the new one.
-	m.revierProject = ""
 	m.agentPollInFlight = false
 	m.agentPollFailing = false
 	m.projectLookupWait = 0
+	m.liveAgents, m.liveAgentsKnown, m.agentPollErr, m.agentPollStale = nil, false, nil, false
+	m.agents.SetAgents(nil, false, m.agentsAbsent(nil), nil)
 	m.applyWorkspaceSizeToBrowseModes()
 
 	m.active = mode.Board
@@ -334,6 +364,9 @@ func (m *Model) bindStore(services Services) {
 	m.showActionModal = false
 	m.storeForm = storeForm{}
 	m.commentDelete = commentDelete{}
+	m.agentClose = nil
+	m.agentAsk = nil
+	m.agentFocusOffer = nil
 	m.fatalErrTitle, m.fatalErrBody = "", ""
 	// Board is initialised eagerly — by Init at startup, by switchStore after a
 	// switch — so it starts marked done and a later switch back to it does not
@@ -344,6 +377,7 @@ func (m *Model) bindStore(services Services) {
 	m.refreshStateBySurface = map[mode.ID]surfaceRefreshState{
 		mode.Board:  {lastRefresh: now},
 		mode.Docs:   {lastRefresh: now},
+		mode.Agents: {lastRefresh: now},
 		mode.Search: {lastRefresh: now},
 		mode.Detail: {},
 	}
@@ -690,8 +724,20 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case agentPollTickMsg:
 		return m, batchCmds(modeCmd, m.scheduleAgentPoll(), m.pollAgentsCmd())
 	case agentsListedMsg:
-		m.applyAgentList(msg)
-		return m, modeCmd
+		return m, batchCmds(modeCmd, m.applyAgentList(msg))
+	case agentStartedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentStarted(msg))
+	case agentAskStartedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentAskStarted(msg))
+	case agentAnsweredMsg:
+		return m, batchCmds(modeCmd, m.handleAgentAnswered(msg))
+	case agentResumedMsg:
+		delete(m.agentResumes, msg.agent.Session)
+		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.epoch, msg.err))
+	case agentClosedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentClosed(msg))
+	case agentUnlinkedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentUnlinked(msg))
 	case agentFocusedMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Could not bring the agent to the front: %v", msg.err), toaster.StyleError))
@@ -852,9 +898,15 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case mode.ActionDeleteComment:
 			return m, batchCmds(modeCmd, m.confirmCommentDelete())
 		case mode.ActionLaunchAgent:
-			return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
-		case mode.ActionFocusAgent:
-			return m, batchCmds(modeCmd, m.focusAgent())
+			return m, batchCmds(modeCmd, m.openAgentDialog())
+		case mode.ActionOpenAgent:
+			return m, batchCmds(modeCmd, m.openAgent(msg.Agent))
+		case mode.ActionCloseAgent:
+			return m, batchCmds(modeCmd, m.requestAgentClose(msg.Agent))
+		case mode.ActionSelectAgent:
+			return m, batchCmds(modeCmd, m.selectAgent(msg.Agent.Session))
+		case mode.ActionPollAgents:
+			return m, batchCmds(modeCmd, m.pollAgentsNow())
 		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
@@ -866,6 +918,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// announces that row travels as a Cmd of its own and can arrive after
 		// the request, so the stored selection may still be an older row.
 		m.adoptSelection(msg.Mode, msg.Selection)
+		if msg.Mode == mode.Agents {
+			// Each poll can move or remove the rows of the Agents tab, so its
+			// selection must not retarget the Detail opened from it.
+			opened := *msg.Selection
+			m.drillSelection = &opened
+		}
 		m.active = mode.Detail
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case detail.OpenRelatedIssueMsg:
@@ -907,6 +965,16 @@ func (m *Model) showToast(message string, style toaster.Style) tea.Cmd {
 	m.toast = m.toast.Show(displaytext.Lines(message), style)
 	// Tag the dismiss timer with this toast's identity so a stale timer from an
 	// earlier toast cannot dismiss the one now on screen (see DismissMsg handler).
+	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())
+}
+
+// showReport shows a report the operator reads to its end, over up to three
+// lines. One that is cut to fit them stays until Escape or the next toast.
+func (m *Model) showReport(message string, style toaster.Style) tea.Cmd {
+	m.toast = m.toast.ShowReport(displaytext.Lines(message), style, m.width)
+	if m.toast.Held() {
+		return nil
+	}
 	return m.scheduleToastDismiss(3*time.Second, m.toast.Seq())
 }
 
@@ -998,6 +1066,10 @@ func (m *Model) reloadActiveSurface() tea.Cmd {
 	}
 	// Board is the shell's home tab, so an unknown active mode draws it
 	// (renderBody) and the button reloads what is drawn.
+	if m.active == mode.Agents {
+		// The agents themselves come from the host, which the shell asks.
+		return batchCmds(m.scoped(m.agents.Reload()), m.pollAgentsNow())
+	}
 	if tab := m.browseController(m.active); tab != nil {
 		return m.scoped(tab.Reload())
 	}
@@ -1109,6 +1181,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 		if hadPendingEditor {
 			return m, modeCmd
 		}
+		// A held toast stays until Escape, so it takes the first one.
+		if m.toast.Held() {
+			m.toast = m.toast.Hide()
+			return m, modeCmd
+		}
 		// The picker is a surface above the shell, so leaving it restores the
 		// mode it was opened from — including Detail — rather than popping to
 		// the home tab. Nothing below it was touched, so its selection and
@@ -1187,12 +1264,7 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 		if m.active != mode.Detail {
 			return m, modeCmd
 		}
-		return m, batchCmds(modeCmd, m.launchCmd(LaunchActionAgent))
-	case m.keys.Match(config.ShellContext, config.ShellActionFocusAgent, msg):
-		if m.active != mode.Detail {
-			return m, modeCmd
-		}
-		return m, batchCmds(modeCmd, m.focusAgent())
+		return m, batchCmds(modeCmd, m.openAgentDialog())
 	}
 
 	return m, modeCmd
@@ -1231,10 +1303,21 @@ func (m Model) handleOverlayMessage(msg tea.Msg, modeCmd tea.Cmd) (tea.Model, te
 			m.showActionModal = false
 			m.storeForm = storeForm{}
 			m.commentDelete = commentDelete{}
+			m.agentClose = nil
+			m.agentAsk = nil
+			m.agentFocusOffer = nil
 			return m, modeCmd
 		}
 
 		if submit, ok := msg.(modal.SubmitMsg); ok {
+			switch {
+			case m.agentClose != nil:
+				return m, batchCmds(modeCmd, m.confirmAgentClose())
+			case m.agentAsk != nil:
+				return m, batchCmds(modeCmd, m.submitAgentAsk(submit.Values))
+			case m.agentFocusOffer != nil:
+				return m, batchCmds(modeCmd, m.confirmAgentFocus())
+			}
 			// No store form is open: the modal is the comment delete question.
 			if m.storeForm.kind == 0 {
 				return m, batchCmds(modeCmd, m.deleteComment())

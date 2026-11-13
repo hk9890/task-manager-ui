@@ -5,10 +5,10 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/launcher"
 	"github.com/hk9890/task-manager-ui/internal/repository"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
@@ -22,9 +22,11 @@ import (
 // caching and pub/sub. The one watch it holds is the store's own change
 // signal, which it takes from Repo when Repo is a repository.ChangeWatcher.
 // Launcher integration stays shell-owned so browse/detail modes can emit intent
-// while launch execution stays centralized and reusable. Revier is a read and
-// focus query on the agents revier already runs, not orchestration: it starts
-// no agent.
+// while launch execution stays centralized and reusable. Agents is the host
+// of the project's coding agents, not orchestration: each call on it is
+// bounded, none outlives its context and the host sets its own timeout on
+// top. The steps inside a call (the harness wait, the session lookup, the
+// prompt, the focus) belong to the host, not to the core.
 type Services struct {
 	Repo     repository.Repository
 	Launcher launcher.Service
@@ -52,11 +54,12 @@ type Services struct {
 	// the launcher for another project root and reuses it, so a test that
 	// injects a fake keeps it across a store switch.
 	ProcessRunner launcher.ProcessRunner
-	// Revier lists the live agents of the project and brings one to the
-	// front. Nil turns that off: no poll, no open button, no board glyph.
+	// Agents lists the live agents of the project and brings one to the
+	// front. Nil turns that off: no poll, no board glyph, no agent dialog
+	// and no Ask, and the Agents tab says there is no agent host.
 	// Like StoreCatalog it is injected after construction, so a test that
-	// builds services never runs the real revier, which starts real agents.
-	Revier revier.Client
+	// builds services never runs the real host, which starts real agents.
+	Agents agent.Host
 	// Logger is the optional root runtime logger. It must NOT carry a
 	// "component" attribute; NewModelWithOptions derives per-mode loggers
 	// (component=board, component=search, …) via logging.WithComponent. When
@@ -72,7 +75,6 @@ const (
 	LaunchActionNvim         = "nvim"
 	LaunchActionOpencode     = "opencode"
 	LaunchActionShellCommand = "shell-command"
-	LaunchActionAgent        = "agent"
 )
 
 // LaunchableActions is that set as a list. The keybinding action set is fixed
@@ -82,7 +84,6 @@ var LaunchableActions = []string{
 	LaunchActionNvim,
 	LaunchActionOpencode,
 	LaunchActionShellCommand,
-	LaunchActionAgent,
 }
 
 // LauncherDefinitions converts the configured launcher definitions into the

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 )
 
@@ -14,6 +15,9 @@ type ID string
 const (
 	Board ID = "board"
 	Docs  ID = "docs"
+	// Agents lists the agents of the store's project, linked to an issue or
+	// not.
+	Agents ID = "agents"
 	// Search is the store search. It satisfies Browse and holds a selection,
 	// but it is not a tab: it is absent from BrowseModes and is opened by a
 	// shell action instead.
@@ -35,7 +39,7 @@ const (
 // Config and IssueEdit are not tabs: Detail is a drill-in reached from a
 // browse mode and left with Escape, and the other three are full-screen
 // surfaces above all of them.
-var BrowseModes = []ID{Board, Docs}
+var BrowseModes = []ID{Board, Docs, Agents}
 
 // IsBrowse reports whether id is one of the browse tabs. The shell keeps
 // lastBrowse pointing at one of these, so selection lookups always resolve.
@@ -86,6 +90,10 @@ type Browse interface {
 	// empty, and Escape then does what it does without a query.
 	ClearQuery() (cleared bool, cmd tea.Cmd)
 
+	// HasQuery reports whether the tab's filter query holds text: the
+	// operator is typing into it.
+	HasQuery() bool
+
 	// TakesKey reports whether the tab takes this key for itself before any
 	// binding. The shell asks the tab on screen, and runs no action on a key
 	// it takes.
@@ -113,6 +121,14 @@ type Selection struct {
 	Issue domain.IssueSummary
 }
 
+// CommentLink is an In Progress issue and the sessions of the agents that
+// commented on it: the agents it links without a link label. The board gives
+// them, in the order of its column, and the Agents tab takes them.
+type CommentLink struct {
+	Issue    domain.IssueSummary
+	Sessions []string
+}
+
 // SelectionChangedMsg is emitted by browse modes whenever the selected
 // issue changes so the shell can update detail presentation state.
 type SelectionChangedMsg struct {
@@ -129,13 +145,17 @@ type ActionRequestMsg struct {
 	// the request does not depend on a SelectionChangedMsg arriving first. The
 	// editor actions leave it nil.
 	Selection *Selection
+	// Agent is the agent an ActionOpenAgent, an ActionCloseAgent or an
+	// ActionSelectAgent acts on, as the mode drew it; the zero Agent for
+	// every other action. An ActionSelectAgent names it by Session alone.
+	Agent agent.Agent
 }
 
 // RequestActionCmd returns the Cmd that asks the shell for a shell-owned action
 // on behalf of the mode with this id.
 //
-// It and RequestOpenDetailCmd are the constructors of the whole contract, so
-// no mode builds the message inline.
+// It, RequestOpenDetailCmd and RequestAgentCmd are the constructors of the
+// whole contract, so no mode builds the message inline.
 func RequestActionCmd(id ID, action Action) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: action}
@@ -147,6 +167,15 @@ func RequestActionCmd(id ID, action Action) tea.Cmd {
 func RequestOpenDetailCmd(id ID, selection *Selection) tea.Cmd {
 	return func() tea.Msg {
 		return ActionRequestMsg{Mode: id, Action: ActionOpenDetail, Selection: selection}
+	}
+}
+
+// RequestAgentCmd returns the Cmd that asks the shell for an action on the
+// agent a — ActionOpenAgent, ActionCloseAgent or ActionSelectAgent — on
+// behalf of the mode with this id.
+func RequestAgentCmd(id ID, action Action, a agent.Agent) tea.Cmd {
+	return func() tea.Msg {
+		return ActionRequestMsg{Mode: id, Action: action, Agent: a}
 	}
 }
 
@@ -169,11 +198,25 @@ const (
 	ActionEditComment   Action = "edit_comment"
 	ActionDeleteComment Action = "delete_comment"
 
-	// ActionLaunchAgent and ActionFocusAgent are the agent and open buttons
-	// of the Content pane's ID line: the first starts the agent launcher on the
-	// issue, the second brings the issue's live agent to the front.
+	// ActionLaunchAgent is the agent button of the Content pane's ID line: it
+	// opens the agent dialog of the issue, which acts on its agents and starts
+	// new ones.
 	ActionLaunchAgent Action = "launch_agent"
-	ActionFocusAgent  Action = "focus_agent"
+
+	// ActionOpenAgent is Enter on a row of the Agents tab: the shell brings
+	// that agent to the front, and resumes it first when it is gone.
+	// ActionCloseAgent closes it, and asks first when it is busy.
+	ActionOpenAgent  Action = "open_agent"
+	ActionCloseAgent Action = "close_agent"
+
+	// ActionSelectAgent is a click on the row of an agent in the Details
+	// pane of Detail: the shell switches to the Agents tab with that agent
+	// selected.
+	ActionSelectAgent Action = "select_agent"
+
+	// ActionPollAgents is the reload key of the Agents tab: the shell asks
+	// the agent host for the live agents at once, as its poll does.
+	ActionPollAgents Action = "poll_agents"
 )
 
 // MouseKind is what the pointer did.

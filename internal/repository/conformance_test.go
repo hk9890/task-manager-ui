@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -881,6 +882,112 @@ func TestUpdateDedupesLabelsConformance(t *testing.T) {
 		}
 		if got := detail.Summary.Labels; !equalStrings(got, []string{"alpha", "beta"}) {
 			t.Errorf("%s: labels after update = %v, want [alpha beta]", b.name, got)
+		}
+	}
+}
+
+// TestAddLabelsKeepsTheOtherLabelsConformance pins the add-label write the
+// agent link takes: the label joins the set the issue has, which no write
+// replaces, and adding a label it has already writes no second one.
+func TestAddLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{Title: "linked", Labels: []string{"alpha"}})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		for range 2 {
+			if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{
+				AddLabels: []string{"agent-session:s-1"},
+			}); err != nil {
+				t.Fatalf("%s: UpdateIssue: %v", b.name, err)
+			}
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		if got := detail.Summary.Labels; !equalStrings(got, []string{"agent-session:s-1", "alpha"}) && !equalStrings(got, []string{"alpha", "agent-session:s-1"}) {
+			t.Errorf("%s: labels after the add = %v, want alpha and agent-session:s-1", b.name, got)
+		}
+	}
+}
+
+// TestRemoveLabelsKeepsTheOtherLabelsConformance pins the label write the
+// issue editor takes: a removed label leaves the set, and a label the write
+// does not name stays, an agent link among them.
+func TestRemoveLabelsKeepsTheOtherLabelsConformance(t *testing.T) {
+	for _, b := range freshBackends(t) {
+		created, err := b.repo.CreateIssue(context.Background(), domain.CreateIssueInput{
+			Title:  "edited",
+			Labels: []string{"alpha", "beta", "agent-session:s-1"},
+		})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.UpdateIssue(context.Background(), created.IssueID, domain.UpdateIssueInput{
+			AddLabels:    []string{"gamma"},
+			RemoveLabels: []string{"alpha"},
+		}); err != nil {
+			t.Fatalf("%s: UpdateIssue: %v", b.name, err)
+		}
+
+		detail, err := b.repo.Issue(context.Background(), created.IssueID)
+		if err != nil {
+			t.Fatalf("%s: Issue: %v", b.name, err)
+		}
+		got := slices.Sorted(slices.Values(detail.Summary.Labels))
+		if want := []string{"agent-session:s-1", "beta", "gamma"}; !equalStrings(got, want) {
+			t.Errorf("%s: labels after the edit = %v, want %v", b.name, got, want)
+		}
+	}
+}
+
+// TestSearchByLabelContainsConformance pins the read the Agents tab takes: the
+// issues with a label that contains the text, without case, closed ones too
+// when asked, and with every other filter still applied.
+func TestSearchByLabelContainsConformance(t *testing.T) {
+	ctx := context.Background()
+	for _, b := range freshBackends(t) {
+		for _, input := range []domain.CreateIssueInput{
+			{Title: "linked", Labels: []string{"alpha", "agent-session:s-1"}},
+			{Title: "linked twice", Labels: []string{"agent-session:s-2", "agent-session:s-3"}},
+			{Title: "unlinked", Labels: []string{"alpha"}},
+			{Title: "bare"},
+		} {
+			if _, err := b.repo.CreateIssue(ctx, input); err != nil {
+				t.Fatalf("%s: CreateIssue %q: %v", b.name, input.Title, err)
+			}
+		}
+		closed, err := b.repo.CreateIssue(ctx, domain.CreateIssueInput{Title: "linked and closed", Labels: []string{"agent-session:s-4"}})
+		if err != nil {
+			t.Fatalf("%s: CreateIssue: %v", b.name, err)
+		}
+		if err := b.repo.CloseIssue(ctx, closed.IssueID, domain.CloseIssueInput{Reason: "done"}); err != nil {
+			t.Fatalf("%s: CloseIssue: %v", b.name, err)
+		}
+
+		for _, tc := range []struct {
+			query domain.SearchIssuesQuery
+			want  []string
+		}{
+			{domain.SearchIssuesQuery{LabelContains: "AGENT-SESSION:"}, []string{"linked", "linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent-session:", IncludeClosed: true}, []string{"linked", "linked and closed", "linked twice"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent-session:", Labels: []string{"alpha"}}, []string{"linked"}},
+			{domain.SearchIssuesQuery{LabelContains: "agent-session:", Text: "twice"}, []string{"linked twice"}},
+		} {
+			page, err := b.repo.Search(ctx, tc.query)
+			if err != nil {
+				t.Fatalf("%s: Search %+v: %v", b.name, tc.query, err)
+			}
+			var got []string
+			for _, result := range page.Results {
+				got = append(got, result.Issue.Title)
+			}
+			sort.Strings(got)
+			if !equalStrings(got, tc.want) {
+				t.Errorf("%s: Search %+v = %v, want %v", b.name, tc.query, got, tc.want)
+			}
 		}
 	}
 }

@@ -1,0 +1,427 @@
+// Package revier is the agent.Host over the revier command line: revier opens
+// each agent in a tab of the project's open workspace. Every call runs the
+// revier binary on PATH with an argument list, never through a shell, and
+// under a timeout. Standard library only.
+package revier
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/hk9890/task-manager-ui/internal/agent"
+)
+
+const (
+	// callTimeout bounds a call that answers at once: a poll must not pile
+	// up behind a revier that hangs.
+	callTimeout = 5 * time.Second
+	// promptTimeout bounds a prompt, which returns once the agent started on
+	// the text.
+	promptTimeout = 30 * time.Second
+	// harnessWait is the seconds the wait for a new agent's harness to start
+	// and be idle may take.
+	harnessWait = 60
+	// sessionAttempts is how often Start lists the agents for the session of
+	// a new agent whose harness does not name it yet.
+	sessionAttempts = 5
+	// startTimeout bounds all of Start: the tab, its harness, its session
+	// and the prompt.
+	startTimeout = 3 * time.Minute
+	// turnWait is the seconds Wait waits for a turn to end.
+	turnWait = 30 * 60
+)
+
+// Host is the agent.Host that runs revier. It remembers the revier project
+// of each root it resolved, so a poll runs one revier call, not two. A failed
+// call on a project forgets it, so a project renamed or removed in revier is
+// resolved again.
+type Host struct {
+	// pause is the time between two attempts of a retried call.
+	pause time.Duration
+
+	mu       sync.Mutex
+	projects map[string]string
+}
+
+var _ agent.Host = (*Host)(nil)
+
+// NewHost returns the Host that runs the revier binary on PATH.
+func NewHost() *Host {
+	return &Host{pause: 2 * time.Second, projects: map[string]string{}}
+}
+
+// Start opens an agent tab without the focus, waits for its harness, reads
+// its session from the list, then prompts it when spec has a prompt. revier
+// has no command that prints the session of a new agent, hence the list. A
+// tab whose session Start could not read is closed again: nothing could reach
+// it. A failed prompt returns the agent with the error.
+func (h *Host) Start(ctx context.Context, spec agent.Spec) (started agent.Agent, err error) {
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+	project, err := h.project(ctx, spec.Root)
+	if err != nil {
+		return agent.Agent{}, err
+	}
+	defer h.forgetOnError(spec.Root, &err)
+	addr, err := newAgent(ctx, project)
+	if err != nil {
+		return agent.Agent{}, err
+	}
+	started, err = h.awaitStarted(ctx, project, addr)
+	if err != nil {
+		closeOrphan(ctx, addr)
+		return agent.Agent{}, err
+	}
+	if spec.Prompt != "" {
+		if _, err := run(ctx, promptTimeout, "", "agent", "prompt", addr, "--", spec.Prompt); err != nil {
+			return started, err
+		}
+		started.Status = agent.Running
+	}
+	return started, nil
+}
+
+// List returns the agents of the revier project at root that run on this
+// machine.
+func (h *Host) List(ctx context.Context, root string) (_ []agent.Agent, err error) {
+	project, err := h.project(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	defer h.forgetOnError(root, &err)
+	return listAgents(ctx, project)
+}
+
+// Focus makes the agent's tab current and raises its window.
+func (h *Host) Focus(ctx context.Context, a agent.Agent) error {
+	_, err := run(ctx, callTimeout, "", "agent", "focus", a.Ref)
+	return err
+}
+
+// Resume opens an agent tab on the conversation session, without the focus,
+// and returns once its harness is idle: revier focuses no agent before that.
+// A tab whose harness does not come up is closed again, as Start does.
+func (h *Host) Resume(ctx context.Context, root, session string) (_ agent.Agent, err error) {
+	ctx, cancel := context.WithTimeout(ctx, startTimeout)
+	defer cancel()
+	project, err := h.project(ctx, root)
+	if err != nil {
+		return agent.Agent{}, err
+	}
+	defer h.forgetOnError(root, &err)
+	addr, err := newAgent(ctx, project, "--resume", session)
+	if err != nil {
+		return agent.Agent{}, err
+	}
+	if err := awaitHarness(ctx, addr); err != nil {
+		closeOrphan(ctx, addr)
+		return agent.Agent{}, err
+	}
+	return agent.Agent{Ref: addr, Session: session, Label: labelOf(addr), Status: agent.Idle}, nil
+}
+
+// Wait returns the status the agent stopped on: idle, or waiting for the
+// operator. It fails after turnWait seconds.
+func (h *Host) Wait(ctx context.Context, a agent.Agent) (agent.Status, error) {
+	out, err := wait(ctx, a.Ref, "stopped", turnWait)
+	if err != nil {
+		return "", err
+	}
+	return status(out), nil
+}
+
+// Read returns the last thing the agent said.
+func (h *Host) Read(ctx context.Context, a agent.Agent) (string, error) {
+	out, err := run(ctx, callTimeout, "", "agent", "read", a.Ref)
+	return string(out), err
+}
+
+// Close closes the agent's panel. Without force revier refuses an agent that
+// is running or waits for an answer.
+func (h *Host) Close(ctx context.Context, a agent.Agent, force bool) error {
+	args := []string{"agent", "close", a.Ref}
+	if force {
+		args = append(args, "--force")
+	}
+	_, err := run(ctx, callTimeout, "", args...)
+	return err
+}
+
+// project returns the revier project whose path is root, from the cache or
+// from revier status. A status that names no project at root wraps
+// agent.ErrNoProject; a status that did not run, such as revier not installed
+// or out of time, is a plain error. Neither is cached, so a root that becomes
+// a project is found on a later call.
+func (h *Host) project(ctx context.Context, root string) (string, error) {
+	h.mu.Lock()
+	project, ok := h.projects[root]
+	h.mu.Unlock()
+	if ok {
+		return project, nil
+	}
+	out, err := run(ctx, callTimeout, root, "status")
+	if err != nil {
+		return "", err
+	}
+	project, err = projectFromStatus(out, root)
+	if err != nil {
+		return "", fmt.Errorf("%w (%w)", err, agent.ErrNoProject)
+	}
+	h.mu.Lock()
+	h.projects[root] = project
+	h.mu.Unlock()
+	return project, nil
+}
+
+// forgetOnError forgets the project of root when *err is set.
+func (h *Host) forgetOnError(root string, err *error) {
+	if *err == nil {
+		return
+	}
+	h.mu.Lock()
+	delete(h.projects, root)
+	h.mu.Unlock()
+}
+
+// awaitStarted waits for the harness of the new agent at addr, then for its
+// session.
+func (h *Host) awaitStarted(ctx context.Context, project, addr string) (agent.Agent, error) {
+	if err := awaitHarness(ctx, addr); err != nil {
+		return agent.Agent{}, err
+	}
+	return h.awaitSession(ctx, project, addr)
+}
+
+// awaitHarness waits until the harness of the new agent at addr has started
+// and is idle, harnessWait seconds at most: revier agent wait itself waits
+// for the harness to start within its timeout.
+func awaitHarness(ctx context.Context, addr string) error {
+	if _, err := wait(ctx, addr, "idle", harnessWait); err != nil {
+		return fmt.Errorf("the agent at %s is not idle after %d seconds: %w", addr, harnessWait, err)
+	}
+	return nil
+}
+
+// awaitSession lists the agents of project until the one at addr names its
+// session, sessionAttempts times at most. The whole address is compared: two
+// targets of a project number their panels each on their own.
+func (h *Host) awaitSession(ctx context.Context, project, addr string) (agent.Agent, error) {
+	for range sessionAttempts {
+		agents, err := listAgents(ctx, project)
+		if err != nil {
+			return agent.Agent{}, err
+		}
+		for _, a := range agents {
+			if a.Ref == addr && a.Session != "" {
+				return a, nil
+			}
+		}
+		if err := h.sleep(ctx); err != nil {
+			return agent.Agent{}, err
+		}
+	}
+	return agent.Agent{}, fmt.Errorf("revier lists no session for the agent at %s", addr)
+}
+
+func (h *Host) sleep(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(h.pause):
+		return nil
+	}
+}
+
+// closeOrphan force-closes the tab at addr that Start opened and gives up on,
+// best effort. The tab holds no prompt yet, so the force loses no work. It
+// runs on its own timeout: ctx may be the one that ran out.
+func closeOrphan(ctx context.Context, addr string) {
+	_, _ = run(context.WithoutCancel(ctx), callTimeout, "", "agent", "close", addr, "--force")
+}
+
+// newAgent opens an agent tab of project without the focus and returns its
+// address, which revier prints before the harness in the tab has started.
+func newAgent(ctx context.Context, project string, extra ...string) (string, error) {
+	args := append([]string{"agent", "new", "--no-focus", "-p", project}, extra...)
+	out, err := run(ctx, callTimeout, "", args...)
+	if err != nil {
+		return "", err
+	}
+	addr := strings.TrimSpace(string(out))
+	if addr == "" {
+		return "", errors.New("revier agent new printed no address")
+	}
+	return addr, nil
+}
+
+// wait runs revier agent wait on addr until status, for seconds at most, and
+// returns the status it ended on.
+func wait(ctx context.Context, addr, status string, seconds int) (string, error) {
+	timeout := time.Duration(seconds)*time.Second + callTimeout
+	out, err := run(ctx, timeout, "", "agent", "wait", addr, "--until", status, "--timeout", fmt.Sprint(seconds))
+	return strings.TrimSpace(string(out)), err
+}
+
+func listAgents(ctx context.Context, project string) ([]agent.Agent, error) {
+	out, err := run(ctx, callTimeout, "", "list", "--json", "--conversations", project)
+	if err != nil {
+		return nil, err
+	}
+	return parseAgents(out)
+}
+
+// run runs revier with args in dir, for timeout at most, and returns its
+// standard output. A failed call's error carries revier's standard error and
+// wraps the *exec.ExitError.
+func run(ctx context.Context, timeout time.Duration, dir string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "revier", args...)
+	cmd.Dir = dir
+	// A child of revier that keeps the output pipe open must not hold the
+	// call past its timeout.
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	if err == nil {
+		return out, nil
+	}
+	name := strings.Join(args[:min(2, len(args))], " ")
+	if errors.Is(err, exec.ErrNotFound) {
+		return nil, fmt.Errorf("revier is not installed: %w", err)
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		if stderr := strings.TrimSpace(string(exitErr.Stderr)); stderr != "" {
+			return nil, fmt.Errorf("revier %s: %w: %s", name, err, stderr)
+		}
+	}
+	return nil, fmt.Errorf("revier %s: %w", name, err)
+}
+
+// projectFromStatus returns the project of revier status output whose path is
+// root. Outside a project revier status reports the project of the focused
+// window instead of failing, so a project at another path is an error.
+func projectFromStatus(out []byte, root string) (string, error) {
+	var project, path string
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+	for scanner.Scan() {
+		key, value, _ := strings.Cut(scanner.Text(), " ")
+		switch key {
+		case "project":
+			project = strings.TrimSpace(value)
+		case "path":
+			path = strings.TrimSpace(value)
+		}
+	}
+	if project == "" || path == "" {
+		return "", errors.New("revier status names no project and path")
+	}
+	if filepath.Clean(path) != filepath.Clean(root) {
+		return "", fmt.Errorf("%s is not a revier project: revier status resolves it to %s", root, path)
+	}
+	return project, nil
+}
+
+// listedProject is the part of one element of revier list --json that List
+// reads.
+type listedProject struct {
+	Project struct {
+		Name string `json:"name"`
+	} `json:"project"`
+	Agents []struct {
+		Panel  string `json:"panel"`
+		Target string `json:"target"`
+		// Ref is the instance holding the panel. An agent without one is
+		// on a link's remote host.
+		Ref   *struct{} `json:"ref"`
+		State struct {
+			Status   string `json:"status"`
+			Session  string `json:"session"`
+			Activity string `json:"activity"`
+			Name     string `json:"name"`
+		} `json:"state"`
+	} `json:"agents"`
+}
+
+// parseAgents returns the agents on this machine in revier list --json output.
+func parseAgents(out []byte) ([]agent.Agent, error) {
+	var projects []listedProject
+	if err := json.Unmarshal(out, &projects); err != nil {
+		return nil, fmt.Errorf("read revier list: %w", err)
+	}
+	var agents []agent.Agent
+	for _, p := range projects {
+		for _, a := range p.Agents {
+			if a.Ref == nil {
+				continue
+			}
+			agents = append(agents, agent.Agent{
+				Ref:      address(p.Project.Name, a.Target, a.Panel),
+				Session:  a.State.Session,
+				Label:    label(a.Target, a.Panel),
+				Name:     a.State.Name,
+				Status:   status(a.State.Status),
+				Activity: a.State.Activity,
+			})
+		}
+	}
+	return agents, nil
+}
+
+// address returns the address revier names an agent by:
+// <project>:<target>:<panel>, or <project>:<panel> without a target.
+func address(project, target, panel string) string {
+	if target == "" {
+		return project + ":" + panel
+	}
+	return project + ":" + target + ":" + panel
+}
+
+// labelOf returns the label of the agent at address addr.
+func labelOf(addr string) string {
+	segments := strings.Split(addr, ":")
+	panel, target := segments[len(segments)-1], ""
+	if len(segments) > 2 {
+		target = segments[len(segments)-2]
+	}
+	return label(target, panel)
+}
+
+// homeTarget is the target of the project's home window, where revier agent
+// new opens a tab.
+const homeTarget = "home"
+
+// label is what the operator calls the agent in a panel of target: the tab
+// it is in. Each target numbers its panels on its own, so a tab outside the
+// home window names its target too.
+func label(target, panel string) string {
+	if target == "" || target == homeTarget {
+		return "Tab " + panel
+	}
+	return "Tab " + target + "/" + panel
+}
+
+// status maps a revier status onto agent.Status. One revier does not document
+// passes through unchanged.
+func status(revier string) agent.Status {
+	switch revier {
+	case "idle":
+		return agent.Idle
+	case "running":
+		return agent.Running
+	case "attention":
+		return agent.NeedsYou
+	default:
+		return agent.Status(revier)
+	}
+}

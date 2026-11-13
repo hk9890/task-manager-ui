@@ -32,7 +32,6 @@ const (
 	ShellActionLaunchOpencode = "launch_opencode"
 	ShellActionLaunchShell    = "launch_shell_command"
 	ShellActionLaunchAgent    = "launch_agent"
-	ShellActionFocusAgent     = "focus_agent"
 	ShellActionStorePicker    = "open_store_picker"
 	ShellActionOpenSearch     = "open_search"
 	ShellActionOpenConfig     = "open_config"
@@ -47,6 +46,11 @@ const (
 	BoardActionPageDown   = "page_down"
 	BoardActionOpenDetail = "open_detail"
 	BoardActionReload     = "reload"
+	// BoardActionCloseAgent and BoardActionOpenIssue act on the selected
+	// row of the Agents tab: they close its agent and open the issue it is
+	// linked to.
+	BoardActionCloseAgent = "close_agent"
+	BoardActionOpenIssue  = "open_issue"
 
 	DetailActionScrollUp   = "scroll_up"
 	DetailActionScrollDown = "scroll_down"
@@ -113,7 +117,6 @@ func DefaultKeyBindings() KeyBindings {
 			ShellActionLaunchOpencode: {"alt+p"},
 			ShellActionLaunchShell:    {"alt+l"},
 			ShellActionLaunchAgent:    {"alt+i"},
-			ShellActionFocusAgent:     {"alt+o"},
 			ShellActionStorePicker:    {"alt+s"},
 			ShellActionOpenSearch:     {"alt+f"},
 			ShellActionOpenConfig:     {"alt+c"},
@@ -129,6 +132,8 @@ func DefaultKeyBindings() KeyBindings {
 			BoardActionPageDown:   {"pgdown"},
 			BoardActionOpenDetail: {"enter"},
 			BoardActionReload:     {"alt+r"},
+			BoardActionCloseAgent: {"alt+x"},
+			BoardActionOpenIssue:  {"alt+o"},
 		},
 		Detail: map[string][]string{
 			DetailActionScrollUp:   {"up"},
@@ -420,7 +425,6 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			ShellActionLaunchOpencode,
 			ShellActionLaunchShell,
 			ShellActionLaunchAgent,
-			ShellActionFocusAgent,
 			ShellActionStorePicker,
 			ShellActionOpenSearch,
 			ShellActionOpenConfig,
@@ -439,6 +443,8 @@ func allowedActionsForContext(context string) map[string]struct{} {
 			BoardActionPageDown,
 			BoardActionOpenDetail,
 			BoardActionReload,
+			BoardActionCloseAgent,
+			BoardActionOpenIssue,
 		} {
 			allowed[action] = struct{}{}
 		}

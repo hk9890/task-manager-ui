@@ -32,7 +32,10 @@ type SearchIssuesQuery struct {
 	Statuses []string
 	Types    []string
 	Labels   []string
-	Assignee string
+	// LabelContains keeps the issues with a label that contains it, compared
+	// without case; "" keeps every issue.
+	LabelContains string
+	Assignee      string
 
 	// PriorityMin/PriorityMax are the inclusive priority bounds.
 	// Use both set to the same value to request an exact priority.

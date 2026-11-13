@@ -19,7 +19,6 @@ const (
 	ButtonEditComment
 	ButtonDeleteComment
 	ButtonLaunchAgent
-	ButtonFocusAgent
 )
 
 const (

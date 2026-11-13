@@ -5,18 +5,18 @@ import (
 	"strings"
 	"testing"
 
-	tea "charm.land/bubbletea/v2"
-
+	"github.com/hk9890/task-manager-ui/internal/agent"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
-// commentsBySessions is a loaded detail whose comments were written by these
-// sessions, in order; "" is a comment no agent wrote.
+// commentsBySessions is a loaded In Progress detail whose comments were
+// written by these sessions, in order; "" is a comment no agent wrote.
 func commentsBySessions(t *testing.T, sessions ...string) *Model {
 	t.Helper()
 	m := commentsDetail(t, len(sessions))
+	m.Detail.Summary.Status = domain.StatusInProgress
 	for idx, session := range sessions {
 		m.Detail.Comments[idx].Session = session
 	}
@@ -30,74 +30,103 @@ func TestLinkedAgentsAreTheLiveAgentsThatCommentedInOrderOfNeed(t *testing.T) {
 	t.Parallel()
 
 	m := commentsBySessions(t, "s-idle", "s-run-b", "", "s-gone", "s-run-a", "s-attn", "s-idle")
-	m.SetLiveAgents(map[string]revier.Agent{
-		"s-idle":   {Panel: "1", Status: revier.StatusIdle, Session: "s-idle"},
-		"s-run-b":  {Panel: "5", Status: revier.StatusRunning, Session: "s-run-b"},
-		"s-run-a":  {Panel: "4", Status: revier.StatusRunning, Session: "s-run-a"},
-		"s-attn":   {Panel: "9", Status: revier.StatusAttention, Session: "s-attn"},
-		"s-silent": {Panel: "2", Status: revier.StatusAttention, Session: "s-silent"},
+	m.SetLiveAgents(map[string]agent.Agent{
+		"s-idle":   {Label: "Tab 1", Status: agent.Idle, Session: "s-idle"},
+		"s-run-b":  {Label: "Tab 5", Status: agent.Running, Session: "s-run-b"},
+		"s-run-a":  {Label: "Tab 4", Status: agent.Running, Session: "s-run-a"},
+		"s-attn":   {Label: "Tab 9", Status: agent.NeedsYou, Session: "s-attn"},
+		"s-silent": {Label: "Tab 2", Status: agent.NeedsYou, Session: "s-silent"},
 	})
 
-	var panels []string
-	for _, agent := range m.LinkedAgents() {
-		panels = append(panels, agent.Panel)
+	var labels []string
+	for _, linked := range m.LinkedAgents() {
+		labels = append(labels, linked.Label)
 	}
-	if want := []string{"9", "4", "5", "1"}; !reflect.DeepEqual(panels, want) {
-		t.Errorf("linked panels = %v, want %v", panels, want)
+	if want := []string{"Tab 9", "Tab 4", "Tab 5", "Tab 1"}; !reflect.DeepEqual(labels, want) {
+		t.Errorf("linked labels = %v, want %v", labels, want)
 	}
 
 	m.Reset()
 	m.ApplyLoadedDetail("tm-1", issueWithComments(1))
+	m.Detail.Summary.Status = domain.StatusInProgress
 	m.Detail.Comments[0].Session = "s-attn"
-	if linked := m.LinkedAgents(); len(linked) != 1 || linked[0].Panel != "9" {
+	if linked := m.LinkedAgents(); len(linked) != 1 || linked[0].Label != "Tab 9" {
 		t.Errorf("after Reset the linked agents are %+v, want the live agents kept", linked)
 	}
 }
 
-// The agent button is drawn on every loaded issue, the open button only with a
-// linked agent, and a click on each sends the request its key sends.
-func TestClicksOnTheAgentButtonsSendTheirRequests(t *testing.T) {
+// A comment links its agent on an In Progress issue only, as on the board
+// and the Agents tab; a link label links it on an issue of any status.
+func TestACommentLinksItsAgentOnAnInProgressIssueOnly(t *testing.T) {
 	t.Parallel()
 
-	m := commentsBySessions(t, "s-1")
-	view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0))
-	if !strings.Contains(view, "agent alt+i") || strings.Contains(view, "open alt+o") {
-		t.Fatalf("without a live agent the ID line is not agent and edit:\n%s", view)
+	live := map[string]agent.Agent{
+		"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"},
+		"s-2": {Label: "Tab 4", Status: agent.Idle, Session: "s-2"},
 	}
-
-	m.SetLiveAgents(map[string]revier.Agent{"s-1": {Panel: "3", Status: revier.StatusRunning, Session: "s-1"}})
-	click := func(text string) tea.Msg {
-		t.Helper()
-		x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), text)
-		return m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)()
-	}
-	testui.AssertActionRequest(t, click("agent alt+i"), mode.Detail, mode.ActionLaunchAgent)
-	testui.AssertActionRequest(t, click("open alt+o"), mode.Detail, mode.ActionFocusAgent)
-	if view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0)); !strings.Contains(view, "Tab 3: running") {
-		t.Errorf("the Metadata pane does not list the linked agent:\n%s", view)
+	for _, status := range []string{"open", "blocked", domain.StatusClosed} {
+		m := commentsBySessions(t, "s-1")
+		m.Detail.Summary.Status = status
+		m.Detail.Summary.Labels = []string{"agent-session:s-2"}
+		m.SetLiveAgents(live)
+		var labels []string
+		for _, linked := range m.LinkedAgents() {
+			labels = append(labels, linked.Label)
+		}
+		if want := []string{"Tab 4"}; !reflect.DeepEqual(labels, want) {
+			t.Errorf("linked agents of a %s issue = %v, want %v", status, labels, want)
+		}
 	}
 }
 
-// A click aimed at open after the linked agent is gone starts no agent: agent
-// does not move into the cells open held, in the stacked and the three-pane
-// layouts.
-func TestAClickWhereOpenWasStartsNoAgent(t *testing.T) {
+// The agent button is drawn on every loaded issue, and a click on it sends
+// the request its key sends.
+func TestAClickOnTheAgentButtonSendsItsRequest(t *testing.T) {
 	t.Parallel()
 
-	for _, width := range []int{commentsWidth, 124, 160} {
-		m := commentsBySessions(t, "s-1")
-		m.SetLiveAgents(map[string]revier.Agent{"s-1": {Panel: "3", Status: revier.StatusRunning, Session: "s-1"}})
-		x, y := testui.FindCell(t, m.View(width, commentsHeight, false, 0), "open alt+o")
+	m := commentsBySessions(t, "s-1")
+	m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}})
+	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "agent alt+i")
+	request := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)()
+	testui.AssertActionRequest(t, request, mode.Detail, mode.ActionLaunchAgent)
+	if view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0)); !strings.Contains(view, "running  Tab 3") {
+		t.Errorf("the Details pane does not list the linked agent:\n%s", view)
+	}
+}
 
-		m.SetLiveAgents(nil)
-		for _, column := range []int{x - 1, x, x + len("open alt+o")} {
-			cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: column, Y: y, At: mouseStart}, width, commentsHeight)
-			if cmd == nil {
-				continue
-			}
-			if request, ok := cmd().(mode.ActionRequestMsg); ok && request.Action == mode.ActionLaunchAgent {
-				t.Errorf("width %d: a click at column %d, where open was, starts an agent", width, column)
-			}
-		}
+// A click on the row of an agent in the Details pane asks the shell for that
+// agent, and gives the pane no focus; the wheel there scrolls nothing. The
+// row under the pointer is lit.
+func TestAClickOnAnAgentRowAsksForThatAgent(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	m := commentsBySessions(t, "s-1", "s-2")
+	m.SetLiveAgents(map[string]agent.Agent{
+		"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"},
+		"s-2": {Label: "Tab 4", Status: agent.Idle, Session: "s-2"},
+	})
+	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "idle     Tab 4")
+
+	m.HandleMouse(mode.MouseMsg{Kind: mode.MouseMove, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)
+	view := m.View(commentsWidth, commentsHeight, false, 0)
+	if testui.RowBand(t, view, "idle     Tab 4") == "" || testui.RowBand(t, view, "running  Tab 3") != "" {
+		t.Errorf("the pointer on Tab 4 does not light that row alone:\n%s", view)
+	}
+
+	focus := m.FocusPane
+	cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)
+	if cmd == nil {
+		t.Fatal("a click on an agent row asks for nothing")
+	}
+	request, ok := cmd().(mode.ActionRequestMsg)
+	if !ok || request.Action != mode.ActionSelectAgent || request.Agent.Session != "s-2" {
+		t.Errorf("a click on Tab 4 sent %#v, want ActionSelectAgent for s-2", request)
+	}
+	if m.FocusPane != focus {
+		t.Errorf("a click on an agent row moved the focus to %d", m.FocusPane)
+	}
+
+	if cmd := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseWheelDown, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight); cmd != nil || m.ContentScrollOffset != 0 {
+		t.Errorf("the wheel on an agent row: cmd %v, content offset %d", cmd != nil, m.ContentScrollOffset)
 	}
 }

@@ -3,6 +3,7 @@ package detail
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
@@ -17,7 +18,8 @@ const wheelLines = 3
 // reference row it also puts the cursor there, and a second click opens that
 // issue: the command returned carries the OpenRelatedIssueMsg. A click on a
 // comment puts the comment cursor there, and one on a button sends the request
-// the button's key sends.
+// the button's key sends. A click on the row of an agent in the Details pane
+// asks the shell to select that agent on the Agents tab.
 func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) tea.Cmd {
 	// Nothing is drawn without a viewport, so there is no cell to be over.
 	if viewportHeight <= 0 {
@@ -47,6 +49,9 @@ func (m *Model) HandleMouse(msg mode.MouseMsg, maxWidth, viewportHeight int) tea
 }
 
 func (m *Model) wheel(pane detail.FocusPane, direction, maxWidth, viewportHeight int) {
+	if pane == detail.FocusPaneDetails {
+		return
+	}
 	if pane == detail.FocusPaneDependencies {
 		m.moveRelatedSelection(direction, maxWidth, viewportHeight)
 		return
@@ -63,13 +68,15 @@ var buttonActions = map[detail.Button]mode.Action{
 	detail.ButtonEditComment:   mode.ActionEditComment,
 	detail.ButtonDeleteComment: mode.ActionDeleteComment,
 	detail.ButtonLaunchAgent:   mode.ActionLaunchAgent,
-	detail.ButtonFocusAgent:    mode.ActionFocusAgent,
 }
 
 // commentClick is what the click tracker holds after a click on a comment.
 const commentClick = "comment"
 
 func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
+	if hit.Agent != "" {
+		return mode.RequestAgentCmd(mode.Detail, mode.ActionSelectAgent, agent.Agent{Session: hit.Agent})
+	}
 	if action, ok := buttonActions[hit.Button]; ok {
 		// A click that selects a comment draws its buttons, and one of them
 		// can stand under that click. The second click of a double click in
@@ -99,13 +106,14 @@ func (m *Model) click(hit detail.Hit, msg mode.MouseMsg) tea.Cmd {
 	return nil
 }
 
-// hover is the reference row or the button under the pointer, or nil.
+// hover is the reference row, the agent row or the button under the
+// pointer, or nil.
 func (m *Model) hover(state detail.State) *detail.Hit {
 	if m.pointer == nil {
 		return nil
 	}
 	hit, ok := detail.HitTest(state, m.pointer.X, m.pointer.Y)
-	if !ok || (hit.RefID == "" && hit.Button == detail.ButtonNone) {
+	if !ok || (hit.RefID == "" && hit.Agent == "" && hit.Button == detail.ButtonNone) {
 		return nil
 	}
 	return &hit

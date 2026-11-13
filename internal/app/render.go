@@ -6,8 +6,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/mode"
+	uiagents "github.com/hk9890/task-manager-ui/internal/ui/agents"
 	"github.com/hk9890/task-manager-ui/internal/ui/fatalerror"
 	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -218,8 +220,9 @@ const (
 
 // tabLabels names each browse tab on the tab line.
 var tabLabels = map[mode.ID]string{
-	mode.Board: "Board",
-	mode.Docs:  "Docs",
+	mode.Board:  "Board",
+	mode.Docs:   "Docs",
+	mode.Agents: "Agents",
 }
 
 // barAction is one button on the menu bar: what the shell can do that is not
@@ -520,7 +523,11 @@ func (m Model) renderFooter() string {
 		return ""
 	}
 
-	hints := footerHints(m.active, m.keys)
+	var agentRow *uiagents.Row
+	if row, ok := m.agents.SelectedRow(); ok && m.active == mode.Agents {
+		agentRow = &row
+	}
+	hints := footerHints(m.active, m.keys, agentRow)
 	// Detail is where the launch keys work, so it is where their being off is
 	// said, before the operator presses one. It leads the legend so that it is
 	// the last hint a narrow terminal drops.
@@ -533,15 +540,16 @@ func (m Model) renderFooter() string {
 }
 
 // workInFlight reports whether a browse surface or the detail is loading, on
-// screen or not, or the store picker while it is up: it is what draws the
-// header spinner and arms its tick.
+// screen or not, an agent start or resume is in flight, or the store picker
+// is loading while it is up: it is what draws the header spinner and arms its
+// tick.
 func (m Model) workInFlight() bool {
 	for _, entry := range m.browseTabs() {
 		if entry.Tab.IsLoading() {
 			return true
 		}
 	}
-	if m.detail.IsLoading() {
+	if m.detail.IsLoading() || m.agentStarts > 0 || len(m.agentResumes) > 0 {
 		return true
 	}
 	// The picker draws its own spinner, and this is what arms the tick that
@@ -583,8 +591,10 @@ func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
 }
 
 // footerHints is the legend of the active surface, the keys an operator needs
-// first leading: KeyLegend drops from the end.
-func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHint {
+// first leading: KeyLegend drops from the end. agentRow is the row selected on
+// the Agents tab, nil without one: the keys that act on a row are named only
+// with one, and the issue key only with a linked issue.
+func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row) []styles.KeyHint {
 	primary := keys.DisplayPrimary
 	pair := func(context, first, second string) string {
 		return primary(context, first) + "/" + primary(context, second)
@@ -607,6 +617,26 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
 		}
+	case mode.Agents:
+		hints := []styles.KeyHint{{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "agents"}}
+		if agentRow != nil {
+			// A gone agent is resumed, not focused, and unlinked, not closed.
+			openDesc, closeDesc := "focus", "close"
+			if agentRow.Agent.Status == agent.Gone {
+				openDesc, closeDesc = "resume", "unlink"
+			}
+			hints = append(hints,
+				styles.KeyHint{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: openDesc},
+				styles.KeyHint{Key: primary(config.BoardContext, config.BoardActionCloseAgent), Desc: closeDesc},
+			)
+			if agentRow.Issue != nil {
+				hints = append(hints, styles.KeyHint{Key: primary(config.BoardContext, config.BoardActionOpenIssue), Desc: "issue"})
+			}
+		}
+		return append(hints,
+			styles.KeyHint{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
+			help, quit,
+		)
 	case mode.Search:
 		return []styles.KeyHint{
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "results"},
@@ -624,6 +654,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "back"},
 			{Key: primary(config.ShellContext, config.ShellActionUpdateIssue), Desc: "edit"},
 			{Key: primary(config.ShellContext, config.ShellActionCommentIssue), Desc: "comment"},
+			{Key: primary(config.ShellContext, config.ShellActionLaunchAgent), Desc: "agent"},
 			{Key: pair(config.DetailContext, config.DetailActionPageUp, config.DetailActionPageDown), Desc: "page"},
 			{Key: pair(config.DetailContext, config.DetailActionHome, config.DetailActionEnd), Desc: "bounds"},
 		}

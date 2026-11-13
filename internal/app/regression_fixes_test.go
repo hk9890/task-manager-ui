@@ -49,16 +49,16 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 		t.Fatalf("expected board selection tm-1 after init, got %q", got)
 	}
 
-	// ModeCyclePrev (shift+tab / ctrl+pgup): prevMode(Board) == Docs, the far
-	// end of the tab strip.
+	// ModeCyclePrev (shift+tab / ctrl+pgup): prevMode(Board) == Agents, the
+	// far end of the tab strip.
 	next, cmd := m.Update(testui.Press("ctrl+pgup"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	if m.active != mode.Docs {
-		t.Fatalf("expected ModeCyclePrev from Board to wrap to Docs, got %s", m.active)
+	if m.active != mode.Agents {
+		t.Fatalf("expected ModeCyclePrev from Board to wrap to Agents, got %s", m.active)
 	}
-	if m.lastBrowse != mode.Docs {
-		t.Fatalf("expected lastBrowse to follow the cycle to Docs, got %s", m.lastBrowse)
+	if m.lastBrowse != mode.Agents {
+		t.Fatalf("expected lastBrowse to follow the cycle to Agents, got %s", m.lastBrowse)
 	}
 
 	// Back to Board, then drill into Detail: lastBrowse must stay Board so the
@@ -67,7 +67,7 @@ func TestModeCycleKeepsSelectionAndAllowsEscape(t *testing.T) {
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
 	if m.active != mode.Board {
-		t.Fatalf("expected ModeCycleNext from Docs to wrap to Board, got %s", m.active)
+		t.Fatalf("expected ModeCycleNext from Agents to wrap to Board, got %s", m.active)
 	}
 
 	next, cmd = m.Update(testui.Press("enter"))

@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -64,11 +64,11 @@ func TestLiveAgentsMarkOnlyTheInProgressCardsTheyCommentedOn(t *testing.T) {
 	testui.ForceTrueColor(t)
 
 	m := agentBoard(t)
-	m.SetLiveAgents(map[string]string{
-		"s-1":  revier.StatusRunning,
-		"s-2":  revier.StatusIdle,
-		"s-2b": revier.StatusAttention,
-		"s-3":  revier.StatusRunning,
+	m.SetLiveAgents(map[string]agent.Status{
+		"s-1":  agent.Running,
+		"s-2":  agent.Idle,
+		"s-2b": agent.NeedsYou,
+		"s-3":  agent.Running,
 	})
 
 	mark := styles.Glyphs.Agent
@@ -84,16 +84,38 @@ func TestLiveAgentsMarkOnlyTheInProgressCardsTheyCommentedOn(t *testing.T) {
 	}
 
 	col := m.uiColumn(inProgressColumnIndex, -1)
-	if got := col.Agents["TM-2"]; got != revier.StatusAttention {
+	if got := col.Agents["TM-2"]; got != agent.NeedsYou {
 		t.Errorf("TM-2 draws the status %q, want attention over idle", got)
 	}
-	if got := col.Agents["TM-3"]; got != revier.StatusRunning {
+	if got := col.Agents["TM-3"]; got != agent.Running {
 		t.Errorf("TM-3 draws the status %q, want running", got)
 	}
 	for idx := range m.columns {
 		if idx != inProgressColumnIndex && m.uiColumn(idx, -1).Agents != nil {
 			t.Errorf("column %q carries agents", m.columns[idx].title)
 		}
+	}
+}
+
+// A live agent that the link label of an issue names marks its card in any
+// column, In Progress or not; a label whose agent is not live draws no mark.
+func TestALinkLabelMarksTheCardInAnyColumn(t *testing.T) {
+	m := newBoardModel(memoryrepo.New(fakes.FrozenClock()), resolvedBoardKeys(t))
+	m.SetSize(200, 30)
+	feedDashboardData(m, repository.DashboardData{
+		ReadyExplain: domain.ReadyExplainResult{Ready: []domain.IssueSummary{
+			{ID: "TM-1", Title: "Started", Type: "task", Status: "open", Priority: 2, Labels: []string{"backend", "agent-session:s-1"}},
+			{ID: "TM-2", Title: "Ended", Type: "task", Status: "open", Priority: 2, Labels: []string{"agent-session:s-gone"}},
+		}},
+	})
+	m.SetLiveAgents(map[string]agent.Status{"s-1": agent.NeedsYou})
+
+	mark := styles.Glyphs.Agent
+	if got := cardMeta(t, m, "TM-1"); got != "P2 OPN "+mark+" TM-1" {
+		t.Errorf("card TM-1 reads %q, want the mark", got)
+	}
+	if got := cardMeta(t, m, "TM-2"); got != "P2 OPN TM-2" {
+		t.Errorf("card TM-2 reads %q, want no mark", got)
 	}
 }
 
@@ -104,7 +126,7 @@ func TestTheAgentMarksFollowThePollAndTheReload(t *testing.T) {
 	m := agentBoard(t)
 	mark := styles.Glyphs.Agent
 
-	m.SetLiveAgents(map[string]string{"s-3": revier.StatusRunning})
+	m.SetLiveAgents(map[string]agent.Status{"s-3": agent.Running})
 	if got := cardMeta(t, m, "TM-3"); !strings.Contains(got, mark) {
 		t.Fatalf("card TM-3 reads %q, want the mark", got)
 	}
@@ -114,7 +136,7 @@ func TestTheAgentMarksFollowThePollAndTheReload(t *testing.T) {
 		t.Errorf("after a failed poll card TM-3 reads %q, want no mark", got)
 	}
 
-	m.SetLiveAgents(map[string]string{"s-3": revier.StatusRunning, "s-new": revier.StatusRunning})
+	m.SetLiveAgents(map[string]agent.Status{"s-3": agent.Running, "s-new": agent.Running})
 	feedDashboardData(m, repository.DashboardData{
 		InProgress: []domain.IssueSummary{
 			{ID: "TM-3", Title: "One agent", Type: "task", Status: "in_progress", Priority: 1},

@@ -8,8 +8,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
 
@@ -325,26 +325,26 @@ func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
 // The Agents group follows Core, one field per linked agent in the order
 // given, with attention said as "needs you", so a short pane keeps it. A pane
 // with no linked agent draws no group.
-func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
+func TestTheDetailsPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	t.Parallel()
 
-	state := MetadataPaneState{
+	state := DetailsPaneState{
 		Detail: domain.IssueDetail{Summary: domain.IssueSummary{ID: "tm-1", Type: "task", Status: "in_progress"}},
 		Width:  metadataRailWidth,
 		Height: 40,
 	}
-	if view := testui.Downsample(RenderMetadataPane(state)); strings.Contains(view, "Agents") {
+	if view := testui.Downsample(RenderDetailsPane(state)); strings.Contains(view, "Agents") {
 		t.Errorf("a pane with no linked agent draws an Agents group:\n%s", view)
 	}
 
-	state.Agents = []revier.Agent{
-		{Panel: "2", Status: revier.StatusAttention, Session: "s-2"},
-		{Panel: "1\x1b", Status: revier.StatusRunning, Session: "s-1"},
-		{Panel: "10", Status: revier.StatusIdle, Session: "s-10"},
+	state.Agents = []agent.Agent{
+		{Label: "Tab 2", Status: agent.NeedsYou, Session: "s-2"},
+		{Label: "Tab 1\x1b", Status: agent.Running, Session: "s-1"},
+		{Label: "Tab 10", Status: agent.Idle, Session: "s-10"},
 	}
-	view := RenderMetadataPane(state)
+	view := RenderDetailsPane(state)
 	if strings.Contains(view, "Tab 1\x1b") {
-		t.Errorf("a revier value reaches the screen uncleaned:\n%q", view)
+		t.Errorf("an agent host value reaches the screen uncleaned:\n%q", view)
 	}
 	view = testui.Downsample(view)
 	_, priorityY := testui.FindCell(t, view, "Priority")
@@ -353,7 +353,7 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 		t.Errorf("the Agents group on row %d does not follow Core, which ends on row %d:\n%s", agentsY, priorityY, view)
 	}
 	previous := agentsY
-	for _, want := range []string{"Tab 2 : needs you", "Tab 1 : running", "Tab 10: idle"} {
+	for _, want := range []string{"needs you  Tab 2", "running    Tab 1", "idle       Tab 10"} {
 		_, y := testui.FindCell(t, view, want)
 		if y != previous+1 {
 			t.Errorf("%q on row %d, want row %d:\n%s", want, y, previous+1, view)
@@ -362,7 +362,36 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	}
 
 	state.Height = 12
-	if view := testui.Downsample(RenderMetadataPane(state)); !strings.Contains(view, "Tab 10: idle") {
+	if view := testui.Downsample(RenderDetailsPane(state)); !strings.Contains(view, "idle       Tab 10") {
 		t.Errorf("a short pane cuts the Agents group:\n%s", view)
+	}
+}
+
+// A field of the Agents group is the agent's name, its label when the
+// harness names none, and its status: what it does is on the Agents tab. A
+// gone agent says gone. The link labels stay off the Labels group.
+func TestTheAgentsGroupNamesTheAgentAndHidesTheLinkLabels(t *testing.T) {
+	t.Parallel()
+
+	state := DetailsPaneState{
+		Detail: domain.IssueDetail{Summary: domain.IssueSummary{
+			ID: "tm-1", Type: "task", Status: "open",
+			Labels: []string{"backend", "agent-session:s-1", "agent-session:s-2"},
+		}},
+		Width:  metadataRailWidth,
+		Height: 40,
+		Agents: []agent.Agent{
+			{Label: "Tab 1", Name: "fix-the-board", Status: agent.Running, Session: "s-1", Activity: "tests"},
+			{Label: "Session s-2", Status: agent.Gone, Session: "s-2"},
+		},
+	}
+	view := testui.Downsample(RenderDetailsPane(state))
+	for _, want := range []string{"running  fix-the-board", "gone     Session s-2", "• backend"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the pane does not draw %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "agent-session:") || strings.Contains(view, "tests") || strings.Contains(view, "Tab 1") {
+		t.Errorf("the pane draws a link label, the activity or the label of a named agent:\n%s", view)
 	}
 }

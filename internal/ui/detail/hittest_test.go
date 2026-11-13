@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 )
@@ -126,11 +127,11 @@ func TestHitTestNamesThePaneUnderThePointer(t *testing.T) {
 			}
 		}
 
-		// The Metadata pane only shows: the mouse finds nothing on it.
-		for _, text := range []string{"Metadata ─", "Priority"} {
+		// Off the row of an agent the Details pane holds nothing to click.
+		for _, text := range []string{"Details ─", "Priority"} {
 			x, y := testui.FindCell(t, view, text)
 			if hit, ok := HitTest(state, x, y); ok {
-				t.Errorf("width %d: HitTest on %q of the Metadata pane = %+v, want no hit", width, text, hit)
+				t.Errorf("width %d: HitTest on %q of the Details pane = %+v, want no hit", width, text, hit)
 			}
 		}
 	}
@@ -186,4 +187,111 @@ func TestRenderBandsTheCursorAndTheHoveredReference(t *testing.T) {
 	if plain := testui.RowBand(t, view, "ch-ref-02"); plain != "" {
 		t.Fatalf("a plain reference carries the band %q", plain)
 	}
+}
+
+// agentsState is hitTestState with a live and a gone agent linked.
+func agentsState(width, height int) State {
+	state := hitTestState(width, height)
+	state.Agents = []agent.Agent{
+		{Label: "Tab 3", Status: agent.Running, Session: "s-3"},
+		{Label: "Tab 5", Status: agent.Gone, Session: "s-5"},
+	}
+	return state
+}
+
+// The row of each linked agent in the Details pane is where Render drew it,
+// in both layouts; the rest of the pane holds nothing to click.
+func TestHitTestFindsEveryAgentRowWhereRenderDrewIt(t *testing.T) {
+	t.Parallel()
+
+	for _, width := range []int{160, 100} {
+		state := agentsState(width, 70)
+		view := Render(state)
+		for text, session := range map[string]string{"running  Tab 3": "s-3", "gone     Tab 5": "s-5"} {
+			x, y := testui.FindCell(t, view, text)
+			for _, column := range []int{x - 2, x, x + len(text)} {
+				hit, ok := HitTest(state, column, y)
+				if !ok || hit.Pane != FocusPaneDetails || hit.Agent != session {
+					t.Errorf("width %d: HitTest at %q column %d = %+v, %v; want %s", width, text, column, hit, ok, session)
+				}
+			}
+		}
+		for _, text := range []string{"Agents", "Priority", "Details ─"} {
+			x, y := testui.FindCell(t, view, text)
+			if hit, ok := HitTest(state, x, y); ok {
+				t.Errorf("width %d: HitTest on %q = %+v, want no hit", width, text, hit)
+			}
+		}
+
+		state.Skeleton = true
+		x, y := testui.FindCell(t, Render(state), "running  Tab 3")
+		if hit, ok := HitTest(state, x, y); ok {
+			t.Errorf("width %d: skeleton: HitTest on an agent row = %+v, want no hit", width, hit)
+		}
+	}
+}
+
+// A pane too short for its lines ends on "… (N more)", and that row is no
+// agent, though an agent row stands under it in the full list.
+func TestHitTestFindsNoAgentUnderTheMoreIndicator(t *testing.T) {
+	t.Parallel()
+
+	// Core takes four lines, the divider and the Agents title two more, so
+	// a pane of eight inner lines draws Tab 3 and turns Tab 5 into the
+	// indicator.
+	state := agentsState(160, 10)
+	view := Render(state)
+	if strings.Contains(view, "Tab 5") {
+		t.Fatalf("fixture draws Tab 5:\n%s", view)
+	}
+	x, y := testui.FindCell(t, view, "running  Tab 3")
+	if hit, ok := HitTest(state, x, y); !ok || hit.Agent != "s-3" {
+		t.Errorf("HitTest on Tab 3 = %+v, %v; want s-3", hit, ok)
+	}
+	if hit, ok := HitTest(state, x, y+1); ok {
+		t.Errorf("HitTest on the indicator = %+v, want no hit", hit)
+	}
+}
+
+// The agent row under the pointer draws the hover band, as a hovered
+// reference does; the other agent row draws none.
+func TestRenderBandsTheHoveredAgentRow(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	state := agentsState(160, 70)
+	state.Hover = &Hit{Pane: FocusPaneDetails, Agent: "s-3"}
+	view := Render(state)
+
+	if band := testui.RowBand(t, view, "running  Tab 3"); band == "" {
+		t.Errorf("the hovered agent row draws no band:\n%s", view)
+	}
+	if band := testui.RowBand(t, view, "gone     Tab 5"); band != "" {
+		t.Errorf("an agent row off the pointer draws the band %q", band)
+	}
+}
+
+// The Details pane with a live and a gone agent, the live one under the
+// pointer.
+func TestDetailsPaneWithAHoveredAgentGolden(t *testing.T) {
+	testui.ForceTrueColor(t)
+
+	state := agentsState(160, 20)
+	state.Hover = &Hit{Pane: FocusPaneDetails, Agent: "s-3"}
+	_, _, width := splitThreePaneWidths(state.Width)
+	pane := RenderDetailsPane(state.detailsPane(width, state.Height))
+	testui.AssertMatchesGoldenNormalized(t, []byte(pane), "details_pane_hovered_agent_w160.golden")
+}
+
+// A name longer than the pane is cut; the status of every agent row stays
+// whole.
+func TestDetailsPaneCutsALongAgentNameAndKeepsTheStatusGolden(t *testing.T) {
+	state := agentsState(160, 20)
+	state.Agents = []agent.Agent{
+		{Label: "Tab 9", Name: "review-agent-session-ui-and-more", Status: agent.NeedsYou, Session: "s-9"},
+		{Label: "Tab 3", Status: agent.Running, Session: "s-3"},
+	}
+	_, _, width := splitThreePaneWidths(state.Width)
+	pane := testui.Downsample(RenderDetailsPane(state.detailsPane(width, state.Height)))
+	testui.AssertContainsAll(t, pane, "needs you  review-agent-ses…", "running    Tab 3")
+	testui.AssertMatchesGoldenStripANSI(t, []byte(pane), "details_pane_long_agent_name_w160.golden")
 }

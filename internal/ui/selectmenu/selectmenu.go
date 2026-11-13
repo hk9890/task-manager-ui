@@ -1,6 +1,7 @@
 // Package selectmenu draws the menu a finished drag selection opens beside
 // the release cell: what the release sent to the clipboard, and what else can
-// be done with the selected text.
+// be done with the selected text. The agent dialog of Detail is the same menu
+// with other entries.
 package selectmenu
 
 import (
@@ -13,11 +14,19 @@ import (
 )
 
 // Entry is one line of the menu. A disabled entry is drawn muted and takes no
-// cursor and no click.
+// cursor and no click. A heading names the entries below it: it is drawn
+// muted and bold, without the gutter, and takes no cursor and no click
+// either.
 type Entry struct {
 	Label    string
 	Key      string
 	Disabled bool
+	Heading  bool
+}
+
+// On reports whether the entry takes the cursor and a click.
+func (e Entry) On() bool {
+	return !e.Disabled && !e.Heading
 }
 
 // State is what Render and HitTest both read. Width is the screen's: the menu
@@ -64,12 +73,21 @@ func Render(s State) string {
 		textutil.PadToWidth(" "+hint, inner),
 	}
 	for i, entry := range s.Entries {
-		lines = append(lines, renderEntry(entry, inner, i == s.Cursor && !entry.Disabled, i == s.Hover && !entry.Disabled))
+		if entry.Heading {
+			lines = append(lines, renderHeading(entry, inner))
+			continue
+		}
+		lines = append(lines, renderEntry(entry, inner, i == s.Cursor && entry.On(), i == s.Hover && entry.On()))
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(styles.OverlayBorderColor).
 		Render(strings.Join(lines, "\n"))
+}
+
+func renderHeading(entry Entry, width int) string {
+	style := lipgloss.NewStyle().Bold(true).Foreground(styles.TextMutedColor)
+	return textutil.PadToWidth(" "+style.Render(textutil.TruncateString(entry.Label, width-1)), width)
 }
 
 func renderEntry(entry Entry, width int, selected, hovered bool) string {

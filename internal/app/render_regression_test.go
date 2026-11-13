@@ -344,7 +344,7 @@ func TestModelBoardShellUsesThreeLineHeaderAndSingleLineFooterHelpAt120Cols(t *t
 	if strings.Contains(headerLines[0], " Board ") || !strings.Contains(headerLines[0], "stores") {
 		t.Fatalf("expected the buttons and no tab on the menu bar, got:\n%s", headerLines[0])
 	}
-	if got := strings.TrimSpace(testui.AnsiEscapePattern.ReplaceAllString(headerLines[2], "")); got != "Board   Docs" {
+	if got := strings.TrimSpace(testui.AnsiEscapePattern.ReplaceAllString(headerLines[2], "")); got != "Board   Docs   Agents" {
 		t.Fatalf("expected the tabs alone on the tab line, got %q", got)
 	}
 	if strings.Contains(header, "Detail") {

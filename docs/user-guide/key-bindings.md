@@ -15,10 +15,10 @@ chords and on keys that print nothing.
 
 - `ctrl+c` — quit
 - `alt+h` — toggle help
-- `tab`, `ctrl+pgdown` — next view tab (Board → Docs → Board)
+- `tab`, `ctrl+pgdown` — next view tab (Board → Docs → Agents → Board)
 - `shift+tab`, `ctrl+pgup` — previous view tab
 - `alt+f` — open the store search, from a tab or from detail
-- `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs to Board, or dismiss toast state
+- `esc` — clear the filter or the query when it holds text; otherwise return from detail or the search to where you came from, from Docs or Agents to Board, or dismiss toast state. A toast that stays until dismissed takes the first `esc` and does nothing else
 - `alt+r` — manually reload detail mode from the repository immediately (detail mode only)
 - `alt+n` — create an issue, in the [issue editor](#issue-editor)
 - `alt+u` — edit the selected issue, its description included
@@ -29,12 +29,26 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
-- `alt+i` — launch `agent` action in detail mode: a new revier agent is prompted to talk about the issue; it is linked to the issue once it comments on it
-- `alt+o` — in detail mode, bring the live revier agent that works on the issue to the front: the one that needs you first, then a running one, then an idle one
+- `alt+i` — in detail mode, open the agent dialog of the issue, `Agents on <id>`. It lists every agent linked to the issue first: `Focus` or `Close` a live one, `Resume` or `Unlink` a gone one. A close of an agent that is running or waits for you asks first, then closes it with force. Under `Start new` come `implement`, `review` and the intents of your config: choosing one starts a revier agent with that intent's prompt and leaves the focus in taskmgr-ui, and labels the issue `agent-session:<session>`. A start that fails shows the error. On a closed issue the store takes no label, so the `Start new` entries are off
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
 message, and the detail footer reads `launchers off`.
+
+The `agent-session:<session>` labels are not shown, in Detail, in the issue editor
+or in `{{issue.labels}}`, and a save in the editor keeps them. Detail lists each
+linked agent under `Agents` with its status: `running`, `idle`, `needs you`, or
+`gone` for a labelled agent that no longer runs. A closed issue shows no `gone`
+agent, as on the Agents tab. What it does is on the Agents tab.
+
+A close from the agent dialog or the Agents tab removes the agent's label from
+its open issues, so the issue is no longer linked. An agent that ends by itself
+keeps its label: it shows as `gone`, and you can resume it or unlink it. Unlink
+removes the label from its open issues and starts nothing. `Cancel` closes the
+dialog.
+
+In the agent dialog `up` and `down` move, `enter` or a click
+runs the entry, and `esc` or a click outside closes the menu.
 
 A terminal must send `alt` as an escape prefix for the `alt+` keys to arrive.
 Most do; on macOS, turn on "Use Option as Meta key" (Terminal) or set the Option
@@ -92,6 +106,32 @@ columns; this tab is where they are browsed. Docs mode reuses the board keymap:
 - `enter` — open selected doc in detail mode
 - `alt+r` — manually reload the docs list immediately
 
+## Agents Tab
+
+Every agent of the project, in two groups: `Linked`, the agents linked to an
+issue, and `Not linked`, the live agents linked to none. Each agent is two lines:
+its name, its status and what it does, then its tab and the ID and title of its
+issue. A long name is cut; the status stays. A labelled agent that no longer runs is `gone`; it is listed only on an
+open issue. Without an agent the tab says why: no agent host, no project path,
+the path not accessible, the path is no revier project, the error revier gave, or that
+revier has not answered yet.
+
+- `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
+- `enter` — bring the selected agent to the front; resume a `gone` one first,
+  and the legend reads `enter resume`. A resume takes seconds: a toast says it
+  started, the spinner turns until it ends, and a second `enter` meanwhile opens
+  no second tab
+- `alt+x` — close the selected agent; one that runs or needs you asks first.
+  On a `gone` agent it unlinks the agent from its open issues, and the legend
+  reads `alt+x unlink`. A closed or unlinked agent leaves the tab and the
+  Details pane at once
+- `alt+o` — open the issue the selected agent is linked to in detail mode;
+  `esc` there returns to the tab. The legend names it only on a linked agent
+- `alt+r` — read the linked issues again and ask revier for the agents at once
+
+A click selects an agent and a second click brings it to the front. Edit,
+comment and close act on the issue of the selected agent.
+
 ## Store Search
 
 `alt+f`, or the `search` button on the menu bar, opens the store search from a
@@ -134,9 +174,10 @@ spinner stands in the first cell of the menu bar.
 - `end` — jump to bottom
 - `enter` (Dependencies focused) — open the highlighted related issue
 
-The Metadata pane only shows the issue's fields. It takes no focus, no key and
-no click, and does not scroll: on a short screen it ends on `… (N more)`. Change
-a field in the issue editor (`alt+u`).
+The Details pane shows the issue's fields and the agents linked to it. It takes
+no focus and no key, and does not scroll: on a short screen it ends on
+`… (N more)`. Change a field in the issue editor (`alt+u`). A click on the row
+of an agent switches to the Agents tab with that agent selected.
 
 The comments stand at the end of the Content pane, newest first, each under a
 bold line with its author and time, with a rule between two of them. With the
@@ -151,22 +192,31 @@ comments focused, the selected comment carries the selection bar:
 An edited comment gets a new time and your name, so it moves to the top.
 
 The buttons in the Content pane each show the key that does the same, and a
-click presses it: `open` (`alt+o`), `agent` (`alt+i`) and `edit` (`alt+u`) on
-the first line, the line of the issue's ID, `add` on the `Comments` heading
-(`alt+a`), and `edit` (`enter`) and `delete` (`alt+d`) on the first line of the
-selected comment. Each stands at the right end of its line. `open` is there only
-while a live agent works on the issue. A pane too narrow for a button leaves it
-out; an ID line too narrow for all of its buttons keeps `open` and `edit`, and
-narrower still `edit` alone, so `agent` never takes the place of `open`. The key
+click presses it: `agent` (`alt+i`) and `edit` (`alt+u`) on the first line, the
+line of the issue's ID, `add` on the `Comments` heading (`alt+a`), and `edit`
+(`enter`) and `delete` (`alt+d`) on the first line of the selected comment. Each
+stands at the right end of its line. A pane too narrow for a button leaves it
+out; an ID line too narrow for both of its buttons drops `agent` first. The key
 still works.
 
-A live agent works on an issue when its revier session wrote a comment on it.
-taskmgr-ui asks `revier` for the live agents every few seconds. The Metadata
-pane lists them in an `Agents` group, one line each: `Tab <panel>` and its
-status, `running`, `idle` or `needs you`. On the board, the card of an In
-Progress issue that a live agent works on carries the agent mark after its
-status, green while the agent runs, grey while it is idle and orange while it
-needs you. Without `revier` on the `PATH` none of this shows.
+An agent is linked to an issue by an `agent-session:<session>` label, which starting it
+from the agent dialog or the selection menu writes. A live agent whose revier
+session wrote a comment on the issue is linked too, but only while the issue is
+In Progress: in detail mode, on the board and on the Agents tab.
+taskmgr-ui asks `revier` for the live agents every few seconds. The Details
+pane lists the linked agents in an `Agents` group, one line each: its status
+— `running`, `idle`, `needs you`, or `gone` for a labelled agent revier does not
+list — then its name. A long name is cut; the status stays. The Agents tab lists every agent of the project. On the board, a card of any
+column that a live agent is linked to carries the agent mark after its status,
+green while the agent runs, grey while it is idle and orange while it needs you.
+
+When revier is not on the `PATH`, or the project is no revier project, the live
+agents are not known: no labelled agent is listed, none is offered for resume,
+and no card carries the mark. The Agents tab says which of the two it is. The
+agent dialog and Ask still open, and a start fails with an error toast.
+
+A resume or a close of an agent runs to its end and is reported after a store
+switch too.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
 
@@ -312,13 +362,13 @@ instead.
   `enter` does: an issue, a doc or a search result opens in detail mode, a row of
   the detail Dependencies pane navigates to that issue, a store picker row opens
   that store.
-- **Click a view tab** — Board, Docs — to switch to it.
+- **Click a view tab** — Board, Docs, Agents — to switch to it.
 - **Click a button** on the menu bar, the first line — the name of the open store, `search`,
   `reload`, `config`, `help`, `quit` — to do what the key shown beside it does. The store's name
   opens the store picker. `reload` reloads the view on screen. `config` opens the configuration
   screen, which takes keys only.
 - **Click the Dependencies or the Content pane** in detail mode to focus it. **Click a comment** to select it.
-- **Click a button** in the detail Content pane — `open`, `agent` and `edit` on the ID line, `add`,
+- **Click a button** in the detail Content pane — `agent` and `edit` on the ID line, `add`,
   and `edit` and `delete` on the selected comment — to do what the key shown beside it does.
 - In the issue editor, **click a field** to put the cursor in it and **click `Save` or `Cancel`**
   to press it. The wheel over the text moves its cursor three lines a notch.
@@ -339,10 +389,21 @@ instead.
   it. A terminal or multiplexer that ignores OSC 52 leaves the clipboard as it
   was: **hold `shift` and drag** there, and copy with the terminal.
 - The menu offers to quote the text in a new comment on the selected issue, to
-  search the store for it, and to close. `up`/`down` and
+  ask an agent about it, to search the store for it, and to close. `up`/`down` and
   `enter` or a click choose; `esc` or a click outside closes it, and the click
-  outside does nothing else. Quote and search are off on screens where they
-  would drop work in progress, such as the issue editor.
+  outside does nothing else. Quote, ask and search are off on screens where
+  they would drop work in progress, such as the issue editor. Ask is off on a
+  closed issue, which takes no label.
+- Ask an agent opens one line for your instruction. The agent starts in the
+  background, out of view, and changes the issue with taskmgr. When its turn
+  ends the issue is read again and a toast shows its summary, over up to three
+  lines. A summary longer than that is cut, and the toast stays until `esc` or
+  the next toast. When the agent
+  has a question, a dialog offers to bring it to the front, in detail mode or on
+  the Agents tab with nothing else open; anywhere else a toast says so, and you
+  answer from the agent dialog or the Agents tab. The agent stays
+  open, linked to the issue. Switch stores before its turn ends and no summary
+  comes.
 - Quote and search leave out the pane borders, the selection bar and the
   indent the screen adds; the clipboard gets the box as drawn. They are off
   for a box of borders alone. A resize during a drag drops the box and

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -155,6 +157,32 @@ func TestUpdateKeyReadsTheIssueAgainAndSaveWritesTitleAndDescription(t *testing.
 	}
 	if m.active != mode.Board || !strings.Contains(m.toast.View(), "Updated issue tm-1") {
 		t.Errorf("after the save the shell is on %q with toast %q", m.active, m.toast.View())
+	}
+}
+
+// The editor does not show the link label of an agent, and a save that
+// changes the labels keeps it in the store.
+func TestTheEditorHidesAndKeepsTheLinkLabels(t *testing.T) {
+	m, gw := editorShell(t)
+	if err := gw.UpdateIssue(context.Background(), "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent-session:s-1"}}); err != nil {
+		t.Fatalf("fixture: %v", err)
+	}
+
+	m = openEditor(t, m, "alt+u")
+	if view := plainShell(m); strings.Contains(view, "agent-session:") {
+		t.Fatalf("the editor shows the link label:\n%s", view)
+	}
+	for range 5 {
+		m = pressKey(t, m, "tab")
+	}
+	m = pressKey(t, m, "backspace")
+	m = pressKey(t, m, "backspace")
+	m = typeInto(t, m, "api")
+	m = pressKey(t, m, "ctrl+s")
+
+	labels := slices.Sorted(slices.Values(issueState(gw, "tm-1").Summary.Labels))
+	if want := []string{"agent-session:s-1", "api"}; !slices.Equal(labels, want) {
+		t.Errorf("the store holds the labels %v, want %v; toast %q", labels, want, m.toast.View())
 	}
 }
 
@@ -715,8 +743,8 @@ func TestIssueUpdateIsTheDifferenceField(t *testing.T) {
 		{name: "white space around a one-line field is no change", change: func(v *issueeditmode.Values) { v.Title, v.Assignee = " Task ", "alice " }},
 		{name: "the labels in another order are no change", change: func(v *issueeditmode.Values) { v.Labels = "docs,ui, ui" }},
 		{name: "a cleared assignee unassigns", change: func(v *issueeditmode.Values) { v.Assignee = "" }, want: domain.UpdateIssueInput{Assignee: str("")}, wantChanged: true},
-		{name: "cleared labels clear the set", change: func(v *issueeditmode.Values) { v.Labels = " " }, want: domain.UpdateIssueInput{ClearLabels: true}, wantChanged: true},
-		{name: "other labels replace the set", change: func(v *issueeditmode.Values) { v.Labels = "ui, api" }, want: domain.UpdateIssueInput{Labels: []string{"ui", "api"}}, wantChanged: true},
+		{name: "cleared labels are removed", change: func(v *issueeditmode.Values) { v.Labels = " " }, want: domain.UpdateIssueInput{RemoveLabels: []string{"docs", "ui"}}, wantChanged: true},
+		{name: "other labels are added and removed, never set", change: func(v *issueeditmode.Values) { v.Labels = "ui, api" }, want: domain.UpdateIssueInput{AddLabels: []string{"api"}, RemoveLabels: []string{"docs"}}, wantChanged: true},
 		{name: "the text is compared as typed", change: func(v *issueeditmode.Values) { v.Text = "body " }, want: domain.UpdateIssueInput{Description: str("body ")}, wantChanged: true},
 		{name: "a status but closed is a field", change: func(v *issueeditmode.Values) { v.Status = "blocked" }, want: domain.UpdateIssueInput{Status: str("blocked")}, wantChanged: true},
 		{name: "closed is a close, not a field", change: func(v *issueeditmode.Values) { v.Status = "closed" }, wantClosing: true},
@@ -744,8 +772,9 @@ func TestIssueUpdateIsTheDifferenceField(t *testing.T) {
 				t.Errorf("%s: %s = %s, want %s", tt.name, field, deref(pair[0]), deref(pair[1]))
 			}
 		}
-		if strings.Join(input.Labels, "|") != strings.Join(tt.want.Labels, "|") || input.ClearLabels != tt.want.ClearLabels || input.Priority != nil {
-			t.Errorf("%s: labels %v, clear %v, priority %v", tt.name, input.Labels, input.ClearLabels, input.Priority)
+		if !slices.Equal(input.AddLabels, tt.want.AddLabels) || !slices.Equal(input.RemoveLabels, tt.want.RemoveLabels) ||
+			input.Labels != nil || input.ClearLabels || input.Priority != nil {
+			t.Errorf("%s: add %v, remove %v, set %v, clear %v, priority %v", tt.name, input.AddLabels, input.RemoveLabels, input.Labels, input.ClearLabels, input.Priority)
 		}
 	}
 

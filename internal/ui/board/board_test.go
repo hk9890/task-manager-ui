@@ -9,8 +9,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
@@ -183,7 +183,7 @@ func TestRenderBoardDrawsTheAgentMarkOnAnInProgressCard(t *testing.T) {
 				SelectedRow:  -1,
 				Total:        2,
 				TotalIsExact: true,
-				Agents:       map[string]string{"TM-2": revier.StatusAttention},
+				Agents:       map[string]agent.Status{"TM-2": agent.NeedsYou},
 			},
 		},
 	}
@@ -194,7 +194,7 @@ func TestRenderBoardDrawsTheAgentMarkOnAnInProgressCard(t *testing.T) {
 		t.Errorf("the board draws the agent mark %d times, want once:\n%s", got, plain)
 	}
 	testui.AssertContainsAll(t, plain, "P1 IP "+styles.Glyphs.Agent+" TM-2", "P1 IP TM-3")
-	if mark := styles.AgentStatusStyle(revier.StatusAttention).Render(styles.Glyphs.Agent); !strings.Contains(rendered, mark) {
+	if mark := styles.AgentStatusStyle(agent.NeedsYou).Render(styles.Glyphs.Agent); !strings.Contains(rendered, mark) {
 		t.Errorf("the mark is not drawn in the attention colour %q", mark)
 	}
 	assertEqualColumnHeights(t, rendered)

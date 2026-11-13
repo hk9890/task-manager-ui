@@ -6,21 +6,27 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 )
 
 type metadataField struct {
 	label string
 	value string
+	// session is the agent a row of the Agents group stands for; "" on
+	// every other row.
+	session string
 }
 
 type metadataGroup struct {
 	title  string
 	fields []metadataField
 	labels []string
+	// valueFirst draws each field as its value, padded, then its label,
+	// so the pane width cuts a long label and not the value.
+	valueFirst bool
 }
 
 const (
@@ -30,41 +36,52 @@ const (
 )
 
 func renderMetadataRail(detail domain.IssueDetail, width int, skeleton bool) []string {
-	return renderMetadataGroups(metadataGroups(detail, skeleton), width)
+	lines, _ := renderMetadataGroups(metadataGroups(detail, skeleton), width)
+	return lines
 }
 
-func renderMetadataGroups(groups []metadataGroup, width int) []string {
+// renderMetadataGroups draws the groups, and reports for each line the
+// session of the agent it stands for, "" for a line that stands for none.
+func renderMetadataGroups(groups []metadataGroup, width int) (lines, sessions []string) {
 	if len(groups) == 0 || width < 1 {
-		return nil
+		return nil, nil
 	}
 
 	out := make([]string, 0, 24)
+	sessions = make([]string, 0, 24)
+	add := func(line, session string) {
+		out = append(out, line)
+		sessions = append(sessions, session)
+	}
 	for i, group := range groups {
 		if i > 0 {
-			out = append(out, renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-metadataIndent)), width))
+			add(renderMetadataPrefixedLine(strings.Repeat(metadataDividerRune, max(0, width-metadataIndent)), width), "")
 		}
 
 		if group.title != "" {
-			out = append(out, renderMetadataPrefixedLine(group.title, width))
+			add(renderMetadataPrefixedLine(group.title, width), "")
 		}
 
-		labelWidth := 0
+		labelWidth, valueWidth := 0, 0
 		for _, field := range group.fields {
-			if len(field.label) > labelWidth {
-				labelWidth = len(field.label)
+			labelWidth = max(labelWidth, len(field.label))
+			valueWidth = max(valueWidth, len(field.value))
+		}
+
+		for _, field := range group.fields {
+			line := fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value)
+			if group.valueFirst {
+				line = fmt.Sprintf("%-*s  %s", valueWidth, field.value, field.label)
 			}
-		}
-
-		for _, field := range group.fields {
-			out = append(out, renderMetadataPrefixedLine(fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value), width))
+			add(renderMetadataPrefixedLine(line, width), field.session)
 		}
 
 		for _, label := range group.labels {
-			out = append(out, renderMetadataPrefixedLine("• "+label, width))
+			add(renderMetadataPrefixedLine("• "+label, width), "")
 		}
 	}
 
-	return out
+	return out, sessions
 }
 
 func renderMetadataPrefixedLine(content string, width int) string {
@@ -135,7 +152,8 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 		groups = append(groups, closeGroup)
 	}
 
-	if labels := renderLabelLines(summary.Labels); len(labels) > 0 {
+	// The link labels are hidden: the Agents group shows what they link.
+	if labels := renderLabelLines(agent.VisibleLabels(summary.Labels)); len(labels) > 0 {
 		groups = append(groups, metadataGroup{title: "Labels", labels: labels})
 	}
 
@@ -162,29 +180,23 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 	return groups
 }
 
-// agentsGroup is the live agents linked to the issue, one field each, and
-// false when there is none. revier writes every value, so each is cleaned
-// before the label width is measured.
-func agentsGroup(agents []revier.Agent) (metadataGroup, bool) {
+// agentsGroup is the agents linked to the issue, one field each, and false
+// when there is none. A field is the agent's status and then its name, so a
+// long name is cut and the status stays; what it does is on the Agents tab.
+// The agent host writes every name, so each is cleaned before it is drawn.
+func agentsGroup(agents []agent.Agent) (metadataGroup, bool) {
 	if len(agents) == 0 {
 		return metadataGroup{}, false
 	}
-	group := metadataGroup{title: "Agents"}
-	for _, agent := range agents {
+	group := metadataGroup{title: "Agents", valueFirst: true}
+	for _, a := range agents {
 		group.fields = append(group.fields, metadataField{
-			label: "Tab " + displaytext.OneLine(agent.Panel),
-			value: agentStatusWord(displaytext.OneLine(agent.Status)),
+			label:   displaytext.OneLine(a.Title()),
+			value:   agent.StatusWord(a.Status),
+			session: a.Session,
 		})
 	}
 	return group, true
-}
-
-// agentStatusWord is what the Agents group says for a revier status.
-func agentStatusWord(status string) string {
-	if status == revier.StatusAttention {
-		return "needs you"
-	}
-	return status
 }
 
 func renderLabelLines(labels []string) []string {

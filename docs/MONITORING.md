@@ -56,8 +56,8 @@ Structured records include at least:
 - `project_root`
 - `build_version`
 - `component`, on records emitted through a component logger: `startup`
-  (`cmd/taskmgr-ui/main.go`), and `board`, `docs`, `search`, `storepicker`
-  (`internal/app/model.go`).
+  (`cmd/taskmgr-ui/main.go`), and `agents`, `board`, `docs`, `search`,
+  `storepicker` (`internal/app/model.go`).
   Shell-level records — the health check below among them — go through the root logger
   and carry no `component` key.
 
@@ -111,7 +111,8 @@ These, all expected:
   column actually pages, and only under `--debug`.
 - `project is not a revier project; agent status not shown` (DEBUG, with `project_root` and
   `error`) — the agent poll (`internal/app/agents.go`) found no revier project at the project
-  root, or no `revier` on the `PATH`. Detail and the board show no agent. Logged once until a
+  root: `revier status` ran and named another project or none. Detail, the board and the Agents tab show no agent; the tab
+  names the cause (`Model.agentsAbsent`). Logged once until a
   poll succeeds, and only under `--debug`. The poll then asks again about once a minute, and at
   once after a store switch.
 
@@ -153,10 +154,17 @@ suppressed for the interactive session.
   `Model.watchStore` starts on the active store (`internal/app/storewatch.go`) is off: the
   operating system refused it, or the store directory was removed or renamed. No toast. The views
   refresh on the one-minute tick, on focus regain and on the reload key until another store is opened.
-- `revier agent listing failed; agent status not shown` (WARN, with `project` and `error`) —
-  `revier list` failed for a resolved project (`Model.applyAgentList`,
-  `internal/app/agents.go`). The agents leave Detail and the board. No toast. Logged once per
+- `revier agent listing failed; agent status not shown` (WARN, with `project_root` and
+  `error`) — `revier list` failed for a resolved project, or `revier status` did not run: no
+  `revier` on the `PATH` (`revier is not installed`), a timeout, or a failed exit
+  (`Model.applyAgentList`, `internal/app/agents.go`). The agents leave Detail, the board and the Agents tab; the tab names
+  the cause (`Model.agentsAbsent`). No toast. Logged once per
   failure: the next record comes after a poll succeeds and another one fails.
+- `reading the issues linked to agents failed` (WARN, with `error`, `component=agents`) — the Agents tab's search for
+  the issues that carry a link label failed (`Model.Update`, `internal/mode/agents/model.go`). No
+  toast. The tab keeps the issues of the last read that succeeded. When none did, it shows only
+  the live agents and those linked by a comment, with no label-linked and no `gone` agent, until a
+  reload or an auto refresh of the tab reads them.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.

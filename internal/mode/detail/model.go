@@ -1,16 +1,17 @@
 package detail
 
 import (
+	"maps"
 	"slices"
 	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/scroll"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -60,7 +61,7 @@ type Model struct {
 	// liveAgents is the live agents of the store's revier project, by
 	// session. The shell sets it from each poll; Reset keeps it, because it
 	// belongs to the project and not to the issue on screen.
-	liveAgents map[string]revier.Agent
+	liveAgents map[string]agent.Agent
 }
 
 // OpenRelatedIssueMsg asks the shell to navigate detail mode to another issue.
@@ -169,37 +170,45 @@ func (m *Model) Error() string { return m.errText }
 // Reset returns the model to its zero state, dropping any in-flight load.
 func (m *Model) Reset() { *m = Model{Keys: m.Keys, liveAgents: m.liveAgents} }
 
-// SetLiveAgents replaces the live agents of the store's revier project, keyed
-// by the session each holds.
-func (m *Model) SetLiveAgents(agents map[string]revier.Agent) {
+// SetLiveAgents replaces the live agents of the store's project, keyed
+// by the session each holds. A nil map is a list not known (agent.Linked).
+func (m *Model) SetLiveAgents(agents map[string]agent.Agent) {
 	m.liveAgents = agents
 }
 
-// LinkedAgents is the live agents linked to the issue open in Detail: those
-// whose session wrote one of its comments. The first is the one that needs
-// the operator most: attention, then running, then idle, then by panel.
-func (m *Model) LinkedAgents() []revier.Agent {
-	return linkedAgents(m.liveAgents, m.Detail.Comments)
+// DropAgent takes the agent a off the issue at once, after the app closed or
+// unlinked it: until the reload of the issue lands, its link label would
+// draw it gone. The reload replaces the labels with the store's.
+func (m *Model) DropAgent(a agent.Agent) {
+	if a.Session == "" {
+		return
+	}
+	m.Detail.Summary.Labels = slices.DeleteFunc(slices.Clone(m.Detail.Summary.Labels), func(label string) bool {
+		return label == agent.LinkLabelPrefix+a.Session
+	})
+	if _, live := m.liveAgents[a.Session]; live {
+		m.liveAgents = maps.Clone(m.liveAgents)
+		delete(m.liveAgents, a.Session)
+	}
 }
 
-func linkedAgents(live map[string]revier.Agent, comments []domain.IssueComment) []revier.Agent {
-	var linked []revier.Agent
-	seen := make(map[string]bool)
-	for _, comment := range comments {
-		agent, ok := live[comment.Session]
-		if comment.Session == "" || !ok || seen[comment.Session] {
-			continue
+// LinkedAgents is the agents linked to the issue open in Detail, by its link
+// labels and, on an In Progress issue, its comment sessions (agent.Linked),
+// as on the board and the Agents tab. The first is the one that needs the
+// operator most; the gone ones are last. A closed issue has no gone agent, as
+// on the Agents tab: the store refuses the unlink of its label.
+func (m *Model) LinkedAgents() []agent.Agent {
+	return linkedAgents(m.liveAgents, m.Detail)
+}
+
+func linkedAgents(live map[string]agent.Agent, d domain.IssueDetail) []agent.Agent {
+	issue := agent.IssueLinks{Labels: d.Summary.Labels, Closed: d.Summary.Status == domain.StatusClosed}
+	if d.Summary.Status == domain.StatusInProgress {
+		for _, comment := range d.Comments {
+			issue.CommentSessions = append(issue.CommentSessions, comment.Session)
 		}
-		seen[comment.Session] = true
-		linked = append(linked, agent)
 	}
-	slices.SortFunc(linked, func(a, b revier.Agent) int {
-		if rank := revier.Rank(a.Status) - revier.Rank(b.Status); rank != 0 {
-			return rank
-		}
-		return strings.Compare(a.Panel, b.Panel)
-	})
-	return linked
+	return agent.Linked(live, issue)
 }
 
 // SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation
@@ -368,9 +377,8 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 			EditComment:   "enter",
 			DeleteComment: m.Keys.DisplayLabel(config.DetailContext, config.DetailActionDeleteComment),
 			LaunchAgent:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchAgent),
-			FocusAgent:    m.Keys.DisplayLabel(config.ShellContext, config.ShellActionFocusAgent),
 		},
-		Agents: linkedAgents(m.liveAgents, d.Comments),
+		Agents: linkedAgents(m.liveAgents, d),
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),
@@ -525,8 +533,8 @@ func (m *Model) focusPane() detail.FocusPane {
 }
 
 // focusStops is the panes left and right walk, in that order. The comments are
-// a stop of their own while the issue has one. The Metadata pane is no stop:
-// it only shows.
+// a stop of their own while the issue has one. The Details pane is no stop:
+// its agent rows take a click, and the agent dialog is their keyboard path.
 func (m *Model) focusStops() []detail.FocusPane {
 	stops := []detail.FocusPane{detail.FocusPaneDependencies, detail.FocusPaneContent}
 	if len(m.Detail.Comments) > 0 {
@@ -592,7 +600,7 @@ func (m *Model) moveRelatedSelection(delta, maxWidth, viewportHeight int) bool {
 	return m.BrowserSelectedIndex != previous
 }
 
-// RenderDetail returns detail used for content/metadata panes while keeping
+// RenderDetail returns detail used for content/details panes while keeping
 // dependency-browser context anchored to the selected issue.
 func (m *Model) RenderDetail() domain.IssueDetail {
 	content := m.Detail

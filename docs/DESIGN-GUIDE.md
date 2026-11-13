@@ -104,7 +104,7 @@ column below shows the `unicode` set:
 | `❯` | the prompt in front of a query line | `Prompt` |
 | `‹ ›` | either side of a value the operator steps through, on the configuration screen and the issue editor | `StepPrev`, `StepNext` |
 | `✅ ❌ ℹ ⚠` | toast severity | `ToastSuccess` and its siblings |
-| `●` | a live revier agent works on the issue, in the colour of the agent's status; after the status token of an In Progress card, drawn only with an agent | `Agent` |
+| `●` | a live revier agent works on the issue, in the colour of the agent's status; after the status token of a card whose link label names the agent, in any column, and of an In Progress card the agent commented on; drawn only with an agent | `Agent` |
 | the issue tokens above | type, priority, status | `IssueType`, `Priority`, `Status` |
 
 - A new marker is a field of `GlyphSet` with a value in all three sets. A row marker that is not a
@@ -121,7 +121,7 @@ The rest is the same in every set, and each has one definition:
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
 | `─` in `BorderDefaultColor` | the rule under the Content header and between two comments | `contentHeaderRule` in `internal/ui/detail/details.go` |
-| `• ` | a metadata list item | `internal/ui/detail/metadata.go` |
+| `• ` | a list item of the Details pane | `internal/ui/detail/metadata.go` |
 | ` • ` | separator between legend hints | `legendSeparator` in `internal/ui/styles/legend.go` |
 | `·` | separator between fields, between menu-bar buttons and between the buttons in a pane | inline at the call site; `buttonSeparator` in `internal/ui/detail/buttons.go` |
 
@@ -170,15 +170,18 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   renderer of their own. Each takes the content lines its column holds from `board.ContentRows`,
   which subtracts the list head and the two borders; none repeats that arithmetic. Both hold a
   `rowlist.List` (`internal/mode/rowlist`) for the selection, the scroll offset, the move keys and
-  the mouse.
+  the mouse. The Agents tab is the exception: its rows are agents in two groups with
+  headings, not issues, so `ui/agents` draws its own box and counts its own `RowLines`.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ### A button in a pane
 
 A menu-bar button is about the surface; a button in a pane is about what that pane shows. Detail
-has them all in the Content pane: `open`, `agent` and `edit` on the ID line, the first line of the
-pane, `add` on the Comments heading, and `edit` and `delete` on the header line of the selected
-comment. `open` is drawn only while a live agent is linked to the issue (`State.Agents`).
+has its buttons in the Content pane: `agent` and `edit` on the ID line, the first line of the pane,
+`add` on the Comments heading, and `edit` and `delete` on the header line of the selected comment.
+The Details pane may hold buttons and clickable rows too; its
+one clickable row today is the row of an agent
+([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
 
 - Draw it with `paneButton` (`internal/ui/detail/buttons.go`): the two runs and the roles of a
   menu-bar button, `" label "` in `ShellActionColor` and `"key "` in `ShellFooterHelpColor`.
@@ -190,14 +193,33 @@ comment. `open` is drawn only while a live agent is linked to the issue (`State.
   the last cell of every button line is the same column: `edit` on the ID line ends where `add`
   ends (`TestTheEditButtonEndsInTheColumnOfTheAddButton`, `internal/ui/detail/comments_test.go`).
   It draws none when fewer than `buttonTextFloor` cells would stay for the text. The ID is never
-  cut for a button. The width alone picks the ID line's set — `open`, `agent` and `edit`; else
-  `open` and `edit`; else `edit`; else none — measured with `open` drawn, so a linked agent coming
-  or going adds or removes `open` and moves no other button: a click aimed at `open` never lands
-  on `agent` (`placeIDLineButtons`). Place the buttons of one line with one `placeButtons` call.
+  cut for a button. The width alone picks the ID line's set — `agent` and `edit`; else `edit`;
+  else none (`placeIDLineButtons`) — so no button comes or goes with the agents of the issue.
+  Place the buttons of one line with one `placeButtons` call.
 - `HitTest` reads the cells `placeButtons` returned, through `renderContentPaneLines`, so a click
   lands on the button that is drawn.
 - A pane border holds no button.
 - A pane in skeleton state draws no button and reports none.
+
+### A clickable row in the Details pane
+
+The Details pane of Detail shows the fields of the issue and the agents linked to it, and it may
+carry buttons and actions on what it shows. It takes no focus, so a click there acts at once: one
+click runs the row, no first click selects it.
+
+- A row of the `Agents` group is clickable. A click switches to [the Agents
+  tab](#the-agents-tab) with that agent selected (`ActionSelectAgent`, `Model.selectAgent`,
+  `internal/app/agents.go`). The request names the agent by its session
+  (`mode.RequestAgentCmd`), so the click acts on the row that is drawn.
+- The keyboard path to the agent is the agent dialog (`launch_agent`), and the tab cycle to the
+  Agents tab. Every new action in the pane needs a key or a menu entry that does the same, as a
+  button in a pane does.
+- Under the pointer the row draws the hover band, `styles.RowHighlight` with `RowHoverBgColor`,
+  across the inner width of the pane, as a reference row of the Dependencies pane does.
+- `HitTest` reports `FocusPaneDetails` and the session in `Hit.Agent` on such a row only, read
+  through `detailsPaneLines`, the lines `RenderDetailsPane` draws. Every other line of the pane,
+  its border, the `… (N more)` row and the pane in skeleton state report nothing.
+- The wheel over the pane scrolls nothing.
 
 ## The screen margin
 
@@ -292,7 +314,7 @@ and the key legend below (`Model.renderFooter`).
 
 ### The tabs
 
-- The tabs are the two views in `mode.BrowseModes` order — Board, Docs. Detail never appears
+- The tabs are the three views in `mode.BrowseModes` order — Board, Docs, Agents. Detail never appears
   there: it is a drill-in, not a tab. Nor does [the store search](#the-store-search), and no
   tab is drawn active while it is up.
 - The active tab is `ShellTabActiveTextColor` on `ShellTabActiveBgColor` and bold; the rest are
@@ -308,6 +330,65 @@ and the key legend below (`Model.renderFooter`).
   each of which takes keys before the shell switch and moves between its fields with them. From
   the store search and from Detail they leave it for a tab, although Detail does not draw the
   strip. A browse surface must not claim either key.
+
+### The Agents tab
+
+The Agents tab (`internal/mode/agents`, drawn by `internal/ui/agents`) lists every agent of the
+store's project. It has no query line: a rule, then one box titled `Agents` with the number of
+agents.
+
+- Two groups, each under a muted bold heading with its count: `Linked`, the agents linked to an
+  issue, then `Not linked`, the live agents linked to none. A group with no agent is left out.
+  Within a group the agent that needs the operator most comes first (`agent.Rank`), then by title.
+- An agent is linked by a link label on any issue, closed ones included, or by a comment on an In
+  Progress card (`Board.CommentLinks`); a label wins over a comment, and the first issue over a
+  later one (`agent.Link`, which `buildRows` and Detail's `linkedAgents` share). A link label no
+  live agent holds is a `gone` row, on an open issue only and only after a poll that answered.
+  The Details pane and the agent dialog of Detail follow the same rule: a closed issue has no
+  `gone` agent (`linkedAgents`, `internal/mode/detail/model.go`), because the store refuses the
+  unlink of its label.
+- A row is two lines. The first is the agent's title (`agent.Agent.Title`: the harness's name, or
+  the label without one), bold, its status word in the colour of `styles.AgentStatusStyle` (`gone`
+  muted), and ` · ` and what it does, muted; all three cleaned with `displaytext.OneLine`. A long title is cut before the status, never the
+  status (`agentLine`, `internal/ui/agents/agents.go`). The second, muted, is the label when the title is a
+  name, and the ID and the title of the linked issue. The selection gutter and the band stand on
+  both lines.
+- Without a row the box says `No agents` and, on the next line, why: no agent host, no project
+  path, the path not accessible, no project of the host, the error of the last poll, or that the
+  host has not answered yet (`Model.agentsAbsent`).
+- The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
+  the front and resumes a gone one first (`ActionOpenAgent`). A resume raises an info toast,
+  `Resuming <title>…`, and turns the header spinner until it ends; an Enter on the same session
+  while it is in flight starts nothing (`Model.resumeAgent`). `close_agent` closes it, and asks
+  first when it is running or needs you (`ActionCloseAgent`, `Model.requestAgentClose`). On a gone
+  one it unlinks the agent without a host call (`Model.unlinkGoneAgent`), and a success toast says
+  `Unlinked <title>`. A close unlinks the agent, as the agent dialog's does. `open_issue` opens the
+  linked issue in Detail, and Escape there returns to the tab; on an agent linked to none it raises
+  the toast an empty selection raises. The legend names the keys that act on the selected row as
+  they act on it: `open_detail` as `resume` and `close_agent` as `unlink` on a gone row,
+  `open_issue` only on a linked one, and none of the three without a row (`footerHints`,
+  `internal/app/render.go`); the tab has no button.
+- The selection of the tab is the linked issue of the selected row, nil for an agent linked to
+  none, so the issue keys act on that issue. A read that changes that issue, its status say,
+  announces it again. Until the live agents and the linked issues are both known the selection
+  stays on the top row, so the tab opens on the agent that needs the operator most. The
+  selection stays on its agent when a poll moves the rows. A failed poll empties the tab but keeps that agent, and the next poll that answers selects
+  it again. A Detail opened with `open_issue` keeps its issue while a poll moves or removes the row
+  under it: the shell holds that issue as a drill-in (`ActionOpenDetail` in `Model.update`).
+- One click selects a row, a second brings its agent to the front; the wheel moves the selection.
+- The agents come from the shell's poll (`Model.publishAgents`), the comment links with them in
+  one `agents.Model.SetAgents`. The tab reads the issues with a link label itself, with
+  `SearchIssuesQuery.LabelContains`, on its first entry, its reload and its auto refresh. Its
+  reload, the key and the `reload` button, also polls the host at once (`ActionPollAgents`,
+  `Model.pollAgentsNow`), with no auto refresh too.
+- An agent the app starts is live at once (`Model.addStartedAgent`), and one it closes leaves at
+  once (`Model.dropAgent`). A poll in flight at either began before it, so its result is dropped
+  and another poll runs (`Model.pollAgentsAgain`): it would draw the started agent `gone` or put
+  the closed one back.
+- `Model.selectAgent` switches to the tab with an agent selected. A row that is not there yet, a
+  gone agent before the read, is selected when it comes (`agents.Model.Select`). When the live
+  agents and the linked issues are both known and the agent has no row, such as a gone agent of a
+  closed issue, the selection stays where it was.
 
 ## Keys and the query line
 
@@ -346,8 +427,9 @@ focuses it.
   dialog's input, or the issue editor. Help and a drag selection drop it, as they drop a key.
 - On a tab or the store search, Escape clears a non-empty query before it leaves the surface or
   hides a toast: the shell calls `Browse.ClearQuery` and acts on Escape itself only when that
-  reports nothing cleared. One thing comes first: an Escape that arrives while the issue editor is
-  still opening cancels that open and leaves the query as it is (`pendingEditor`, `handleShellKey`).
+  reports nothing cleared. Two things come first: an Escape that arrives while the issue editor is
+  still opening cancels that open and leaves the query as it is (`pendingEditor`, `handleShellKey`),
+  and an Escape under a held toast hides that toast and does nothing else.
 - A tab's query is a filter over the rows in memory: `Query.Filter` keeps the rows where every word
   is in the title or the ID, in their order. The model keeps the loaded rows and the matching rows
   apart (`issues` and `shown` in `internal/mode/board/model.go`); selection, scroll, hit test and
@@ -558,12 +640,13 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   comment line starts with the 2-cell gutter whatever the selection, so the line count does not
   follow the cursor (`renderComments`, `internal/ui/detail/comments.go`). The bar is drawn only
   while the comments have the focus (`FocusPaneComments`).
-- The Metadata pane of Detail only shows. It is no focus stop (`focusStops`,
-  `internal/mode/detail/model.go`), so its border never takes the focus colour; `HitTest` reports
-  nothing on it; it has no cursor and no scroll offset. A pane too short for its lines ends on
-  `… (N more)` (`RenderMetadataPane`). Its `Agents` group, drawn only with a linked live agent
-  and right after `Core` so a short pane keeps it, only shows too: `open` on the ID line acts on the agents. Every action on the issue is a key and a button of the
-  Content pane ([A button in a pane](#a-button-in-a-pane)).
+- The Details pane of Detail is no focus stop (`focusStops`, `internal/mode/detail/model.go`), so
+  its border never takes the focus colour; it has no cursor and no scroll offset. A pane too short
+  for its lines ends on `… (N more)` (`RenderDetailsPane`). Its `Agents` group is drawn only with
+  a linked agent, right after `Core` so a short pane keeps it, and its rows take a click
+  ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)). Every action on
+  the issue itself is a key and a button of the Content pane
+  ([A button in a pane](#a-button-in-a-pane)).
 - A move of the comment cursor scrolls the Content pane with two calls, the last line of the
   comment and then its first: a comment that fits is drawn whole and a taller one starts at its
   header line (`scrollToComment`, `internal/mode/detail/model.go`).
@@ -572,7 +655,9 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   rows on `… (N earlier)` / `… (N more)` indicators, as `ui/detail` does. The selection bar staying
   on a row that actually renders is a contract; `EnsureVisible` in a clipped pane satisfies the
   window check and hides the bar. Both count rows of one line; a list of two-line rows passes its
-  capacity in rows, as `mode/storepicker` does with `RowCapacity`.
+  capacity in rows, as `mode/storepicker` does with `RowCapacity`. The Agents tab is the
+  exception: its group headings and gaps are lines `scroll.EnsureVisible` does not count, so it
+  scrolls with `agents.EnsureVisible` (`internal/ui/agents`).
 - A column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
   issue older than a day and another before the first older than a week, each carrying the count
   of issues below it (`internal/ui/board/agemarker.go`). A divider is a row, not an issue:
@@ -628,6 +713,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - A click on a button in a pane sends the request its key sends (`buttonActions`,
   `internal/mode/detail/mouse.go`). A click on a comment gives the comments the focus and puts
   the cursor on it; a second click does nothing more, and the click does not scroll the pane.
+  A click on the row of an agent in the Details pane selects that agent on the Agents tab
+  ([A clickable row in the Details pane](#a-clickable-row-in-the-details-pane)).
 - The configuration screen takes no mouse event: `handleMouse` returns before the header and the
   surface are measured. Text selection still works there, because it runs before the routing.
 - The issue editor takes the event at the same place, before the header is measured
@@ -653,15 +740,28 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   it. `selectmenu.Place` puts it on the side of the cell away from the press, so it leaves the box
   clear, and on the other side where it would leave the screen.
   - Its title says sent, not copied: OSC 52 has no reply.
-  - It offers a quote of the text in a new comment on the selected issue, a store search for the
-    text on one line, and close. The quote goes to the issue its label names, taken when the menu
-    opens. Quote and search read the text without the screen's chrome (`quotable`): the border
+  - It offers a quote of the text in a new comment on the selected issue, an agent asked about the
+    text, a store search for the text on one line, and close. The quote and the ask go to the issue
+    their label names, taken when the menu opens. Quote and search read the text without the screen's chrome (`quotable`): the border
     rows at the top and the bottom, the leading columns that hold a side border `│`, the gutter or
     a space on every line, and the trailing side borders. A tree or a table drawn in the text keeps
     its glyphs; the clipboard keeps the box as drawn. The search runs once, at once
-    (`search.Model.SetQuery`). Quote and search are off on the picker, the configuration screen,
-    the issue editor, help and under a dialog, where each would leave the surface with work on it,
-    and for a box of chrome alone.
+    (`search.Model.SetQuery`). Quote, ask and search are off on the picker, the configuration
+    screen, the issue editor, help and under a dialog, where each would leave the surface with work
+    on it, and for a box of chrome alone. Ask is off without an agent host, and on a closed issue,
+    where the store refuses the link label; there its label says so
+    (`Ask an agent: off, <id> is closed`). A host that is there but fails, such as revier missing
+    from the `PATH`, fails the start with an error toast.
+  - Ask opens the ask question in the action modal: one line for the instruction, and `Ask`
+    (`Model.openAgentAsk`, `internal/app/askagent.go`). An empty line asks nothing. The agent
+    starts without the focus and is linked as an intent's agent is. An info toast says it works in
+    the background; when its turn ends the shell polls the agents, reloads the issue (on a watched
+    store the watch does it) and reports the status line its reply ends with
+    (`Model.handleAgentAnswered`): `done` a success toast, `failed` an error toast, `question` the
+    focus offer, and a reply without one an info toast that it finished. A turn that ends with the
+    agent waiting for the operator is the focus offer too, whatever the reply says. The agent stays
+    open. A store switch before the start returns still reports the start, and the toast says no
+    answer comes: the wait belongs to the store the start began on.
   - Up and down move over the entries that are on, Enter or a click runs one, Escape or a click
     outside closes it, and quit quits. A click outside does nothing else. Every other key, paste and mouse event is
     dropped while it is up, and a resize that changes the screen's size closes it.
@@ -673,15 +773,67 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   helpers corrupt already-rendered colour, so they are not an alternative here.
 - A modal is centred (`overlay.Center`); a toast is bottom-centred with `PadY: 1`
   (`overlay.Bottom`). Both are placed on the screen, so the margin stays blank around them.
-- The action modal, the toast and the selection menu are the only overlays. Help is a full screen
-  ([Surfaces above the shell](#surfaces-above-the-shell)).
-- The action modal carries two things: the store form of the picker (`Model.openStoreForm`) and
-  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), which has no input,
-  a `modal.ButtonDanger` confirm, and takes `y` and `n`. `handleOverlayMessage` tells them apart
-  by `storeForm.kind`. A new field of an issue is a row of the issue editor, never a modal.
+- The action modal, the toast, the selection menu and the agent dialog are the only overlays. Help
+  is a full screen ([Surfaces above the shell](#surfaces-above-the-shell)).
+- The agent dialog is the selection menu's overlay (`selectionMenu`, drawn by
+  `internal/ui/selectmenu`) with other entries: `launch_agent` and the `agent` button open it in
+  Detail (`Model.openAgentDialog`, `internal/app/agents.go`). It is centred over the screen as it
+  was when it opened, titled `Agents on <id>`, and takes keys and the mouse as the selection menu
+  does. The issue and its agents are taken when it opens. Its entries, in order:
+  - `Focus <title>` and `Close <title>` for each live linked agent, `Resume <title>` and
+    `Unlink <title>` for each gone one. Unlink removes the link label from every open issue
+    without a host call (`Model.unlinkGoneAgent`). A closed issue lists no gone agent, so no
+    Unlink is offered where the store would refuse it. A close of an agent that is running or needs you asks first and then forces the close; an
+    idle one closes at once. A close that succeeds unlinks the agent: its link label leaves every
+    open issue that carries it (`Model.closeAgent`), so it is no `gone` row afterwards. A close or
+    an unlink that succeeds takes the agent off the Details pane and the Agents tab at once
+    (`Model.dropAgent`), before the reload drops its label: until then the label would draw it
+    `gone`, and Enter would resume the agent just closed. A closed
+    issue keeps the label, because the store refuses the change. A removal that fails raises an
+    error toast that names the issue. An agent that ends by itself keeps its label, is `gone` and
+    can be resumed or unlinked. A resume reopens the conversation and brings it to the front.
+  - The heading `Start new`, then one entry per configured intent. A heading is a muted bold line
+    without the gutter that takes no cursor and no click (`selectmenu.Entry.Heading`). On a closed
+    issue the store refuses the link label: the heading reads `Start new: off, the issue is closed`
+    and the intents are off. Without an intent the part is left out.
+  - Cancel, which closes the dialog. It is not named Close, so it does not read as the close of
+    an agent. The dialog has no hint line.
+
+  The cursor opens on the first entry that is on. An intent starts the agent through the agent
+  host without the focus, so the operator stays in taskmgr-ui, and raises an info toast at once, because a start takes as long as the agent takes to
+  start; a start that fails, and a label that is not written, raise an error toast
+  (`Model.handleAgentStarted`). A start that fails after the agent has its session, at the prompt,
+  still links the agent. A store switch does not drop the toast of a start, and each
+  toast names the issue. Every toast and dialog entry names an agent by `agent.Agent.Title`, as its row does; the link label goes to the store the start began on. Without an agent host or the project path, and without a
+  linked agent and an intent both, the key raises a warning toast instead of the dialog.
+- The Agents group of the Details pane is each linked agent's status word — `running`, `idle`,
+  `needs you`, `gone` (`agent.StatusWord`) — padded to the longest in the group, then its title
+  (`agent.Agent.Title`). The pane width cuts a long title, never the status. What it does is on
+  the Agents tab. A live agent whose session wrote a comment on the issue is in the group on an
+  In Progress issue only (`linkedAgents`), as on the board and the Agents tab; a link label links
+  it on an issue of any status. A link label no live agent holds is `gone` after a poll that answered. Before the first answer
+  and after a failed poll the live agents are not known, so such a label draws no row and the
+  agent dialog offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
+- The action modal carries five things: the store form of the picker (`Model.openStoreForm`),
+  the yes or no before a comment is deleted (`Model.confirmCommentDelete`), the yes or no
+  before a busy agent is closed (`Model.requestAgentClose`), the ask question of the selection
+  menu (`Model.openAgentAsk`), and the offer to bring an agent that asks to the front
+  (`Model.offerAgentFocus`). The delete and close questions have no input, a
+  `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
+  `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
+  `storeForm.kind`. The focus offer opens only on Detail or the Agents tab with no overlay, menu or
+  drag open: no key typed there is text. Board, Docs and the store search take a typed key as
+  query text with no prefix, so anywhere else a warning toast names the agent dialog and the
+  Agents tab instead. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.
+- The done and failed report of an asked agent is a report toast (`Model.showReport`,
+  `toaster.Model.ShowReport`): its message wraps at spaces over up to three lines instead of
+  being cut at the box. A report that does not fit them is cut with `…` and is held
+  (`toaster.Model.Held`): no timer hides it, the next toast replaces it, and the first Escape
+  hides it and does nothing else. Every other toast is cut to one line per line feed and
+  closes after three seconds.
 - A toast draws at most `maxMessageLines` lines (`internal/ui/toaster/toaster.go`): a line feed
   in a path or an error text is a line of the box. `capLines` gives the last of them to the cut
   mark, a line that holds only `…`.
@@ -730,7 +882,9 @@ The selection menu is the one exception: no key selects text, so no key reaches 
 - Long work renders the spinner: advance the frame with `loading.NextFrame`, draw it with
   `loading.Glyph`, drive it with `loading.SpinnerTickCmd`.
 - The shell says work is in flight with the spinner cell in front of the tabs
-  (`Model.headerSpinnerCell`), drawn while `Model.workInFlight` reports a surface loading; idle draws nothing.
+  (`Model.headerSpinnerCell`), drawn while `Model.workInFlight` reports a surface loading, or an
+  agent start or resume in flight: each waits for the agent's harness, which takes seconds; idle
+  draws nothing.
   In Detail, which has no tab line, the glyph stands in the menu bar's first cell
   ([The shell chrome](#the-shell-chrome)).
 - A cold start draws skeleton rows (`issuerow.RenderCompactSkeleton`) rather than an empty frame.

@@ -52,8 +52,13 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "ctrl+t", Desc: "in the search, switch between open issues and all of them"},
 		}},
 		{Title: "Tabs", Entries: []helpscreen.Entry{
-			{Key: shell(config.ShellActionModeCycleNext), Desc: "next tab: Board, Docs"},
+			{Key: shell(config.ShellActionModeCycleNext), Desc: "next tab: Board, Docs, Agents"},
 			{Key: shell(config.ShellActionModeCyclePrev), Desc: "previous tab"},
+		}},
+		{Title: "Agents tab", Entries: []helpscreen.Entry{
+			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
+			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent, asking first while it is running or needs you; unlink a gone one"},
+			{Key: board(config.BoardActionOpenIssue), Desc: "open the issue the selected agent is linked to in Detail"},
 		}},
 		{Title: "Issue", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionCreateIssue), Desc: "create an issue, in the issue editor"},
@@ -83,8 +88,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionLaunchNvim), Desc: "launch nvim on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchOpencode), Desc: "launch opencode on the issue, in the background"},
 			{Key: shell(config.ShellActionLaunchShell), Desc: "launch the shell command on the issue, in the background"},
-			{Key: shell(config.ShellActionLaunchAgent), Desc: "start a revier agent that talks about the issue, in the background"},
-			{Key: shell(config.ShellActionFocusAgent), Desc: "bring the agent that works on the issue to the front"},
+			{Key: shell(config.ShellActionLaunchAgent), Desc: "the agents of the issue: focus or close a live one, resume or unlink a gone one, or start a new one"},
 		}},
 		{Title: "Menu bar and stores", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionStorePicker), Desc: "list the task stores on this machine and open one"},
@@ -111,12 +115,13 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		{Title: "Mouse", Entries: []helpscreen.Entry{
 			{Key: "click", Desc: "select a row or a comment, switch to a tab, focus a pane or a field of the issue editor"},
 			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
-			{Key: "second click", Desc: "open the row"},
+			{Key: "click", Desc: "an agent in the Details pane: select it on the Agents tab"},
+			{Key: "second click", Desc: "open the row; on the Agents tab, bring the agent to the front"},
 			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the text of the issue editor and this screen"},
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
 		}},
-		{Title: "Selection menu", Entries: []helpscreen.Entry{
+		{Title: "Selection menu and agent dialog", Entries: []helpscreen.Entry{
 			{Key: "up/down", Desc: "the entry above / below"},
 			{Key: "enter", Desc: "run the entry"},
 			{Key: "click", Desc: "run the entry under it"},

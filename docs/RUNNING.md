@@ -74,7 +74,7 @@ python3 scripts/capture_taskmgr_ui_screen.py \
   --cwd "$repoPath" --width 200 --height 34 --startup-wait 1.2 --timeout 25 \
   --step 'wait-for-text:Ready:3000' \
   --step 'send-key:ENTER' \
-  --step 'wait-for-text:Metadata:3000' \
+  --step 'wait-for-text:Details:3000' \
   --step 'checkpoint:detail-open' \
   --step 'send-key:ESC' \
   --step 'wait-for-text:Board:2000' \
@@ -158,16 +158,22 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 - **Comments** — in detail, `right` from Content reaches the comments; `enter` edits the selected
   one, `alt+d` asks before it deletes, and the `add`, `edit` and `delete` buttons do the same on a
   click.
-- **External tools** — `alt+v`, `alt+p`, `alt+l` and `alt+i` from detail leave the app alive with the
-  expected toast. Drive `alt+i` with a fake `revier` first on `PATH`, such as `fakeRevier` in
-  `internal/config/agent_launcher_integration_test.go`: against this project's own store, a real
+- **External tools** — `alt+v`, `alt+p` and `alt+l` from detail leave the app alive with the
+  expected toast. `alt+i` opens the agent dialog, and an intent under `Start new` shows `Starting an agent to …`
+  and then `Started <agent name> on <id>`, with the label `agent-session:<session>` on the issue. Drive it
+  with a fake `revier` first on `PATH`, such as `fakeRevier` in
+  `internal/agent/revier/revier_integration_test.go`: against this project's own store, a real
   one starts a real agent on the issue.
 - **Live agents** — the app runs `revier` itself every few seconds, so put a fake `revier` first on
-  `PATH` for every run, never the real one: `alt+o` would focus a real agent and `alt+i` start one.
+  `PATH` for every run, never the real one: `alt+i` would focus or start a real agent.
   Make its `status` print `project` and `path` lines for the project root and its
   `list --json --conversations` print an agent whose `.state.session` wrote a comment on an In
-  Progress issue, as `fakeRevier` in `internal/revier/revier_integration_test.go` does. The card
-  carries the agent mark, Detail lists the agent under `Agents` and draws `open alt+o`.
+  Progress issue, as `fakeRevier` in `internal/agent/revier/revier_integration_test.go` does. The card
+  carries the agent mark, Detail lists the agent under `Agents`. `alt+i`
+  opens the agent dialog; its Close and Resume entries run `revier agent close` and
+  `revier agent new --resume`, so the fake must answer both. `shift+tab` from Board opens the
+  Agents tab: the agent stands under `Linked`, one with no link under `Not linked`, each with
+  the `.state.name` the fake gives; `enter`, `alt+x` and `alt+o` act on the selected one.
 
 ## Behaviours that need a real terminal
 

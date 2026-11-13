@@ -283,6 +283,9 @@ func (m *Model) findIssue(issueID string) (int, bool) {
 	return 0, false
 }
 
+// HasQuery reports whether the query holds text.
+func (m *Model) HasQuery() bool { return !m.query.Empty() }
+
 // ClearQuery empties the query, which the shell asks for on Escape. cleared is
 // false when there was no text, and Escape is then the shell's.
 func (m *Model) ClearQuery() (cleared bool, cmd tea.Cmd) {

@@ -115,7 +115,7 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 	tab := testui.Press("tab")
 	shiftTab := testui.Press("shift+tab")
 
-	for _, want := range []mode.ID{mode.Docs, mode.Board} {
+	for _, want := range []mode.ID{mode.Docs, mode.Agents, mode.Board} {
 		m = press(m, tab)
 		if m.active != want {
 			t.Fatalf("expected tab to move to %s, got %s", want, m.active)
@@ -125,7 +125,7 @@ func TestModelTabAndShiftTabCycleBrowseTabs(t *testing.T) {
 		}
 	}
 
-	for _, want := range []mode.ID{mode.Docs, mode.Board} {
+	for _, want := range []mode.ID{mode.Agents, mode.Docs, mode.Board} {
 		m = press(m, shiftTab)
 		if m.active != want {
 			t.Fatalf("expected shift+tab to move to %s, got %s", want, m.active)
@@ -274,7 +274,8 @@ func TestModelUsesConfiguredShellAndBoardKeyBindings(t *testing.T) {
 }
 
 // TestModeCycleDirections asserts that nextMode and prevMode traverse the
-// header tab strip — mode.BrowseModes: Board, Docs — wrapping at both ends.
+// header tab strip — mode.BrowseModes: Board, Docs, Agents — wrapping at both
+// ends.
 //
 // Detail is not a tab. Cycling from it resumes from lastBrowse, so it steps
 // onto the strip instead of staying in Detail.
@@ -287,12 +288,15 @@ func TestModeCycleDirections(t *testing.T) {
 		if got := nextMode(mode.Board, mode.Board); got != mode.Docs {
 			t.Errorf("nextMode(Board, Board) = %s; want Docs", got)
 		}
-		if got := nextMode(mode.Docs, mode.Docs); got != mode.Board {
-			t.Errorf("nextMode(Docs, Docs) = %s; want Board", got)
+		if got := nextMode(mode.Docs, mode.Docs); got != mode.Agents {
+			t.Errorf("nextMode(Docs, Docs) = %s; want Agents", got)
+		}
+		if got := nextMode(mode.Agents, mode.Agents); got != mode.Board {
+			t.Errorf("nextMode(Agents, Agents) = %s; want Board", got)
 		}
 		// From Detail the cycle resumes from lastBrowse.
-		if got := nextMode(mode.Detail, mode.Docs); got != mode.Board {
-			t.Errorf("nextMode(Detail, Docs) = %s; want Board", got)
+		if got := nextMode(mode.Detail, mode.Docs); got != mode.Agents {
+			t.Errorf("nextMode(Detail, Docs) = %s; want Agents", got)
 		}
 		if got := nextMode(mode.Detail, mode.Board); got != mode.Docs {
 			t.Errorf("nextMode(Detail, Board) = %s; want Docs", got)
@@ -302,14 +306,14 @@ func TestModeCycleDirections(t *testing.T) {
 	t.Run("prevMode_backward", func(t *testing.T) {
 		t.Parallel()
 
-		if got := prevMode(mode.Board, mode.Board); got != mode.Docs {
-			t.Errorf("prevMode(Board, Board) = %s; want Docs", got)
+		if got := prevMode(mode.Board, mode.Board); got != mode.Agents {
+			t.Errorf("prevMode(Board, Board) = %s; want Agents", got)
 		}
 		if got := prevMode(mode.Docs, mode.Docs); got != mode.Board {
 			t.Errorf("prevMode(Docs, Docs) = %s; want Board", got)
 		}
-		if got := prevMode(mode.Detail, mode.Board); got != mode.Docs {
-			t.Errorf("prevMode(Detail, Board) = %s; want Docs", got)
+		if got := prevMode(mode.Detail, mode.Board); got != mode.Agents {
+			t.Errorf("prevMode(Detail, Board) = %s; want Agents", got)
 		}
 	})
 

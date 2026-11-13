@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"slices"
 	"sort"
 	"strings"
 
@@ -136,6 +137,12 @@ func (r *Repository) matchesSearchLocked(si *storedIssue, q domain.SearchIssuesQ
 				return false
 			}
 		}
+	}
+
+	if q.LabelContains != "" && !slices.ContainsFunc(si.labels, func(label string) bool {
+		return strings.Contains(strings.ToLower(label), strings.ToLower(q.LabelContains))
+	}) {
+		return false
 	}
 
 	// Assignee filter: exact match.

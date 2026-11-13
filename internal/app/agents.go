@@ -2,33 +2,42 @@ package app
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/hk9890/task-manager-ui/internal/revier"
+	"github.com/hk9890/task-manager-ui/internal/agent"
+	"github.com/hk9890/task-manager-ui/internal/displaytext"
+	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/mode"
+	"github.com/hk9890/task-manager-ui/internal/repository"
+	"github.com/hk9890/task-manager-ui/internal/ui/modal"
+	"github.com/hk9890/task-manager-ui/internal/ui/selectmenu"
 	"github.com/hk9890/task-manager-ui/internal/ui/toaster"
 )
 
 // armAgentPoll starts the agent poll timer, or returns nil when there is no
-// revier client or no background work is wanted. The timer is not scoped: it
+// agent host or no background work is wanted. The timer is not scoped: it
 // re-arms only from its own handler, so a dropped tick would stop the chain
 // for the rest of the session.
 func (m Model) armAgentPoll() tea.Cmd {
-	if m.services.Revier == nil || m.runtime.DisableAutoRefresh {
+	if m.services.Agents == nil || m.runtime.DisableAutoRefresh {
 		return nil
 	}
 	return m.scheduleAgentPoll()
 }
 
-// pollAgentsCmd asks revier for the live agents of the store's project. It
-// starts nothing while a poll is in flight, without a revier client, and
-// without a project path to ask about. The project name is resolved once per
-// store and cached; a failed lookup runs again only after projectRetryTicks
-// ticks, or on the next store bind.
+// pollAgentsCmd asks the agent host for the live agents of the store's
+// project. It starts nothing while a poll is in flight, without a host, and
+// without a project path to ask about. After the host said the root is no
+// project of its own, the next poll runs only after projectRetryTicks ticks,
+// or on the next store bind.
 func (m *Model) pollAgentsCmd() tea.Cmd {
-	client := m.services.Revier
+	host := m.services.Agents
 	root := m.services.ProjectRoot
-	if client == nil || m.agentPollInFlight || !m.storeOpen || root == "" || m.projectRootMissing {
+	if host == nil || m.agentPollInFlight || !m.storeOpen || root == "" || m.projectRootMissing {
 		return nil
 	}
 	if m.projectLookupWait > 0 {
@@ -36,78 +45,430 @@ func (m *Model) pollAgentsCmd() tea.Cmd {
 		return nil
 	}
 	m.agentPollInFlight = true
-	ctx, project := m.ctx, m.revierProject
+	ctx := m.ctx
 	return m.scoped(func() tea.Msg {
-		return listAgents(ctx, client, root, project)
+		agents, err := host.List(ctx, root)
+		return agentsListedMsg{agents: agents, err: err}
 	})
 }
 
-func listAgents(ctx context.Context, client revier.Client, root, project string) agentsListedMsg {
-	if project == "" {
-		resolved, err := client.Project(ctx, root)
-		if err != nil {
-			return agentsListedMsg{err: err}
-		}
-		project = resolved
-	}
-	agents, err := client.Agents(ctx, project)
-	return agentsListedMsg{project: project, agents: agents, err: err}
+// pollAgentsNow is the reload of the Agents tab: it asks the host at once,
+// also when the host said a minute ago that the root is no project of its
+// own.
+func (m *Model) pollAgentsNow() tea.Cmd {
+	m.projectLookupWait = 0
+	return m.pollAgentsCmd()
 }
 
-// applyAgentList hands the listed agents to Detail and their statuses to the
-// board, both keyed by session. A failed
-// poll clears them, and is logged once until a poll succeeds again: the poll
-// runs every few seconds.
-func (m *Model) applyAgentList(msg agentsListedMsg) {
+// pollAgentsAgain lists the agents after the app started or closed one: at
+// once, or after the poll in flight, whose result is dropped. That poll began
+// before the change, and would put a closed agent back or leave a started
+// one out.
+func (m *Model) pollAgentsAgain() tea.Cmd {
+	if m.agentPollInFlight {
+		m.agentPollStale = true
+		return nil
+	}
+	return m.pollAgentsCmd()
+}
+
+// applyAgentList takes the listed agents as the live ones. A failed poll
+// clears them, and is logged once until a poll succeeds again: the poll runs
+// every few seconds. A poll that began before the app started or closed an
+// agent is dropped, and another one runs.
+func (m *Model) applyAgentList(msg agentsListedMsg) tea.Cmd {
 	m.agentPollInFlight = false
-	m.revierProject = msg.project
+	if m.agentPollStale {
+		m.agentPollStale = false
+		return m.pollAgentsCmd()
+	}
 	if msg.err != nil {
-		if msg.project == "" {
+		if errors.Is(msg.err, agent.ErrNoProject) {
 			m.projectLookupWait = projectRetryTicks
 		}
-		m.detail.SetLiveAgents(nil)
-		m.board.SetLiveAgents(nil)
 		if !m.agentPollFailing {
-			m.logAgentPollFailure(msg)
+			m.logAgentPollFailure(msg.err)
 		}
 		m.agentPollFailing = true
-		return
+		m.liveAgents, m.liveAgentsKnown, m.agentPollErr = nil, false, msg.err
+		return m.publishAgents()
 	}
 	m.agentPollFailing = false
+	m.liveAgents, m.liveAgentsKnown, m.agentPollErr = msg.agents, true, nil
+	return m.publishAgents()
+}
 
-	bySession := make(map[string]revier.Agent, len(msg.agents))
-	statusBySession := make(map[string]string, len(msg.agents))
-	for _, agent := range msg.agents {
-		if agent.Session != "" {
-			bySession[agent.Session] = agent
-			statusBySession[agent.Session] = agent.Status
+// publishAgents hands the live agents to Detail and the Agents tab, and their
+// statuses to the board, keyed by session. The Agents tab takes the board's
+// comment links with them.
+func (m *Model) publishAgents() tea.Cmd {
+	var bySession map[string]agent.Agent
+	var statusBySession map[string]agent.Status
+	if m.liveAgentsKnown {
+		bySession = make(map[string]agent.Agent, len(m.liveAgents))
+		statusBySession = make(map[string]agent.Status, len(m.liveAgents))
+		for _, live := range m.liveAgents {
+			if live.Session != "" {
+				bySession[live.Session] = live
+				statusBySession[live.Session] = live.Status
+			}
 		}
 	}
 	m.detail.SetLiveAgents(bySession)
 	m.board.SetLiveAgents(statusBySession)
+	return m.scoped(m.agents.SetAgents(m.liveAgents, m.liveAgentsKnown, m.agentsAbsent(m.agentPollErr), m.board.CommentLinks()))
 }
 
-func (m Model) logAgentPollFailure(msg agentsListedMsg) {
-	if msg.project == "" {
+// addStartedAgent puts an agent the app started among the live agents at
+// once, and lists them again: until a poll holds it, its link label would
+// draw it gone. While the live agents are not known nothing is drawn gone,
+// so it waits for the poll.
+func (m *Model) addStartedAgent(started agent.Agent) tea.Cmd {
+	var publish tea.Cmd
+	isStarted := func(a agent.Agent) bool { return a.Key() == started.Key() }
+	if m.liveAgentsKnown && started.Session != "" && !slices.ContainsFunc(m.liveAgents, isStarted) {
+		m.liveAgents = append(slices.Clone(m.liveAgents), started)
+		publish = m.publishAgents()
+	}
+	return batchCmds(publish, m.pollAgentsAgain())
+}
+
+// agentsAbsent is why the Agents tab may show no agent: no host, no project
+// path to ask about, a root that is no project of the host, or the error the
+// last poll failed with, such as a host that is not installed; "" when
+// nothing keeps the host from answering.
+func (m Model) agentsAbsent(pollErr error) string {
+	root := m.services.ProjectRoot
+	switch {
+	case m.services.Agents == nil:
+		return "no agent host: agents are off"
+	case root == "":
+		return "the store has no project path to ask the agent host about"
+	case m.projectRootMissing:
+		return "the project path is not accessible: " + root
+	case errors.Is(pollErr, agent.ErrNoProject):
+		return root + " is no project of the agent host"
+	case pollErr != nil:
+		return "the agent host failed: " + pollErr.Error()
+	}
+	return ""
+}
+
+// agentsOff says why no agent can start in the store's project: no host, no
+// project path, or a path that is not accessible; "" when one can.
+func (m *Model) agentsOff() string {
+	root := m.services.ProjectRoot
+	m.projectRootMissing = projectRootMissing(root)
+	switch {
+	case m.services.Agents == nil:
+		return "No agent host: agents are off"
+	case root == "":
+		return "Agents are off: the store has no project path"
+	case m.projectRootMissing:
+		return "Agents are off: project path not accessible: " + root
+	}
+	return ""
+}
+
+// selectAgent switches to the Agents tab with the agent of session selected.
+// The click on its row in the Details pane asks for it.
+func (m *Model) selectAgent(session string) tea.Cmd {
+	switchCmd := m.switchToTab(mode.Agents)
+	return batchCmds(switchCmd, m.scoped(m.agents.Select(session)))
+}
+
+func (m Model) logAgentPollFailure(err error) {
+	if errors.Is(err, agent.ErrNoProject) {
 		// Not a fault: most projects are not revier projects.
 		m.logger().Debug("project is not a revier project; agent status not shown",
-			"project_root", m.services.ProjectRoot, "error", msg.err.Error())
+			"project_root", m.services.ProjectRoot, "error", err.Error())
 		return
 	}
 	m.logger().Warn("revier agent listing failed; agent status not shown",
-		"project", msg.project, "error", msg.err.Error())
+		"project_root", m.services.ProjectRoot, "error", err.Error())
 }
 
-// focusAgent brings the first live agent linked to the issue open in Detail
-// to the front: the one that needs the operator most.
-func (m *Model) focusAgent() tea.Cmd {
-	linked := m.detail.LinkedAgents()
-	if len(linked) == 0 || m.services.Revier == nil {
-		return m.showToast("No live agent on this issue", toaster.StyleWarn)
-	}
-	ctx, client := m.ctx, m.services.Revier
-	addr := revier.Address(m.revierProject, linked[0].Panel)
+func (m *Model) focusOneAgent(a agent.Agent) tea.Cmd {
+	ctx, host := m.ctx, m.services.Agents
 	return func() tea.Msg {
-		return agentFocusedMsg{err: client.Focus(ctx, addr)}
+		return agentFocusedMsg{err: host.Focus(ctx, a)}
 	}
+}
+
+// openAgent brings a to the front: a live one at once, a gone one after its
+// resume. Enter on its row of the Agents tab asks for it.
+func (m *Model) openAgent(a agent.Agent) tea.Cmd {
+	if m.services.Agents == nil {
+		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
+	}
+	if a.Status == agent.Gone {
+		return m.resumeAgent(a)
+	}
+	return m.focusOneAgent(a)
+}
+
+// openAgentDialog opens the agent dialog of the issue open in Detail, in the
+// middle of the screen: first the agents linked to it, focus or close each
+// live one and resume or unlink each gone one, then one entry per configured
+// intent that starts a new agent, then Cancel. The issue and its agents are taken
+// when the dialog opens, so a refresh under it cannot move an agent to
+// another issue.
+func (m *Model) openAgentDialog() tea.Cmd {
+	issue, ok := m.selectedIssueContext()
+	if !ok {
+		return m.showToast("No selected issue to start an agent on", toaster.StyleWarn)
+	}
+	if off := m.agentsOff(); off != "" {
+		return m.showToast(off, toaster.StyleWarn)
+	}
+	linked := m.detail.LinkedAgents()
+	intents := m.services.Config.Agent.Intents
+	if len(linked) == 0 && len(intents) == 0 {
+		return m.showToast("No agent on this issue and no agent intents configured", toaster.StyleWarn)
+	}
+
+	menu := &selectionMenu{
+		title:       "Agents on " + displaytext.OneLine(issue.Summary.ID),
+		backdrop:    m.frozenScreen(),
+		screenWidth: m.width,
+	}
+	for _, a := range linked {
+		menu.entries = append(menu.entries, linkedAgentActions(a)...)
+	}
+	if len(intents) > 0 {
+		heading, off := "Start new", issue.Summary.Status == domain.StatusClosed
+		if off {
+			heading = "Start new: off, the issue is closed"
+		}
+		menu.entries = append(menu.entries, selectionAction{entry: selectmenu.Entry{Label: heading, Heading: true}})
+		for _, intent := range intents {
+			menu.entries = append(menu.entries, selectionAction{
+				entry: selectmenu.Entry{Label: displaytext.OneLine(intent.Name), Disabled: off},
+				run:   func(m *Model) tea.Cmd { return m.startAgent(issue, intent) },
+			})
+		}
+	}
+	menu.entries = append(menu.entries, m.closeMenuAction("Cancel"))
+	m.openCentredMenu(menu)
+	return nil
+}
+
+// linkedAgentActions are the entries of one linked agent in the agent
+// dialog: Focus and Close for a live one, Resume and Unlink for a gone one.
+func linkedAgentActions(a agent.Agent) []selectionAction {
+	label := displaytext.OneLine(a.Title())
+	if a.Status == agent.Gone {
+		return []selectionAction{
+			{
+				entry: selectmenu.Entry{Label: "Resume " + label},
+				run:   func(m *Model) tea.Cmd { return m.resumeAgent(a) },
+			},
+			{
+				entry: selectmenu.Entry{Label: "Unlink " + label},
+				run:   func(m *Model) tea.Cmd { return m.unlinkGoneAgent(a) },
+			},
+		}
+	}
+	return []selectionAction{
+		{
+			entry: selectmenu.Entry{Label: "Focus " + label},
+			run:   func(m *Model) tea.Cmd { return m.focusOneAgent(a) },
+		},
+		{
+			entry: selectmenu.Entry{Label: "Close " + label},
+			run:   func(m *Model) tea.Cmd { return m.requestAgentClose(a) },
+		},
+	}
+}
+
+// resumeAgent reopens the conversation of a gone agent in the store's
+// project and brings it to the front. The harness of the new tab takes
+// seconds to come up, so an info toast says the resume started, and a second
+// resume of the session while one is in flight starts nothing: it would open
+// a second tab on the same conversation. As a start, it is unscoped and runs
+// on no store's context: a store switch must not stop it half done, and the
+// host then closes the tab it opened. The host bounds every call itself.
+func (m *Model) resumeAgent(gone agent.Agent) tea.Cmd {
+	label := displaytext.OneLine(gone.Title())
+	if m.agentResumes[gone.Session] {
+		return m.showToast("Already resuming "+label+"…", toaster.StyleInfo)
+	}
+	if m.agentResumes == nil {
+		m.agentResumes = make(map[string]bool)
+	}
+	m.agentResumes[gone.Session] = true
+	host, root, epoch := m.services.Agents, m.services.ProjectRoot, m.storeEpoch
+	resume := func() tea.Msg {
+		ctx := context.Background()
+		resumed, err := host.Resume(ctx, root, gone.Session)
+		if err == nil {
+			err = host.Focus(ctx, resumed)
+		}
+		return agentResumedMsg{epoch: epoch, agent: gone, err: err}
+	}
+	return batchCmds(m.showToast("Resuming "+label+"…", toaster.StyleInfo), resume)
+}
+
+// requestAgentClose closes an idle agent at once. It asks first before it
+// closes one that is running or waits for the operator: the host refuses
+// those unless forced, and the turn in them is lost. A gone agent has
+// nothing to close, so it is unlinked.
+func (m *Model) requestAgentClose(a agent.Agent) tea.Cmd {
+	switch {
+	case m.services.Agents == nil:
+		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
+	case a.Status == agent.Gone:
+		return m.unlinkGoneAgent(a)
+	}
+	if a.Status != agent.Running && a.Status != agent.NeedsYou {
+		return m.closeAgent(a, false)
+	}
+	m.agentClose = &a
+	return m.openActionModal(modal.Config{
+		Title:          "Close agent",
+		Message:        displaytext.OneLine(fmt.Sprintf("%s is %s. Close it anyway?", a.Title(), agentStatusWord(a.Status))),
+		ConfirmText:    "Close",
+		ConfirmVariant: modal.ButtonDanger,
+	})
+}
+
+// openActionModal puts a question in the action modal, sized to the screen.
+func (m *Model) openActionModal(config modal.Config) tea.Cmd {
+	m.actionModal = modal.NewWithKeys(config, modal.BindingsFromConfig(m.keys))
+	m.actionModal.SetSize(m.width, m.height)
+	m.showActionModal = true
+	return m.actionModal.Init()
+}
+
+// confirmAgentClose closes the close question and force-closes the agent it
+// was about.
+func (m *Model) confirmAgentClose() tea.Cmd {
+	a := *m.agentClose
+	m.showActionModal = false
+	m.agentClose = nil
+	return m.closeAgent(a, true)
+}
+
+// closeAgent closes a, and then unlinks it: it removes the link label of its
+// session from every open issue that carries it. The store refuses every
+// change to a closed issue, so a closed one keeps its label.
+//
+// As a start, it is unscoped and runs on no store's context: a store switch
+// between the close and the unlink must not lose the unlink nor the report
+// of either. It unlinks in repo, the store the close began on.
+func (m *Model) closeAgent(a agent.Agent, force bool) tea.Cmd {
+	host, repo, epoch := m.services.Agents, m.services.Repo, m.storeEpoch
+	return func() tea.Msg {
+		ctx := context.Background()
+		if err := host.Close(ctx, a, force); err != nil {
+			return agentClosedMsg{epoch: epoch, agent: a, err: err}
+		}
+		unlinked, err := unlinkAgent(ctx, repo, a.Session)
+		return agentClosedMsg{epoch: epoch, agent: a, unlinked: unlinked, unlinkErr: err}
+	}
+}
+
+// unlinkGoneAgent removes the link label of a gone agent from the open
+// issues that carry it, so it is no gone row afterwards.
+func (m *Model) unlinkGoneAgent(a agent.Agent) tea.Cmd {
+	ctx, repo := m.ctx, m.services.Repo
+	return m.scoped(func() tea.Msg {
+		unlinked, err := unlinkAgent(ctx, repo, a.Session)
+		return agentUnlinkedMsg{agent: a, unlinked: unlinked, err: err}
+	})
+}
+
+// handleAgentUnlinked reports an unlink of a gone agent.
+func (m *Model) handleAgentUnlinked(msg agentUnlinkedMsg) tea.Cmd {
+	var reload tea.Cmd
+	if len(msg.unlinked) > 0 {
+		reload = m.reloadAfterLink(msg.unlinked...)
+	}
+	label := displaytext.OneLine(msg.agent.Title())
+	if msg.err != nil {
+		return batchCmds(reload, m.showToast(fmt.Sprintf("Could not unlink %s: %s", label, displaytext.OneLine(msg.err.Error())), toaster.StyleError))
+	}
+	return batchCmds(reload, m.dropAgent(msg.agent), m.showToast("Unlinked "+label, toaster.StyleSuccess))
+}
+
+// dropAgent takes an agent the app closed and unlinked off the Details pane
+// and the Agents tab at once: until the reload lands, its link label would
+// draw it gone, and Enter on that row would resume it. A poll in flight
+// began before the close, so its result is dropped.
+func (m *Model) dropAgent(a agent.Agent) tea.Cmd {
+	m.liveAgents = slices.DeleteFunc(slices.Clone(m.liveAgents), func(live agent.Agent) bool { return live.Key() == a.Key() })
+	if m.agentPollInFlight {
+		m.agentPollStale = true
+	}
+	m.detail.DropAgent(a)
+	return m.scoped(m.agents.DropAgent(a))
+}
+
+// unlinkAgent removes the link label of session from the open issues that
+// carry it, and returns the IDs of the issues it was removed from.
+func unlinkAgent(ctx context.Context, repo repository.Repository, session string) ([]string, error) {
+	label, err := agent.LinkLabel(session)
+	if err != nil {
+		// No issue carries a label the store refuses: the agent was never linked.
+		return nil, nil
+	}
+	page, err := repo.Search(ctx, domain.SearchIssuesQuery{Labels: []string{label}})
+	if err != nil {
+		return nil, err
+	}
+	var unlinked []string
+	for _, result := range page.Results {
+		id := result.Issue.ID
+		if err := repo.UpdateIssue(ctx, id, domain.UpdateIssueInput{RemoveLabels: []string{label}}); err != nil {
+			return unlinked, fmt.Errorf("%s: %w", id, err)
+		}
+		unlinked = append(unlinked, id)
+	}
+	return unlinked, nil
+}
+
+// handleAgentClosed reports a close. An agent closed but not unlinked is
+// reported as an error: its issue shows it gone. After a store switch the
+// close is reported and the surfaces are left alone: they show another
+// store.
+func (m *Model) handleAgentClosed(msg agentClosedMsg) tea.Cmd {
+	active := msg.epoch == m.storeEpoch
+	var reload tea.Cmd
+	if active && len(msg.unlinked) > 0 {
+		reload = m.reloadAfterLink(msg.unlinked...)
+	}
+	if msg.unlinkErr != nil {
+		var poll tea.Cmd
+		if active {
+			poll = m.pollAgentsAgain()
+		}
+		return batchCmds(reload, poll, m.showToast(fmt.Sprintf("Closed %s, but could not unlink it from %s", displaytext.OneLine(msg.agent.Title()), displaytext.OneLine(msg.unlinkErr.Error())), toaster.StyleError))
+	}
+	if msg.err != nil || !active {
+		return batchCmds(reload, m.reportAgentAction("close", "Closed", msg.agent, msg.epoch, msg.err))
+	}
+	return batchCmds(reload, m.dropAgent(msg.agent), m.reportAgentAction("close", "Closed", msg.agent, msg.epoch, nil))
+}
+
+// reportAgentAction reports a resume or a close of a, begun on the store of
+// epoch. On success it polls at once when that store is the active one, so
+// the Agents group shows the change before the next tick.
+func (m *Model) reportAgentAction(verb, past string, a agent.Agent, epoch int, err error) tea.Cmd {
+	label := displaytext.OneLine(a.Title())
+	if err != nil {
+		return m.showToast(fmt.Sprintf("Could not %s %s: %v", verb, label, err), toaster.StyleError)
+	}
+	report := m.showToast(past+" "+label, toaster.StyleSuccess)
+	if epoch != m.storeEpoch {
+		return report
+	}
+	return batchCmds(report, m.pollAgentsAgain())
+}
+
+// agentStatusWord is what the close question says for an agent status.
+func agentStatusWord(status agent.Status) string {
+	if status == agent.NeedsYou {
+		return "waiting for you"
+	}
+	return string(status)
 }

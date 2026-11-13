@@ -46,17 +46,14 @@ func TestModelBuiltInLauncherHotkeysUseLauncherService(t *testing.T) {
 	next, cmd = m.Update(testui.Press("alt+l"))
 	m = next.(Model)
 	m = applyMessages(t, m, runBatch(cmd))
-	next, cmd = m.Update(testui.Press("alt+i"))
-	m = next.(Model)
-	m = applyMessages(t, m, runBatch(cmd))
 
 	calls := fakeLauncher.Calls()
 	actions := make([]string, 0, len(calls))
 	for _, call := range calls {
 		actions = append(actions, call.Action)
 	}
-	if strings.Join(actions, ",") != "nvim,opencode,shell-command,agent" {
-		t.Fatalf("expected launcher actions [nvim opencode shell-command agent], got %#v", actions)
+	if strings.Join(actions, ",") != "nvim,opencode,shell-command" {
+		t.Fatalf("expected launcher actions [nvim opencode shell-command], got %#v", actions)
 	}
 }
 

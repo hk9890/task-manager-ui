@@ -31,7 +31,7 @@ Load semantics:
 The model is intentionally small and only covers app-shell concerns:
 
 - `Launcher.Definitions`
-  - Defaults to four built-in launcher actions:
+  - Defaults to three built-in launcher actions:
     - `nvim` → launches `nvim` with a read-only issue context buffer. The issue fields
       reach it through `env` as `TASKMGR_UI_ISSUE_*` and the Ex commands read them back
       as `$VAR`; a `+cmd` argument is an Ex command line, so a placeholder there would be
@@ -39,12 +39,6 @@ The model is intentionally small and only covers app-shell concerns:
     - `opencode` → launches `opencode run` with issue metadata args/env.
     - `shell-command` → launches `sh -lc` with a simple formatted issue-context
       print command.
-    - `agent` → runs `sh -c` in the project root: `revier agent new --no-focus` adds an agent
-      tab to the project's open revier workspace, and once that agent is idle,
-      `revier agent prompt` sends it `lets start working on tasks <id> do not do anything just talk`.
-      The agent is linked to the issue once it comments on it. It adds no agent when
-      `revier status` resolves the project root to another project: outside a project,
-      revier falls back to the focused window's. Errors after `sh` starts reach no toast.
   - Each definition supports these YAML keys:
     - `action` (required unique action key)
     - `command` (required executable/template string)
@@ -59,9 +53,23 @@ The model is intentionally small and only covers app-shell concerns:
       leaves the field nil in the override struct, so the built-in value is
       preserved; writing `args: []` produces a non-nil empty slice that
       **replaces** the built-in args (use this to explicitly clear defaults)
-  - Only the four built-in action names can be launched — there is no keybinding
+  - The built-in `agent` launcher was removed: agents start from `agent.intents`. An override of
+    action `agent` without a `command` fails startup and `--check-config` with an error that says
+    so; delete the override and move its prompt to an intent.
+  - Only the three built-in action names can be launched — there is no keybinding
     action for any other. Startup warns by name for a definition nothing can
     start; override a built-in instead of appending a new action.
+- `Agent.Intents`
+  - The `Start new` entries of the agent dialog that `launch_agent` opens in Detail, in menu
+    order. An intent starts an agent through the agent host, without the focus, with its `prompt` as the
+    first prompt, and labels the issue `agent-session:<session>`.
+  - Defaults to `implement` and `review`, each a short prompt that names `{{issue.id}}`.
+  - Each intent has a `name` (required, unique) and a `prompt` (required, one line: revier
+    submits a prompt as one line). The prompt takes the
+    [launcher placeholders](#launcher-interpolationcontext-surface), and it is text, never a
+    command line.
+  - YAML intents merge by `name`: a matching default takes the file's `prompt`, a new name is
+    appended, and a default the file does not name stays.
 - `UI.ShowModeSwitcherHelp`
   - Defaults to `true`.
   - Controls whether the shell renders the key legend on its last line.
@@ -96,6 +104,11 @@ launcher:
         - -lc
         - 'printf "issue=%s\n" "$0"'
         - "{{issue.id}}"
+
+agent:
+  intents:
+    - name: plan
+      prompt: "Plan taskmgr issue {{issue.id}} and write the plan as a comment on it."
 
 ui:
   show_mode_switcher_help: false
@@ -210,19 +223,22 @@ Supported actions by context:
   - `quit`, `toggle_help`, `open_search`, `open_store_picker`, `open_config`,
     `mode_cycle_next`, `mode_cycle_prev`, `escape`, `reload_detail`, `create_issue`,
     `update_issue`, `close_issue`, `comment_issue`, `save_edit`, `launch_nvim`,
-    `launch_opencode`, `launch_shell_command`, `launch_agent`, `focus_agent`
+    `launch_opencode`, `launch_shell_command`, `launch_agent`
   - `save_edit` acts in the issue editor only. The keys that move between the fields there —
     `tab`, `shift+tab`, the arrows, `enter`, `pgup`, `pgdown` — are built in and follow no
     binding. Of the other `shell` actions only `quit`, `toggle_help` and `escape` act there.
 - `board`
   - `move_left`, `move_right`, `move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
-    `page_down`, `open_detail`, `reload`
+    `page_down`, `open_detail`, `reload`, `close_agent`, `open_issue`
   - Docs mode, the store search and the store picker have no context of their own: each
     reads the row movement (`move_up`, `move_down`, `move_home`, `move_end`, `page_up`,
     `page_down`), `open_detail` and `reload` from this one. Rebinding them moves all four
     surfaces together, which is deliberate — each is a single list of rows, and a context
     of its own would ask for the same movement to be rebound twice. In the picker
     `open_detail` opens the highlighted store.
+  - The Agents tab reads the row movement and `reload` from this context too. There
+    `open_detail` brings the selected agent to the front, `close_agent` closes it, or
+    unlinks a gone one, and `open_issue` opens its issue in Detail; the other surfaces ignore the last two.
   - The configuration screen reads `move_up` and `move_down` from this context. The keys that
     step a value there, `left`, `right` and `enter`, are built in and follow no binding.
 - `detail`
@@ -238,11 +254,12 @@ For the default operator keybindings (as shipped), see
 ## Launcher interpolation/context surface
 
 Launcher templates support these placeholders across `command`, every `args`
-entry, every `env` entry, and `workdir`:
+entry, every `env` entry, and `workdir`, and so does the `prompt` of an intent:
 
 - `{{issue.id}}`
 - `{{issue.title}}`
-- `{{issue.labels}}` (comma-joined label list)
+- `{{issue.labels}}` (comma-joined label list, without the `agent-session:<session>` labels
+  that link an agent)
 - `{{issue.assignee}}`
 - `{{project.root}}`
 

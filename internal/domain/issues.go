@@ -5,6 +5,10 @@ import "time"
 // StatusClosed is the status of a closed issue.
 const StatusClosed = "closed"
 
+// StatusInProgress is the status of an issue at work: the board's In
+// Progress column.
+const StatusInProgress = "in_progress"
+
 // IssueSummary is the compact issue projection used in list and queue views.
 type IssueSummary struct {
 	ID        string

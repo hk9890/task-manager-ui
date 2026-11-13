@@ -6,27 +6,87 @@ import (
 
 	"github.com/charmbracelet/colorprofile"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/domain"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 )
 
 // refreshTickMsg triggers periodic surface auto-refresh.
 type refreshTickMsg struct{}
 
-// agentPollTickMsg asks revier for the live agents of the project again.
+// agentPollTickMsg asks the agent host for the live agents of the project
+// again.
 type agentPollTickMsg struct{}
 
-// agentsListedMsg carries the live agents of the store's revier project.
-// project is "" when the project root resolved to no revier project.
+// agentsListedMsg carries the live agents of the store's project. err wraps
+// agent.ErrNoProject when the project root is no project of the host.
 type agentsListedMsg struct {
-	project string
-	agents  []revier.Agent
-	err     error
+	agents []agent.Agent
+	err    error
 }
 
 // agentFocusedMsg carries the result of bringing an agent to the front.
 type agentFocusedMsg struct{ err error }
+
+// agentStart is the result of starting an agent on the issue issueID: err
+// when a step of the start failed, linkErr when the label that links the
+// agent to the issue was not written. An agent with a session started even
+// when err is set, and is linked.
+type agentStart struct {
+	// epoch is the store the start began on: the link label is written there.
+	epoch   int
+	issueID string
+	agent   agent.Agent
+	err     error
+	linkErr error
+}
+
+// agentStartedMsg carries the start of an agent from an intent of the agent
+// dialog, which leaves the focus in the app.
+type agentStartedMsg agentStart
+
+// agentAskStartedMsg carries the start of an agent asked in the background.
+type agentAskStartedMsg agentStart
+
+// agentAnsweredMsg carries the last thing an agent asked in the background
+// said once its turn ended, and the status it ended on: err when the wait or
+// the read failed. An agent that waits for the operator is not read.
+type agentAnsweredMsg struct {
+	issueID   string
+	agent     agent.Agent
+	stoppedOn agent.Status
+	reply     string
+	err       error
+}
+
+// agentResumedMsg carries the result of reopening a gone agent's
+// conversation and bringing it to the front: err when either failed. epoch
+// is the store the resume began on: the message is not scoped.
+type agentResumedMsg struct {
+	epoch int
+	agent agent.Agent
+	err   error
+}
+
+// agentClosedMsg carries the result of closing an agent: err when the close
+// failed, and else the issues its link label was removed from, and unlinkErr
+// when a removal failed. epoch is the store the close began on: the message
+// is not scoped.
+type agentClosedMsg struct {
+	epoch     int
+	agent     agent.Agent
+	err       error
+	unlinked  []string
+	unlinkErr error
+}
+
+// agentUnlinkedMsg carries the result of unlinking a gone agent: the issues
+// its link label was removed from, and err when a removal failed.
+type agentUnlinkedMsg struct {
+	agent    agent.Agent
+	unlinked []string
+	err      error
+}
 
 // storeChangedMsg reports that the active store changed on disk.
 type storeChangedMsg struct{}

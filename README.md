@@ -13,7 +13,7 @@ What it does:
   titles and IDs that match, and marks the match.
 - **Search** — `alt+f` searches the whole store as you type, widens to closed work, and drills
   into any result.
-- **Detail** — the full issue with its dependencies, content and metadata panes.
+- **Detail** — the full issue with its dependencies, content and details panes.
 - **Edit in place** — one full-screen editor creates, edits and closes an issue, its description
   included; comments are added, edited and deleted from Detail.
 - **Launch external tools** — run `nvim`, `opencode` or your own command against the selected issue.

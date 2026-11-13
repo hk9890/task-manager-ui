@@ -1,5 +1,5 @@
 // Package detail is the dedicated issue-detail renderer: the content,
-// dependencies, and metadata panes of a single issue, plus the layout that
+// dependencies, and details panes of a single issue, plus the layout that
 // arranges them (three-pane when wide, stacked below InspectorTwoColumnMinWidth).
 //
 // The boundary is deliberate — compact row and list rendering belongs to

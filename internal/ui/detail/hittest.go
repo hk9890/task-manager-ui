@@ -5,12 +5,15 @@ import "strings"
 // Hit is the detail cell under a point: the pane, and what is drawn there.
 // RefID is "" anywhere but on a row of the Dependencies pane, and Button is
 // ButtonNone anywhere but on a button. On a comment, Pane is FocusPaneComments
-// and Comment the index of that comment; read Comment only then.
+// and Comment the index of that comment; read Comment only then. On the row
+// of an agent in the Details pane, Pane is FocusPaneDetails and Agent the
+// session of that agent.
 type Hit struct {
 	Pane    FocusPane
 	RefID   string
 	Button  Button
 	Comment int
+	Agent   string
 }
 
 // rect is a pane's box, borders included.
@@ -22,26 +25,27 @@ func (r rect) contains(x, y int) bool {
 	return x >= r.x && x < r.x+r.width && y >= r.y && y < r.y+r.height
 }
 
-// panes is where Render puts each pane the mouse acts on, at the state's size.
-// The Metadata pane only shows, so it is not one of them.
+// panes is where Render puts each pane, at the state's size.
 type panes struct {
-	dependencies, content rect
+	dependencies, content, details rect
 }
 
 func layoutPanes(width, height int) panes {
 	if usesResponsiveDetailLayout(width) {
 		contentHeight, bottomHeight := splitResponsiveLayoutHeights(height)
-		dependenciesWidth, _ := splitResponsiveBottomWidths(width)
+		dependenciesWidth, detailsWidth := splitResponsiveBottomWidths(width)
 		return panes{
 			content:      rect{0, 0, width, contentHeight},
 			dependencies: rect{0, contentHeight, dependenciesWidth, bottomHeight},
+			details:      rect{dependenciesWidth + detailColumnGap, contentHeight, detailsWidth, bottomHeight},
 		}
 	}
 
-	leftWidth, contentWidth, _ := splitThreePaneWidths(width)
+	leftWidth, contentWidth, detailsWidth := splitThreePaneWidths(width)
 	return panes{
 		dependencies: rect{0, 0, leftWidth, height},
 		content:      rect{leftWidth + detailColumnGap, 0, contentWidth, height},
+		details:      rect{leftWidth + contentWidth + 2*detailColumnGap, 0, detailsWidth, height},
 	}
 }
 
@@ -58,7 +62,8 @@ func drawsPanes(state State) bool {
 
 // HitTest reports what Render(state) draws at cell (x, y), with (0, 0) the
 // first cell of the frame. ok is false in the gaps between panes, on the
-// Metadata pane, and whenever Render draws something other than the panes.
+// Details pane off the row of an agent, and whenever Render draws something
+// other than the panes.
 func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	if state.Width <= 0 {
 		state.Width = defaultDetailWidth
@@ -74,6 +79,8 @@ func HitTest(state State, x, y int) (hit Hit, ok bool) {
 	switch {
 	case p.content.contains(x, y):
 		return hitContent(state, p.content, x, y), true
+	case p.details.contains(x, y):
+		return hitDetails(state, p.details, x, y)
 	case !p.dependencies.contains(x, y):
 		return Hit{}, false
 	}
@@ -159,4 +166,25 @@ func hitContent(state State, pane rect, x, y int) Hit {
 		}
 	}
 	return hit
+}
+
+// hitDetails is the agent whose row of the Details pane is at (x, y). ok is
+// false anywhere else in the pane: no other line of it is clickable.
+func hitDetails(state State, pane rect, x, y int) (hit Hit, ok bool) {
+	column := x - pane.x
+	line := y - pane.y - 1
+	innerHeight := max(1, pane.height-2)
+	if state.Skeleton || column == 0 || column == pane.width-1 || line < 0 || line >= innerHeight {
+		return Hit{}, false
+	}
+	_, sessions := detailsPaneLines(state.detailsPane(pane.width, pane.height), pane.width)
+	// The window sliceWithOffset draws from the top; its last row is the
+	// "… (N more)" indicator when it clips.
+	if line >= len(sessions) || (len(sessions) > innerHeight && line == innerHeight-1) {
+		return Hit{}, false
+	}
+	if sessions[line] == "" {
+		return Hit{}, false
+	}
+	return Hit{Pane: FocusPaneDetails, Agent: sessions[line]}, true
 }

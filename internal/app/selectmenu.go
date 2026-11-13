@@ -19,10 +19,11 @@ import (
 // The release has already sent the text to the clipboard; the menu offers
 // what else to do with it. It stands over the screen the drag froze, box
 // included, and holds every key and mouse event until it closes: each would
-// change the screen it stands over.
+// change the screen it stands over. The agent dialog (agents.go) is the
+// same menu over the screen as it was when the menu opened.
 type selectionMenu struct {
-	text     string
 	title    string
+	hint     string
 	backdrop string
 	at       screenCell
 	// screenWidth is the width the menu is cut to.
@@ -34,32 +35,31 @@ type selectionMenu struct {
 
 type selectionAction struct {
 	entry selectmenu.Entry
-	run   func(m *Model, text string) tea.Cmd
+	run   func(m *Model) tea.Cmd
 }
 
 // openSelectionMenu opens the menu for a selection the release just sent.
 func (m *Model) openSelectionMenu(selected textSelection, text string, release screenCell) {
 	menu := &selectionMenu{
-		text:     text,
 		title:    fmt.Sprintf("Sent %d characters to the clipboard", sentCount(text)),
+		hint:     "shift+drag if not copied",
 		backdrop: selected.view(),
 		entries:  m.selectionActions(text),
 	}
-	for menu.cursor < len(menu.entries)-1 && menu.entries[menu.cursor].entry.Disabled {
-		menu.cursor++
-	}
+	menu.cursorToFirst()
 	menu.screenWidth = m.width
 	width, height := selectmenu.Size(menu.state())
 	menu.at.x, menu.at.y = selectmenu.Place(selected.from.x, selected.from.y, release.x, release.y, width, height, m.width, m.height)
 	m.selMenu = menu
 }
 
-// selectionActions are the menu's entries for text. Quoting and searching
-// leave the surface on screen, so they are off where that would drop work in
-// progress or where there is no store to act on. They are off too for a box
+// selectionActions are the menu's entries for text. Quoting, asking an agent
+// and searching leave the surface on screen, so they are off where that would
+// drop work in progress or where there is no store to act on. Asking is off
+// too without an agent host. They are off too for a box
 // that holds only the screen's chrome: it leaves them no text.
 //
-// The quote goes to the issue its label names: a refresh under the menu can
+// The quote and the ask go to the issue their label names: a refresh under the menu can
 // move the selection before the entry is chosen.
 func (m *Model) selectionActions(text string) []selectionAction {
 	canAct := len(quotable(text)) > 0 && !m.showHelp && !m.showActionModal && m.storeOpen &&
@@ -72,23 +72,52 @@ func (m *Model) selectionActions(text string) []selectionAction {
 		issue = selection.Issue
 		quote = "Quote in a comment on " + displaytext.OneLine(issue.ID)
 	}
+	ask := "Ask an agent about it"
+	canAsk := canQuote && m.services.Agents != nil
+	switch {
+	case canAsk && m.issueClosed(issue):
+		canAsk = false
+		ask = "Ask an agent: off, " + displaytext.OneLine(issue.ID) + " is closed"
+	case canAsk:
+		ask = "Ask an agent about it on " + displaytext.OneLine(issue.ID)
+	}
 	return []selectionAction{
-		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: func(m *Model, text string) tea.Cmd {
+		{entry: selectmenu.Entry{Label: quote, Disabled: !canQuote}, run: func(m *Model) tea.Cmd {
 			m.quoteInComment(issue, text)
 			return nil
 		}},
-		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: (*Model).searchSelection},
-		{
-			entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
-			run:   func(*Model, string) tea.Cmd { return nil },
-		},
+		{entry: selectmenu.Entry{Label: ask, Disabled: !canAsk}, run: func(m *Model) tea.Cmd {
+			return m.openAgentAsk(issue, text)
+		}},
+		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: func(m *Model) tea.Cmd {
+			return m.searchSelection(text)
+		}},
+		m.closeMenuAction("Close"),
+	}
+}
+
+// issueClosed reports whether issue is closed, as Detail shows it when Detail
+// shows that issue: a close made there reaches the browse selection later.
+func (m *Model) issueClosed(issue domain.IssueSummary) bool {
+	if m.active == mode.Detail && m.detail.Detail.Summary.ID == issue.ID {
+		return m.detail.Detail.Summary.Status == domain.StatusClosed
+	}
+	return issue.Status == domain.StatusClosed
+}
+
+// closeMenuAction is the last entry of a menu: it closes the menu and does
+// nothing else.
+func (m *Model) closeMenuAction(label string) selectionAction {
+	return selectionAction{
+		entry: selectmenu.Entry{Label: label, Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
+		run:   func(*Model) tea.Cmd { return nil },
 	}
 }
 
 func (s *selectionMenu) state() selectmenu.State {
 	state := selectmenu.State{
 		Title:  s.title,
-		Hint:   "shift+drag if not copied",
+		Hint:   s.hint,
 		Width:  s.screenWidth,
 		Cursor: s.cursor,
 		Hover:  -1,
@@ -133,9 +162,15 @@ func (m Model) selectionMenuKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// cursorToFirst puts the cursor on the first entry that is on.
+func (s *selectionMenu) cursorToFirst() {
+	s.cursor = -1
+	s.move(1)
+}
+
 func (s *selectionMenu) move(step int) {
 	for next := s.cursor + step; next >= 0 && next < len(s.entries); next += step {
-		if !s.entries[next].entry.Disabled {
+		if s.entries[next].entry.On() {
 			s.cursor = next
 			return
 		}
@@ -165,14 +200,13 @@ func (m Model) selectionMenuMouse(msg pointer) (tea.Model, tea.Cmd) {
 
 func (m Model) runSelectionAction(entry int) (tea.Model, tea.Cmd) {
 	action := m.selMenu.entries[entry]
-	if action.entry.Disabled {
+	if !action.entry.On() {
 		return m, nil
 	}
-	text := m.selMenu.text
 	m.selMenu = nil
 	// The run is a statement of its own: Go leaves unspecified whether m in
 	// the return is read before or after a call that changes it.
-	cmd := action.run(&m, text)
+	cmd := action.run(&m)
 	return m, cmd
 }
 

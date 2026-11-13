@@ -9,12 +9,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
 	"github.com/hk9890/task-manager-ui/internal/dashboard"
 	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
-	"github.com/hk9890/task-manager-ui/internal/revier"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
@@ -171,16 +171,16 @@ type Model struct {
 	// starts meanwhile looks for the same issue (captureRefreshAnchor).
 	anchorSearch *anchorSearch
 
-	// --- live revier agents ---
+	// --- live agents ---
 
 	// inProgressSessions is the comment sessions of each In Progress issue,
 	// from the last dashboard that loaded. liveAgents is the status of each
-	// live agent by its session, from the shell's last poll. agentStatus is
-	// what the two give the In Progress column: the status of the agent that
-	// needs the operator most, by issue ID.
+	// live agent by its session, from the shell's last poll. With the link
+	// labels of each card they give agentMarks: the agent mark of each card,
+	// by column, worked out when one of them changes (markAgents).
 	inProgressSessions map[string][]string
-	liveAgents         map[string]string
-	agentStatus        map[string]string
+	liveAgents         map[string]agent.Status
+	agentMarks         []map[string]agent.Status
 }
 
 // NewModel creates a board mode controller.
@@ -346,10 +346,6 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 	if col.err != nil {
 		errStr = col.err.Error()
 	}
-	var agents map[string]string
-	if colIdx == inProgressColumnIndex {
-		agents = m.agentStatus
-	}
 	return uiboard.Column{
 		Title:        col.title,
 		Rows:         col.shown,
@@ -361,37 +357,75 @@ func (m *Model) uiColumn(colIdx, selectedRow int) uiboard.Column {
 		Loading:      col.loading,
 		Error:        errStr,
 		AgeMarkers:   colIdx != doneColumnIndex,
-		Agents:       agents,
+		Agents:       m.agentMarksOf(colIdx),
 	}
 }
 
-// SetLiveAgents replaces the live agents of the store's revier project: the
-// status of each, by the session it holds. An In Progress card whose issue
-// one of them commented on draws the agent mark.
-func (m *Model) SetLiveAgents(statusBySession map[string]string) {
+// SetLiveAgents replaces the live agents of the store's project: the
+// status of each, by the session it holds. A card whose issue links one of
+// them draws the agent mark.
+func (m *Model) SetLiveAgents(statusBySession map[string]agent.Status) {
 	m.liveAgents = statusBySession
-	m.linkAgents()
+	m.markAgents()
 }
 
-// linkAgents gives each In Progress issue the status of the live agent that
-// needs the operator most among those that commented on it.
-func (m *Model) linkAgents() {
-	m.agentStatus = nil
-	for id, sessions := range m.inProgressSessions {
+// CommentLinks is the In Progress issues an agent commented on, in the
+// order of the column, each with the sessions of those agents: the agents a
+// card links without a link label.
+func (m *Model) CommentLinks() []mode.CommentLink {
+	var links []mode.CommentLink
+	for _, issue := range m.columns[inProgressColumnIndex].issues {
+		if sessions := m.inProgressSessions[issue.ID]; len(sessions) > 0 {
+			links = append(links, mode.CommentLink{Issue: issue, Sessions: sessions})
+		}
+	}
+	return links
+}
+
+func (m *Model) agentMarksOf(colIdx int) map[string]agent.Status {
+	if colIdx >= len(m.agentMarks) {
+		return nil
+	}
+	return m.agentMarks[colIdx]
+}
+
+// markAgents works out the agent mark of every loaded card, by column.
+func (m *Model) markAgents() {
+	m.agentMarks = nil
+	if len(m.liveAgents) == 0 {
+		return
+	}
+	m.agentMarks = make([]map[string]agent.Status, len(m.columns))
+	for colIdx := range m.columns {
+		m.agentMarks[colIdx] = m.columnAgents(colIdx)
+	}
+}
+
+// columnAgents gives each card of column colIdx that links a live agent the
+// status of the one that needs the operator most: the agents its link labels
+// name, and in the In Progress column those that commented on it.
+func (m *Model) columnAgents(colIdx int) map[string]agent.Status {
+	var statuses map[string]agent.Status
+	for _, issue := range m.columns[colIdx].issues {
+		sessions := agent.LinkSessions(issue.Labels)
+		if colIdx == inProgressColumnIndex {
+			sessions = append(sessions, m.inProgressSessions[issue.ID]...)
+		}
 		for _, session := range sessions {
 			status, live := m.liveAgents[session]
 			if !live {
 				continue
 			}
-			if current, linked := m.agentStatus[id]; linked && revier.Rank(current) <= revier.Rank(status) {
+			if current, linked := statuses[issue.ID]; linked && agent.Rank(current) <= agent.Rank(status) {
 				continue
 			}
-			if m.agentStatus == nil {
-				m.agentStatus = map[string]string{}
+			if statuses == nil {
+				statuses = map[string]agent.Status{}
 			}
-			m.agentStatus[id] = status
+			statuses[issue.ID] = status
 		}
 	}
+	return statuses
 }
 
 // SetSize updates render dimensions.
@@ -569,7 +603,7 @@ func (m *Model) compose(data repository.DashboardData, loadErr error) tea.Cmd {
 	m.doneLoadedCount = len(m.columns[doneColumnIndex].issues)
 	m.doneClosedTotal = data.ClosedTotal
 	m.inProgressSessions = data.InProgressSessions
-	m.linkAgents()
+	m.markAgents()
 
 	m.settleAfterRefreshLoad(anchor)
 	// Composition complete — clear the in-flight flag so future reload requests
@@ -625,6 +659,9 @@ func (m *Model) filterColumns() {
 		m.columns[i].shown = m.query.Filter(m.columns[i].issues)
 	}
 }
+
+// HasQuery reports whether the query holds text.
+func (m *Model) HasQuery() bool { return !m.query.Empty() }
 
 // ClearQuery empties the query, which the shell asks for on Escape. cleared is
 // false when there was no text, and Escape is then the shell's.
@@ -1079,6 +1116,7 @@ func (m *Model) applyLoadMoreClosed(msg loadMoreClosedDoneMsg) tea.Cmd {
 			exact:  cols.Done.TotalIsExact,
 		}
 		m.filterColumns()
+		m.markAgents()
 	}
 
 	// The merged slice may have shifted the issue under the cursor (dedup/replace

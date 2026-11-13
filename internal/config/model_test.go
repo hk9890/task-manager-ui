@@ -8,7 +8,7 @@ import (
 func TestDefault_LauncherDefinitions(t *testing.T) {
 	cfg := Default()
 
-	want := []string{"nvim", "opencode", "shell-command", "agent"}
+	want := []string{"nvim", "opencode", "shell-command"}
 	if len(cfg.Launcher.Definitions) != len(want) {
 		t.Fatalf("expected %d default launcher definitions, got %d", len(want), len(cfg.Launcher.Definitions))
 	}
@@ -88,6 +88,20 @@ func TestDefault_NvimLauncherPassesIssueFieldsThroughEnv(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("nvim definition must carry env entry %q, got %#v", want, nvim.Env)
+		}
+	}
+}
+
+// The default intents name the issue in their prompt: an agent started on one
+// must know which issue it is.
+func TestDefault_IntentsNameTheIssue(t *testing.T) {
+	intents := Default().Agent.Intents
+	if len(intents) != 2 || intents[0].Name != "implement" || intents[1].Name != "review" {
+		t.Fatalf("default intents = %#v, want implement and review", intents)
+	}
+	for _, intent := range intents {
+		if !strings.Contains(intent.Prompt, "{{issue.id}}") {
+			t.Errorf("intent %q prompt %q does not name the issue", intent.Name, intent.Prompt)
 		}
 	}
 }
