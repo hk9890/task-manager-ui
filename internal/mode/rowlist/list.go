@@ -93,6 +93,8 @@ func (l *List) MoveKey(keys config.ResolvedKeyBindings, msg tea.KeyPressMsg, sta
 func (l *List) Mouse(msg mode.MouseMsg, state uiboard.State) (moved, open bool) {
 	l.pointer = msg.Pointer()
 	if l.pointer == nil {
+		// A click after the pointer left the list is no second click.
+		l.clicks = mode.ClickTracker{}
 		return false, false
 	}
 

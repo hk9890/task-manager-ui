@@ -5,11 +5,25 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
 
 // handleMouse is the board's mouse on one column: the wheel moves the
-// selection, one click selects a doc and a second opens it.
+// selection, one click selects a doc and a second opens it. The wheel over the
+// preview scrolls the preview, and a click there does nothing.
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
+	if uiboard.OverAside(m.viewState(0), msg.X, msg.Y) {
+		m.list.Mouse(mode.MouseMsg{Kind: mode.MouseLeave}, m.viewState(0))
+		// A notch moves no further than a page, so a short pane skips no line.
+		step := min(previewWheelLines, uidetail.PreviewPageRows(m.previewState(0)))
+		switch msg.Kind {
+		case mode.MouseWheelUp:
+			m.scrollPreview(-step)
+		case mode.MouseWheelDown:
+			m.scrollPreview(step)
+		}
+		return nil
+	}
 	moved, open := m.list.Mouse(msg, m.viewState(0))
 	if open {
 		return mode.RequestOpenDetailCmd(mode.Docs, m.currentSelection())
@@ -20,6 +34,7 @@ func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 // viewState is the docs column as the renderer sees it. View and the hit test
 // build the same value, so a click lands on the row that is drawn under it.
 func (m *Model) viewState(skeletonPhase int) uiboard.State {
+	_, previewWidth, _ := m.split()
 	return uiboard.State{
 		Query:         m.query.Text(),
 		Placeholder:   queryPlaceholder,
@@ -28,6 +43,6 @@ func (m *Model) viewState(skeletonPhase int) uiboard.State {
 		Width:         m.width,
 		Height:        m.height,
 		SkeletonPhase: skeletonPhase,
-		Now:           m.now(),
+		AsideWidth:    previewWidth,
 	}
 }

@@ -236,7 +236,8 @@ Supported actions by context:
     `page_down`), `open_detail` and `reload` from this one. Rebinding them moves all four
     surfaces together, which is deliberate — each is a single list of rows, and a context
     of its own would ask for the same movement to be rebound twice. In the picker
-    `open_detail` opens the highlighted store.
+    `open_detail` opens the highlighted store. On the Docs tab `page_up` and `page_down`
+    scroll the Preview while it is drawn, and page the list without it.
   - The Agents tab reads the row movement and `reload` from this context too. There
     `open_detail` brings the selected agent to the front, `close_agent` closes it, or
     unlinks a gone one, and `open_issue` opens its issue in Detail; the other surfaces ignore the last two.

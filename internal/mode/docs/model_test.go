@@ -17,6 +17,7 @@ import (
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 // seedMixed seeds two docs and one task so every assertion also proves the
@@ -339,6 +340,8 @@ func TestDocsModePageAndBoundKeysMoveTheSelection(t *testing.T) {
 		gw.Memory.Seed(memoryrepo.Issue{ID: fmt.Sprintf("tm-%02d", i), Title: fmt.Sprintf("Doc %02d", i), Status: "open", Type: "doc", Priority: 2})
 	}
 	m := loadedModel(t, gw)
+	// One column: with the preview drawn the page keys scroll the preview.
+	m.SetSize(styles.SplitMinWidth-1, 30)
 	page := uiboard.ContentRows(m.height) / issuerow.Height
 
 	steps := []struct {

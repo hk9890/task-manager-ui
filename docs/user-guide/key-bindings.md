@@ -98,10 +98,12 @@ selection comes near the end of the loaded rows.
 
 One column listing every `doc`-type issue, open and closed — closing a doc
 archives it. Docs are not work, so they never reach the Ready or In Progress
-columns; this tab is where they are browsed. Docs mode reuses the board keymap:
+columns; this tab is where they are browsed. On a terminal 100 columns wide or
+more, a Preview pane beside the list shows the selected doc as you move. Docs
+mode reuses the board keymap:
 
 - `up`, `down` — move up or down
-- `pgup`, `pgdown` — move one page
+- `pgup`, `pgdown` — scroll the preview a page; without the preview, move one page
 - `home`, `end` — move to the first or the last doc
 - `enter` — open selected doc in detail mode
 - `alt+r` — manually reload the docs list immediately
@@ -384,8 +386,8 @@ instead.
   to press it. The wheel over the text moves its cursor three lines a notch.
 - **Wheel** over a list moves its selection one row a notch. On the board that is
   the column under the pointer, which takes the focus.
-- **Wheel** over the detail Content pane, or on the help screen,
-  scrolls it three lines a notch. Help on a terminal under 10 rows scrolls
+- **Wheel** over the detail Content pane, the Docs Preview, the Agent pane, or on the help screen,
+  scrolls it three lines a notch. A click on the Docs Preview does nothing. Help on a terminal under 10 rows scrolls
   fewer, so no line is skipped.
 - While a dialog is open, the mouse reaches nothing under it: a dialog takes
   keys only. On the help screen the wheel scrolls and a click does nothing.

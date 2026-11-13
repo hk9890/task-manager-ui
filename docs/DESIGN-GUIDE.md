@@ -172,6 +172,11 @@ terminal following wcwidth draws as one. The frame is then built a cell wider th
   `rowlist.List` (`internal/mode/rowlist`) for the selection, the scroll offset, the move keys and
   the mouse. The Agents tab is the exception: its rows are agents in two groups with
   headings, not issues, so `ui/agents` draws its own box and counts its own `RowLines`.
+- A pane beside a list is `board.State.Aside`, drawn `AsideWidth` cells wide right of the columns,
+  under the list head, at `board.ColumnHeight`; the columns share what it leaves, and `HitTest`
+  reports no column on it. Size the two with `styles.SplitWidths`: the list a third of the screen,
+  held between 40 and 56 cells, `styles.SplitGap` between them, and the list alone below
+  `styles.SplitMinWidth`. [The Docs tab](#the-docs-tab) is the one user.
 - `ui/detail` renders the issue detail; it is separate from compact row rendering by design.
 
 ### A button in a pane
@@ -330,6 +335,40 @@ and the key legend below (`Model.renderFooter`).
   each of which takes keys before the shell switch and moves between its fields with them. From
   the store search and from Detail they leave it for a tab, although Detail does not draw the
   strip. A browse surface must not claim either key.
+
+### The Docs tab
+
+The Docs tab (`internal/mode/docs`) lists every doc, open and closed, in one board column. From
+`styles.SplitMinWidth` columns the Preview pane of the selected doc stands beside it
+(`detail.RenderPreview`): the meta row, the title and the rule of the Content pane, then the
+description and the notes as markdown. It has no button, no comment and no focus; Enter still
+opens Detail.
+
+- The list is ordered by last change and draws no age dividers (`Column.AgeMarkers` false): the
+  preview shows the doc, and a divider between docs says nothing a reader acts on.
+- The preview follows the selection and reads nothing itself. The shell reads the selected issue
+  for Detail on every selection change, and its `detailLoadedMsg` handler hands each read to the
+  tab (`docs.Model.ShowDoc`, `ShowDocFailure`). The tab keeps the outcome of the last read only,
+  and draws it only while its issue is the selected doc. Do not give the tab a read of its own: a
+  move would read the doc twice.
+- A read the shell makes for another surface (the Board, the search, a drill-in) replaces that
+  outcome, so every way back to the tab reads the selection again: a tab switch and Escape from
+  Detail both call `ensureDetailForCurrentSelectionCmd`. A new way back must too, or the pane
+  waits on a read nobody started.
+- Until the read lands the pane draws the row's header over skeleton rows, and skeleton rows alone
+  while the first list loads; a failed read draws the error in place of the body until the next
+  read lands.
+- The page keys of the board context scroll the preview while it is drawn (`previewKey`): the tab
+  reads every key from that context, so the reserved keys stay refused for it. Below
+  `styles.SplitMinWidth` they page the list; above it no key pages the list, which `home`, `end`
+  and the wheel still cross. The legend names them only while they scroll
+  (`footerHints`). Each doc opens at its top, a reload's included. The scroll is clamped only
+  against a read of the selected doc (`clampPreview`), so a read of another issue, a resize
+  meanwhile or a round trip through another surface leaves the doc where it was.
+- The wheel over the preview scrolls it `previewWheelLines` lines a notch, never more than a page
+  (`detail.PreviewPageRows`), and moves no selection; a click there does nothing, and ends a
+  double click begun on the list. `board.OverAside` says whether a cell is on the pane, from the
+  layout `Render` draws.
 
 ### The Agents tab
 
@@ -686,7 +725,7 @@ open until the store is created, so a rejected name or prefix is corrected in pl
   capacity in rows, as `mode/storepicker` does with `RowCapacity`. The Agents tab is the
   exception: its group headings and gaps are lines `scroll.EnsureVisible` does not count, so it
   scrolls with `agents.EnsureVisible` (`internal/ui/agents`).
-- A column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
+- A board column ordered by last change (`Column.AgeMarkers`) draws a muted divider before the first
   issue older than a day and another before the first older than a week, each carrying the count
   of issues below it (`internal/ui/board/agemarker.go`). A divider is a row, not an issue:
   `ScrollOffset` and `SelectedRow` stay issue indices. A mode model that draws through `ui/board`

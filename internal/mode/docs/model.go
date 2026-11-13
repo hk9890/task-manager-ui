@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -14,6 +13,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode/rowlist"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
 
 const (
@@ -42,10 +42,6 @@ type Model struct {
 	width  int
 	height int
 
-	// now is the clock the age markers measure against. Tests replace it so a
-	// golden pins which rows fall on which side of a divider.
-	now func() time.Time
-
 	// issues is every loaded doc; shown is the docs of it the query matches,
 	// and is issues itself while the query is empty. Selection, scroll, hit
 	// test, hover and View read shown.
@@ -66,6 +62,9 @@ type Model struct {
 
 	// list is the selection, the scroll window and the pointer over shown.
 	list rowlist.List
+
+	// preview is the Preview pane beside the list, on a screen wide enough.
+	preview preview
 
 	// anchorIssueID is the issue selected when an auto-refresh started. The
 	// load handler restores the cursor onto it when it survives the refresh.
@@ -94,7 +93,6 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 		repo:   repo,
 		logger: logger,
 		keys:   keys,
-		now:    time.Now,
 	}
 }
 
@@ -141,6 +139,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			}
 			return m.queryChanged()
 		}
+		if m.previewKey(msg) {
+			return nil
+		}
 		if moved, handled := m.list.MoveKey(m.keys, msg, m.viewState(0)); handled {
 			return m.selectionMovedCmd(moved)
 		}
@@ -159,10 +160,14 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// View renders the docs column.
+// View renders the docs column and, on a screen wide enough, the Preview
+// pane of the selected doc beside it.
 func (m *Model) View(skeletonPhase int) string {
 	state := m.viewState(skeletonPhase)
 	state.Hover = m.list.Hover(state)
+	if state.AsideWidth > 0 {
+		state.Aside = uidetail.RenderPreview(m.previewState(skeletonPhase))
+	}
 	return uiboard.Render(state)
 }
 
@@ -184,7 +189,6 @@ func (m *Model) uiColumn() uiboard.Column {
 		Loaded:       len(m.issues),
 		Loading:      m.loading,
 		Error:        errText,
-		AgeMarkers:   true,
 	}
 }
 
@@ -195,6 +199,7 @@ func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampSelection()
+	m.clampPreview()
 }
 
 // IsLoading reports whether the column is in its loading state.
@@ -227,6 +232,7 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	if rm == mode.RefreshReload {
 		m.list.SelectedRow = 0
 		m.list.ScrollOffset = 0
+		m.followSelection()
 	} else if selection := m.currentSelection(); selection != nil {
 		m.anchorIssueID = selection.Issue.ID
 	}
@@ -337,6 +343,7 @@ func (m *Model) selectionMovedCmd(moved bool) tea.Cmd {
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {
+	m.followSelection()
 	selection := m.currentSelection()
 	return func() tea.Msg {
 		return mode.SelectionChangedMsg{Mode: mode.Docs, Selection: selection}
