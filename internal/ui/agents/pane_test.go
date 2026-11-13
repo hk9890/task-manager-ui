@@ -94,7 +94,7 @@ func TestTheQueryLineFiltersTheList(t *testing.T) {
 	if view := testui.Downsample(Render(state)); !strings.Contains(view, "filter agents") {
 		t.Errorf("the empty query line shows no placeholder:\n%s", view)
 	}
-	state.Query, state.Rows = "nothing", nil
+	state.Query, state.Rows, state.Loaded = "nothing", nil, 4
 	if view := testui.Downsample(Render(state)); !strings.Contains(view, "No agent matches the filter") || strings.Contains(view, "No agents") {
 		t.Errorf("an empty match is not told apart:\n%s", view)
 	}

@@ -163,7 +163,7 @@ func renderList(state State, width int) string {
 	}
 	if len(state.Rows) == 0 {
 		title, why := emptyText, state.Empty
-		if state.Query != "" && state.Empty == "" {
+		if state.Query != "" && state.Empty == "" && state.Loaded > 0 {
 			title, why = noMatchText, ""
 		}
 		content = append(content, " "+lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Render(textutil.TruncateString(title, inner-1)))

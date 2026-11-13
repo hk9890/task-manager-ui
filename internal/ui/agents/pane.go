@@ -43,7 +43,7 @@ type Pane struct {
 func RenderPane(pane Pane, row *Row, width, height int) string {
 	inner := max(1, height-2)
 	text := max(1, width-2-2*panePad)
-	view := windowLines(paneLines(pane, row, text), pane.ScrollOffset, inner, text)
+	view, _ := scroll.Window(paneLines(pane, row, text), pane.ScrollOffset, inner, text)
 	pad := strings.Repeat(" ", panePad)
 	for i, line := range view {
 		view[i] = pad + line
@@ -149,20 +149,4 @@ func wrapMuted(text string, width int) []string {
 		lines[i] = muted(line)
 	}
 	return lines
-}
-
-// windowLines is the height lines of lines from offset on. A window that does
-// not start at the top says how many lines are above it in its first line,
-// and one that does not reach the end how many are below it in its last.
-func windowLines(lines []string, offset, height, width int) []string {
-	offset = max(0, min(offset, len(lines)-height))
-	end := min(len(lines), offset+height)
-	window := append([]string(nil), lines[offset:end]...)
-	if offset > 0 {
-		window[0] = muted(textutil.TruncateString(scroll.Earlier(offset), width))
-	}
-	if end < len(lines) {
-		window[len(window)-1] = muted(textutil.TruncateString(scroll.More(len(lines)-end), width))
-	}
-	return window
 }

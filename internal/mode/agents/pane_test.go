@@ -24,7 +24,7 @@ func splitTab(t *testing.T, reads map[string]int) *Model {
 	}
 	m := NewModel(context.Background(), memory.New(), nil, keys(t), read)
 	m.SetSize(140, 30)
-	m.entered = true
+	m.SetShown(true)
 	return m
 }
 
@@ -129,6 +129,7 @@ func TestOnlyTheRestingSelectionIsRead(t *testing.T) {
 
 	narrow := splitTab(t, reads)
 	narrow.SetSize(90, 30)
+	narrow.SetShown(true)
 	settle(t, narrow, narrow.SetAgents([]agent.Agent{live("s-9", "9", agent.Idle)}, true, "", nil))
 	if reads["s-9"] != 0 {
 		t.Errorf("a narrow screen read %v", reads)
@@ -143,7 +144,7 @@ func TestThePageKeysScrollThePane(t *testing.T) {
 		return strings.Repeat("line\n\n", 60), nil
 	})
 	m.SetSize(140, 30)
-	m.entered = true
+	m.SetShown(true)
 	settle(t, m, m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, "", nil))
 
 	m.Update(testui.Press("pgdown"))

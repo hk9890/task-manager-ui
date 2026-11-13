@@ -1,12 +1,43 @@
 // Package scroll provides shared viewport-scroll helpers.
 package scroll
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
+)
 
 // Earlier and More are the indicators a clipped pane draws on its first and
 // its last row: one wording for every pane that scrolls text.
 func Earlier(count int) string { return fmt.Sprintf("… (%d earlier)", count) }
 func More(count int) string    { return fmt.Sprintf("… (%d more)", count) }
+
+// Window is the height lines of lines from offset on, padded with blank lines
+// to height, and the offset clamped to the lines there are. A window that does
+// not start at the top says how many lines are above it on its first line, and
+// one that does not reach the end how many are below it on its last; each is
+// cut to width.
+func Window(lines []string, offset, height, width int) ([]string, int) {
+	if height <= 0 {
+		return nil, 0
+	}
+	if len(lines) == 0 {
+		lines = []string{""}
+	}
+	offset = max(0, min(offset, len(lines)-height))
+	end := min(len(lines), offset+height)
+	window := append([]string(nil), lines[offset:end]...)
+	if offset > 0 {
+		window[0] = textutil.TruncateString(Earlier(offset), width)
+	}
+	if end < len(lines) {
+		window[len(window)-1] = textutil.TruncateString(More(len(lines)-end), width)
+	}
+	for len(window) < height {
+		window = append(window, "")
+	}
+	return window, offset
+}
 
 // EnsureVisible returns the scroll offset that keeps sel inside the visible
 // window of size window. It slides the window as little as possible:

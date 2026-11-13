@@ -113,14 +113,15 @@ type Model struct {
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
 
-	// entered is set by Init: the tab reads no message before the operator
-	// first opens it.
-	entered bool
+	// paneShown is whether the Agent pane is on screen: the tab is the one
+	// shown, on a screen wide enough to split. Nothing is read while it is not.
+	paneShown bool
 	// messages is the last read message of each agent, by key; reading the
-	// key of the read in flight, and readGeneration the pause that may start
-	// the next one. paneOffset is the scroll of the Agent pane.
+	// keys of the reads in flight, due the key whose pause runs, and
+	// readGeneration that pause. paneOffset is the scroll of the Agent pane.
 	messages       map[string]lastMessage
-	reading        string
+	reading        map[string]bool
+	due            string
 	readGeneration int
 	paneOffset     int
 }
@@ -131,18 +132,33 @@ func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logg
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Model{ctx: ctx, repo: repo, read: read, logger: logger, keys: keys, messages: make(map[string]lastMessage)}
+	return &Model{
+		ctx: ctx, repo: repo, read: read, logger: logger, keys: keys,
+		messages: make(map[string]lastMessage), reading: make(map[string]bool),
+	}
 }
 
-// Init reads the issues that carry a link label, and the last message of the
-// selected agent.
-func (m *Model) Init() tea.Cmd {
-	m.entered = true
+// Init reads the issues that carry a link label.
+func (m *Model) Init() tea.Cmd { return m.load() }
+
+// Reload reads them again, nil while a read is in flight, and forgets every
+// last message, so the selected agent's is read again.
+func (m *Model) Reload() tea.Cmd {
+	clear(m.messages)
 	return tea.Batch(m.load(), m.readSoon())
 }
 
-// Reload reads them again; nil while a read is in flight.
-func (m *Model) Reload() tea.Cmd { return m.load() }
+// SetShown tells the tab whether it is the surface on screen. The shell calls
+// it after every message: it is how a tab switch or a resize that puts the
+// Agent pane on screen starts the read of the selected agent's message.
+func (m *Model) SetShown(shown bool) tea.Cmd {
+	wasShown := m.paneShown
+	m.paneShown = shown && m.split()
+	if m.paneShown && !wasShown {
+		return m.readSoon()
+	}
+	return nil
+}
 
 // AutoRefresh is Reload: the agents themselves come from the shell's poll.
 func (m *Model) AutoRefresh() tea.Cmd { return m.load() }
@@ -234,8 +250,10 @@ func (m *Model) withoutDropped(issues []domain.IssueSummary) []domain.IssueSumma
 }
 
 // Select puts the selection on the agent of session, now when its row is
-// there and otherwise once a poll or a read brings it.
+// there and otherwise once a poll or a read brings it. It clears the query,
+// which could hide that row.
 func (m *Model) Select(session string) tea.Cmd {
+	m.query.Clear()
 	m.pending = session
 	return m.rebuild()
 }
@@ -277,10 +295,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // queryChanged filters the rows again. The selection stays on its agent while
 // it still matches, and otherwise takes the first match.
 func (m *Model) queryChanged() tea.Cmd {
-	if !slices.ContainsFunc(m.matching(m.all), func(r uiagents.Row) bool { return r.Agent.Key() == m.chosen }) {
-		m.selected, m.chosen = 0, ""
-	}
-	return m.rebuild()
+	return m.rebuildWith(true)
 }
 
 // matching is the rows the query matches: on the agent's title, label and
@@ -302,12 +317,14 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	match := func(action string) bool { return m.keys.Match(config.BoardContext, action, msg) }
 	page := max(1, uiagents.InnerHeight(m.height)/uiagents.RowLines)
 	if m.split() {
+		// A page step keeps the lines the two scroll markers cover on screen.
+		step := max(1, uiagents.InnerHeight(m.height)-2)
 		switch {
 		case m.keys.Match(config.DetailContext, config.DetailActionPageUp, msg):
-			m.scrollPane(-uiagents.InnerHeight(m.height))
+			m.scrollPane(-step)
 			return nil
 		case m.keys.Match(config.DetailContext, config.DetailActionPageDown, msg):
-			m.scrollPane(uiagents.InnerHeight(m.height))
+			m.scrollPane(step)
 			return nil
 		}
 	}
@@ -422,9 +439,10 @@ func (m *Model) pane() uiagents.Pane {
 	if !ok {
 		return pane
 	}
-	last, known := m.messages[row.Agent.Key()]
+	key := row.Agent.Key()
+	last, known := m.messages[key]
 	switch {
-	case !known && m.read != nil:
+	case !known && (m.due == key || m.reading[key]):
 		pane.Reading = true
 	case known && last.err != nil:
 		pane.Error = last.err.Error()
@@ -448,31 +466,40 @@ func (m *Model) scrollPane(delta int) {
 // later call ends the pause before it.
 func (m *Model) readSoon() tea.Cmd {
 	m.readGeneration++
+	m.due = ""
 	row, ok := m.selectedRow()
 	if !ok || !m.wantsRead(row.Agent) {
 		return nil
 	}
-	due := readDueMsg{key: row.Agent.Key(), generation: m.readGeneration}
+	m.due = row.Agent.Key()
+	due := readDueMsg{key: m.due, generation: m.readGeneration}
 	return tea.Tick(readPause, func(time.Time) tea.Msg { return due })
 }
 
+// wantsRead reports whether the last message of a is to be read: the pane is
+// on screen, a is live, no read of it is in flight, and its message is not
+// known, failed to read, or was read while a did something else.
 func (m *Model) wantsRead(a agent.Agent) bool {
-	if m.read == nil || !m.entered || !m.split() || a.Status == agent.Gone || m.reading == a.Key() {
+	if m.read == nil || !m.paneShown || a.Status == agent.Gone || m.reading[a.Key()] {
 		return false
 	}
 	last, known := m.messages[a.Key()]
-	return !known || last.activity != a.Activity || last.status != a.Status
+	return !known || last.err != nil || last.activity != a.Activity || last.status != a.Status
 }
 
 // readDue reads the selected agent's last message when the selection rested
 // on it for the whole pause.
 func (m *Model) readDue(msg readDueMsg) tea.Cmd {
 	row, ok := m.selectedRow()
-	if msg.generation != m.readGeneration || !ok || row.Agent.Key() != msg.key || !m.wantsRead(row.Agent) {
+	if msg.generation != m.readGeneration {
+		return nil
+	}
+	m.due = ""
+	if !ok || row.Agent.Key() != msg.key || !m.wantsRead(row.Agent) {
 		return nil
 	}
 	a, ctx, read := row.Agent, m.ctx, m.read
-	m.reading = a.Key()
+	m.reading[a.Key()] = true
 	return func() tea.Msg {
 		message, err := read(ctx, a)
 		return messageReadMsg{key: a.Key(), activity: a.Activity, status: a.Status, message: message, err: err}
@@ -480,14 +507,15 @@ func (m *Model) readDue(msg readDueMsg) tea.Cmd {
 }
 
 func (m *Model) messageRead(msg messageReadMsg) tea.Cmd {
-	if m.reading == msg.key {
-		m.reading = ""
-	}
-	if msg.err != nil {
-		m.logger.Debug("reading the last message of an agent failed", "error", msg.err.Error())
-	}
+	delete(m.reading, msg.key)
 	m.messages[msg.key] = lastMessage{activity: msg.activity, status: msg.status, message: msg.message, err: msg.err}
 	m.paneOffset = min(m.paneOffset, uiagents.PaneMaxOffset(m.viewState()))
+	if msg.err != nil {
+		// The next poll or reload tries again: a retry from here would loop
+		// on a host that keeps failing.
+		m.logger.Debug("reading the last message of an agent failed", "error", msg.err.Error())
+		return nil
+	}
 	// The agent may have moved on while it was read.
 	return m.readSoon()
 }
@@ -513,6 +541,12 @@ func (m *Model) move(delta int) tea.Cmd {
 // key is given up; once they are settled, an agent without a row is gone
 // from the tab and the selection stays on the row at its place.
 func (m *Model) rebuild() tea.Cmd {
+	return m.rebuildWith(false)
+}
+
+// rebuildWith is rebuild; with toFirst, an agent the rows no longer hold, as
+// after a query change, gives the selection to the first row instead.
+func (m *Model) rebuildWith(toFirst bool) tea.Cmd {
 	before, beforeKey := m.selectedIssue(), m.selectedKey()
 	m.all = buildRows(m.live, m.liveKnown, m.issues, m.commentLinks)
 	m.rows = m.matching(m.all)
@@ -529,6 +563,8 @@ func (m *Model) rebuild() tea.Cmd {
 	}
 	if at := rowOf(m.chosen); at >= 0 {
 		m.selected = at
+	} else if toFirst {
+		m.selected = 0
 	}
 	m.selected = min(max(m.selected, 0), max(len(m.rows)-1, 0))
 	// Before the rows settle their order is not final: the selection stays on

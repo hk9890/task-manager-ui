@@ -797,37 +797,7 @@ func (k ButtonKeys) withDefaults() ButtonKeys {
 }
 
 func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) {
-	if height <= 0 {
-		return nil, 0
-	}
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-
-	maxOffset := max(0, len(lines)-height)
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > maxOffset {
-		offset = maxOffset
-	}
-
-	start := offset
-	end := min(len(lines), start+height)
-	window := append([]string(nil), lines[start:end]...)
-
-	if offset > 0 && len(window) > 0 {
-		window[0] = textutil.TruncateString(scroll.Earlier(offset), width)
-	}
-	if end < len(lines) && len(window) > 0 {
-		window[len(window)-1] = textutil.TruncateString(scroll.More(len(lines)-end), width)
-	}
-
-	for len(window) < height {
-		window = append(window, "")
-	}
-
-	return window, offset
+	return scroll.Window(lines, offset, height, width)
 }
 
 func renderCompact(detail domain.IssueDetail, width int) string {

@@ -168,7 +168,7 @@ suppressed for the interactive session.
 - `reading the last message of an agent failed` (DEBUG, with `error`, `component=agents`) — the
   `Host.Read` of the agent selected on the Agents tab failed (`Model.messageRead`,
   `internal/mode/agents/model.go`). No toast. The Agent pane shows `⚠ read failed:` with the same
-  cause; the next poll that reports another activity or status of the agent reads it again.
+  cause; the next poll, or the tab's reload, reads it again.
   Visible only under `--debug`.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under

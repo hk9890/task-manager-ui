@@ -564,7 +564,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	refreshCmd := model.refreshAfterStoreChangeCmd()
 	model.trackSurfaceLoads()
-	return model, batchCmds(cmd, refreshCmd, model.ensureSpinnerTickCmd())
+	// Whatever moved the screen, a tab switch or a resize, the Agents tab
+	// learns here whether its pane is on screen to read for.
+	var agentsCmd tea.Cmd
+	if model.agents != nil {
+		agentsCmd = model.scoped(model.agents.SetShown(model.active == mode.Agents))
+	}
+	return model, batchCmds(cmd, refreshCmd, agentsCmd, model.ensureSpinnerTickCmd())
 }
 
 // ensureSpinnerTickCmd arms the spinner tick when work is in flight and no tick

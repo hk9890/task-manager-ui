@@ -336,8 +336,7 @@ and the key legend below (`Model.renderFooter`).
 The Agents tab (`internal/mode/agents`, drawn by `internal/ui/agents`) lists every agent of the
 store's project. It draws the list head of the board — the rule and the query line
 (`board.RenderQueryLine`) — then one box titled `Agents` with the number of agents and, from
-`styles.SplitMinWidth` columns, the Agent pane beside it, at the widths `styles.SplitWidths` gives
-the Docs tab too.
+`styles.SplitMinWidth` columns, the Agent pane beside it, at the widths `styles.SplitWidths` gives.
 
 - The query filters the rows in memory (`Model.matching`): every word is in the agent's title, its
   label or what it does, or in the ID or the title of its issue (`Query.MatchesAny`). The selection
@@ -369,13 +368,18 @@ the Docs tab too.
   Detail heads it — type, priority, status and ID, the title bold under them — or `none`, the label
   when the title is a name, the session, then `Last message` as markdown.
 - The last message is `agent.Host.Read`, which the shell hands the tab as `agents.Read`. It is read
-  once the selection rests on an agent for `readPause`, only while the pane is drawn and after the
-  tab's first entry, and never for a gone agent (`Model.readSoon`). It is kept by agent with what
-  the agent did when it was read; a poll that reports another activity or status reads it again,
-  and the older message stays on screen until the answer comes.
-- While the pane is drawn the `page_up` and `page_down` keys of the detail context scroll it, and so
-  does the wheel over it (`OnPane`); below `styles.SplitMinWidth` they page the list. A new
-  selection starts the pane at its top.
+  once the selection rests on an agent for `readPause`, only while the pane is on screen, and never
+  for a gone agent (`Model.readSoon`). The shell calls `agents.Model.SetShown` after every message
+  (`Model.Update`), so a tab switch or a resize that puts the pane on screen starts the read, and
+  the tab reads nothing while another surface is up. One read per agent is in flight at a time.
+- The message is kept by agent with what the agent did when it was read; a poll that reports
+  another activity or status reads it again, and the older message stays on screen until the answer
+  comes. A failed read is tried again on the next poll, never at once. The tab's reload forgets
+  every message.
+- While the pane is drawn the `page_up` and `page_down` keys of the detail context scroll it by its
+  height less the two scroll-marker lines, and the wheel over it scrolls it (`OnPane`); below
+  `styles.SplitMinWidth` they page the list. A new selection starts the pane at its top.
+- `agents.Model.Select` clears the query, which could hide the agent asked for.
 - The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
   the front and resumes a gone one first (`ActionOpenAgent`). A resume raises an info toast,
   `Resuming <title>…`, and turns the header spinner until it ends; an Enter on the same session
