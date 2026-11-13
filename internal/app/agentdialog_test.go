@@ -2,7 +2,7 @@ package app
 
 // The agent dialog of the issue in Detail: launch_agent and the agent button
 // open it. It focuses, closes and resumes the agents linked to the issue, and
-// an intent in it starts a new agent in front and links it to the issue.
+// an intent in it starts a new agent without focus and links it to the issue.
 
 import (
 	"errors"
@@ -371,9 +371,9 @@ func TestTheAgentKeyOpensTheAgentDialogOnTheIssue(t *testing.T) {
 	}
 }
 
-// Enter on an intent starts an agent in front, prompted with the intent's
+// Enter on an intent starts an agent without focus, prompted with the intent's
 // prompt for the issue, and writes the label of its session on the issue.
-func TestAnIntentStartsAnAgentInFrontAndLinksItToTheIssue(t *testing.T) {
+func TestAnIntentStartsAnAgentWithoutFocusAndLinksItToTheIssue(t *testing.T) {
 	m, client, _, _ := agentShell(t)
 	client.Started = startedOnTab9()
 
@@ -384,7 +384,6 @@ func TestAnIntentStartsAnAgentInFrontAndLinksItToTheIssue(t *testing.T) {
 	want := []agent.Spec{{
 		Root:   m.services.ProjectRoot,
 		Prompt: "Review the work done on taskmgr issue tm-1 and report what is missing.",
-		Focus:  true,
 	}}
 	if got := startCalls(client); !reflect.DeepEqual(got, want) {
 		t.Fatalf("Start calls = %+v, want %+v", got, want)

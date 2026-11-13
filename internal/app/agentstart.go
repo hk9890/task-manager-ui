@@ -27,12 +27,14 @@ func (m *Model) openCentredMenu(menu *selectionMenu) {
 	m.selMenu = menu
 }
 
-// startAgent starts an agent in front on the issue, prompted for intent, and
-// links it to the issue with the label of its session. The host returns once
-// the session is known, which takes as long as the agent takes to start.
+// startAgent starts an agent on the issue, prompted for intent, and links it
+// to the issue with the label of its session. The focus stays in the app: the
+// operator goes to the agent from the agent dialog or the Agents tab. The host
+// returns once the session is known, which takes as long as the agent takes
+// to start.
 func (m *Model) startAgent(issue domain.IssueDetail, intent config.Intent) tea.Cmd {
 	host, repo, root := m.services.Agents, m.services.Repo, m.services.ProjectRoot
-	spec := agent.Spec{Root: root, Prompt: launcher.Interpolate(intent.Prompt, issue, root), Focus: true}
+	spec := agent.Spec{Root: root, Prompt: launcher.Interpolate(intent.Prompt, issue, root)}
 	issueID := issue.Summary.ID
 	starting := m.showToast(fmt.Sprintf("Starting an agent to %s %s…", displaytext.OneLine(intent.Name), displaytext.OneLine(issueID)), toaster.StyleInfo)
 	epoch := m.storeEpoch

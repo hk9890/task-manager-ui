@@ -61,7 +61,7 @@ The model is intentionally small and only covers app-shell concerns:
     start; override a built-in instead of appending a new action.
 - `Agent.Intents`
   - The `Start new` entries of the agent dialog that `launch_agent` opens in Detail, in menu
-    order. An intent starts an agent through the agent host in front, with its `prompt` as the
+    order. An intent starts an agent through the agent host, without the focus, with its `prompt` as the
     first prompt, and labels the issue `agent-session:<session>`.
   - Defaults to `implement` and `review`, each a short prompt that names `{{issue.id}}`.
   - Each intent has a `name` (required, unique) and a `prompt` (required, one line: revier

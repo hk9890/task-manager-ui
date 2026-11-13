@@ -775,10 +775,10 @@ The selection menu is the one exception: no key selects text, so no key reaches 
     an agent. The dialog has no hint line.
 
   The cursor opens on the first entry that is on. An intent starts the agent through the agent
-  host and raises an info toast at once, because a start takes as long as the agent takes to
+  host without the focus, so the operator stays in taskmgr-ui, and raises an info toast at once, because a start takes as long as the agent takes to
   start; a start that fails, and a label that is not written, raise an error toast
-  (`Model.handleAgentStarted`). A start that fails after the agent has its session, at the prompt
-  or the focus, still links the agent. A store switch does not drop the toast of a start, and each
+  (`Model.handleAgentStarted`). A start that fails after the agent has its session, at the prompt,
+  still links the agent. A store switch does not drop the toast of a start, and each
   toast names the issue; the link label goes to the store the start began on. Without an agent host or the project path, and without a
   linked agent and an intent both, the key raises a warning toast instead of the dialog.
 - The Agents group of the Details pane is each linked agent's status word — `running`, `idle`,

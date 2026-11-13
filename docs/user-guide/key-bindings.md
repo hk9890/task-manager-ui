@@ -29,7 +29,7 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
-- `alt+i` — in detail mode, open the agent dialog of the issue, `Agents on <id>`. It lists every agent linked to the issue first: `Focus` or `Close` a live one, `Resume` or `Unlink` a gone one. A close of an agent that is running or waits for you asks first, then closes it with force. Under `Start new` come `implement`, `review` and the intents of your config: choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent-session:<session>`. A start that fails shows the error. On a closed issue the store takes no label, so the `Start new` entries are off
+- `alt+i` — in detail mode, open the agent dialog of the issue, `Agents on <id>`. It lists every agent linked to the issue first: `Focus` or `Close` a live one, `Resume` or `Unlink` a gone one. A close of an agent that is running or waits for you asks first, then closes it with force. Under `Start new` come `implement`, `review` and the intents of your config: choosing one starts a revier agent with that intent's prompt and leaves the focus in taskmgr-ui, and labels the issue `agent-session:<session>`. A start that fails shows the error. On a closed issue the store takes no label, so the `Start new` entries are off
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
