@@ -57,6 +57,29 @@ func (c Catalog) Stores(ctx context.Context) ([]storecatalog.Entry, error) {
 	return out, nil
 }
 
+// SyncStatus implements storecatalog.Catalog.
+//
+// tasks.PublishStatus takes no context — it runs no git and reads a few small
+// files — so cancellation is honoured by checking before the call, as Stores
+// does. It is not read-only: where a killed publish left its lock file
+// filled, it empties that file.
+func (c Catalog) SyncStatus(ctx context.Context) (storecatalog.SyncStatus, error) {
+	if err := ctx.Err(); err != nil {
+		return storecatalog.SyncStatus{}, err
+	}
+
+	state, err := tasks.PublishStatus()
+	if err != nil {
+		return storecatalog.SyncStatus{}, fmt.Errorf("tasks.PublishStatus: %w", err)
+	}
+	return storecatalog.SyncStatus{
+		SetUp:    state.SetUp,
+		Branch:   displaytext.OneLine(state.Branch),
+		LastSync: state.LastSync,
+		Running:  state.Running,
+	}, nil
+}
+
 // Open implements storecatalog.Catalog. It resolves by registry name the way
 // --store-name does at startup, so a store opened from the picker and the same
 // store named on the command line are the same store.
@@ -100,7 +123,7 @@ func (c Catalog) CreateCentral(ctx context.Context, dir, name, prefix string) (s
 func (c Catalog) DerivePrefix(dir string) string { return tasks.DerivePrefix(dir) }
 
 func (c Catalog) resolve(opts tasks.ResolveOptions) (storecatalog.Opened, error) {
-	store, info, err := tasks.Resolve(opts)
+	store, info, err := repositorytaskmgr.Resolve(opts)
 	if err != nil {
 		return storecatalog.Opened{}, err
 	}

@@ -193,6 +193,7 @@ func (m *Model) deleteComment() tea.Cmd {
 
 func (m *Model) handleCommentDeleted(msg commentDeletedMsg) tea.Cmd {
 	if msg.err != nil {
+		m.logWriteFailure(msg.issueID, msg.err)
 		return m.showToast(fmt.Sprintf("Failed to delete the comment: %v", msg.err), toaster.StyleError)
 	}
 	done := m.showToast(fmt.Sprintf("Deleted comment on %s", msg.issueID), toaster.StyleSuccess)
@@ -295,6 +296,7 @@ func (m *Model) handleEditorSaved(msg editorSavedMsg) tea.Cmd {
 		cmds = append(cmds, m.reloadDetailAfterMutationCmd(issueID))
 	}
 	if msg.err != nil {
+		m.logWriteFailure(issueID, msg.err)
 		refusal := msg.err.Error()
 		// Only a close writes before the write that was refused.
 		if msg.wrote {

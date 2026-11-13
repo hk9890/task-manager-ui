@@ -694,6 +694,15 @@ a key: it costs no binding and no config surface, and it disappears once the dir
 store. The header count counts stores only. The form rides the shell's action-modal slot and stays
 open until the store is created, so a rejected name or prefix is corrected in place.
 
+When this machine has sync set up, the picker draws its sync state on the last line inside the
+box: `storecatalog.Catalog.SyncStatus`, drawn by `renderSync` in `internal/ui/storepicker`. The
+line is not a row. It sits after the selection gutter in `TextMutedColor`, costs the rows one line
+in `RowCapacity`, and `HitTest` does not reach it. It reads `Sync running`, `Last sync N min ago`
+(or `h`, `d`, `just now`) or `Not synced yet`, then `·` and the branch; a line too long for the box
+cuts the branch, not the time. The time counts from when the listing landed, so it changes only on
+a load or a reload. With no sync set up, or a read that failed, there is no line; the failure is
+logged ([MONITORING.md](MONITORING.md#runtime-failure-records)).
+
 ## Selection and scrolling
 
 - Take the gutter from `styles.SelectionPrefix(selected, styled)`. It returns both variants: use
@@ -919,8 +928,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   and puts every click below a row off; an escape sequence runs in the terminal; a bidirectional
   override reorders the cells beside it. The value a file or store operation uses stays raw, so
   the cleaning is at the places such a text passes on its way to the screen:
-  - where a display-only value enters: `StoreName`, and the path and detail of a catalog entry
-    (`internal/storecatalog/taskmgr`);
+  - where a display-only value enters: `StoreName`, the path and detail of a catalog entry, and
+    the sync branch in `SyncStatus` (`internal/storecatalog/taskmgr`);
   - `Model.showToast`, with `displaytext.Lines`, because a toast may hold line feeds the app wrote.
     A caller that wraps the text first cleans it before the wrap, as `Model.applyConfigChange`
     does: a control character has no width until it is drawn as a space;

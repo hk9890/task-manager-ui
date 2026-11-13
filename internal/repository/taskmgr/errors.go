@@ -66,7 +66,9 @@ func mapReadErr(op string, err error) error {
 // domain.ErrorCodeConflict, which the memory backend returns too.
 // A write a lifecycle hook refuses becomes domain.ErrorCodeHookDenied, which is
 // taskmgr-only: a policy said no, which is not a fault in the app and must not
-// reach the operator as "unknown".
+// reach the operator as "unknown". A write that gave up on the write lock
+// another writer held (tasks.ErrStoreBusy) becomes domain.ErrorCodeTimeout:
+// nothing was written, and the operator can try again.
 func mapWriteErr(op string, err error) error {
 	if err == nil {
 		return nil
@@ -82,6 +84,8 @@ func mapWriteErr(op string, err error) error {
 		return repoError(domain.ErrorCodeHookDenied, op, hookDeniedMessage(hde), err)
 	case errors.Is(err, tasks.ErrImmutable):
 		return repoError(domain.ErrorCodeConflict, op, "issue is closed; reopen it before editing", err)
+	case errors.Is(err, tasks.ErrStoreBusy):
+		return repoError(domain.ErrorCodeTimeout, op, "store busy: another write holds the lock; try again", err)
 	case errors.Is(err, tasks.ErrNoStore):
 		return repoError(domain.ErrorCodeNoDatabaseFound, op, "", err)
 	default:

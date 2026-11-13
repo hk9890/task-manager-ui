@@ -490,6 +490,25 @@ func (m Model) logger() *slog.Logger {
 	return slog.Default()
 }
 
+// logWriteFailure records a write the store refused or could not take. The
+// screen shows the refusal; the log also keeps its cause, which the screen
+// leaves out — for a busy store, the store and the wait. An error that is no
+// repository error is not a write failure, and is not recorded.
+func (m Model) logWriteFailure(issueID string, err error) {
+	var repoErr domain.RepositoryError
+	if !errors.As(err, &repoErr) {
+		return
+	}
+	attrs := []any{"error", err.Error()}
+	if issueID != "" {
+		attrs = append(attrs, "issue", issueID)
+	}
+	if repoErr.Cause != nil {
+		attrs = append(attrs, "cause", repoErr.Cause.Error())
+	}
+	m.logger().Warn("issue write failed", attrs...)
+}
+
 // Init fires the startup health check and the spinner tick. Board loads are
 // deferred until the health check passes (see startupHealthCheckMsg handler in
 // Update). Docs is deferred further until the user first switches to it; see

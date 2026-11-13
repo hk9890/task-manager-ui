@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -22,11 +23,16 @@ import (
 	uistorepicker "github.com/hk9890/task-manager-ui/internal/ui/storepicker"
 )
 
-// StoresLoadedMsg carries the result of a catalog listing. It is exported
-// because the shell arms the reload that produces it.
+// StoresLoadedMsg carries the result of a catalog listing and of the sync
+// state read with it. It is exported because the shell arms the reload that
+// produces it.
 type StoresLoadedMsg struct {
 	Entries []storecatalog.Entry
 	Err     error
+	// Sync is this machine's sync state. SyncErr is why it could not be read;
+	// it fails no listing.
+	Sync    storecatalog.SyncStatus
+	SyncErr error
 	// Generation is the listing this result belongs to. A Bubble Tea command
 	// cannot be cancelled, so a listing dispatched for an earlier open of the
 	// picker still delivers after the picker has been closed and reopened;
@@ -73,6 +79,14 @@ type Model struct {
 	entries []storecatalog.Entry
 	err     error
 
+	// sync is the sync state the last listing read; nil when it is not set up
+	// or could not be read, which draws no sync line. syncReadAt is when that
+	// listing landed: the line counts its relative time from there, so it
+	// changes only on a load. now is the clock it is read from.
+	sync       *uistorepicker.Sync
+	syncReadAt time.Time
+	now        func() time.Time
+
 	// activeStorePath is the store directory the app is currently browsing. It
 	// marks one row as the active store; empty when no store is open.
 	activeStorePath string
@@ -117,13 +131,16 @@ func NewModel(ctx context.Context, catalog storecatalog.Catalog, logger *slog.Lo
 		catalog: catalog,
 		logger:  logger,
 		keys:    keys,
+		now:     time.Now,
 	}
 }
 
 // Init loads the store list. Every open lists again: a store registered from
 // another terminal must appear without restarting the app, so an open is never
 // suppressed by a listing left in flight from an earlier one.
+// The sync line of an earlier open is not drawn meanwhile: it is timed from that open.
 func (m *Model) Init() tea.Cmd {
+	m.sync = nil
 	return m.startListing()
 }
 
@@ -266,6 +283,8 @@ func (m *Model) viewState(spinnerFrame int, help string) uistorepicker.State {
 		SpinnerFrame: spinnerFrame,
 		Width:        m.width,
 		Height:       m.height,
+		Sync:         m.sync,
+		Now:          m.syncReadAt,
 	}
 }
 
@@ -355,6 +374,7 @@ func (m *Model) apply(msg StoresLoadedMsg) {
 	m.loading = false
 	m.inflight = false
 	m.err = msg.Err
+	m.applySync(msg.Sync, msg.SyncErr)
 
 	if msg.Err != nil {
 		m.logger.Error("failed to list central task-manager stores", "error", msg.Err)
@@ -367,6 +387,20 @@ func (m *Model) apply(msg StoresLoadedMsg) {
 	}
 
 	m.clampSelection()
+}
+
+// applySync keeps the sync state a listing read. A failed read draws no line
+// and is only logged: the store list does not depend on it.
+func (m *Model) applySync(status storecatalog.SyncStatus, err error) {
+	m.sync = nil
+	m.syncReadAt = m.now()
+	if err != nil {
+		m.logger.Warn("failed to read this machine's sync state", "error", err)
+		return
+	}
+	if status.SetUp {
+		m.sync = &uistorepicker.Sync{Branch: status.Branch, LastSync: status.LastSync, Running: status.Running}
+	}
 }
 
 func (m *Model) clampSelection() {
@@ -403,7 +437,7 @@ func (m *Model) moveRow(delta int) {
 // first tea.WindowSizeMsg, so the scroll window and the visible rows cannot
 // disagree.
 func (m *Model) itemCapacity() int {
-	return uistorepicker.RowCapacity(m.height, m.err != nil)
+	return uistorepicker.RowCapacity(m.height, m.err != nil, m.sync != nil)
 }
 
 func loadStoresCmd(ctx context.Context, catalog storecatalog.Catalog, generation int) tea.Cmd {
@@ -414,6 +448,7 @@ func loadStoresCmd(ctx context.Context, catalog storecatalog.Catalog, generation
 			return StoresLoadedMsg{Err: errors.New("no store catalog is configured for this session"), Generation: generation}
 		}
 		entries, err := catalog.Stores(ctx)
-		return StoresLoadedMsg{Entries: entries, Err: err, Generation: generation}
+		sync, syncErr := catalog.SyncStatus(ctx)
+		return StoresLoadedMsg{Entries: entries, Err: err, Sync: sync, SyncErr: syncErr, Generation: generation}
 	}
 }

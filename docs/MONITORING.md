@@ -139,6 +139,16 @@ suppressed for the interactive session.
 - `failed to list central task-manager stores` (`storepicker`) — the store picker could
   not read the central registry. The picker shows the cause inline and keeps whatever it
   listed before; on a first open it has nothing to keep and shows the error alone.
+- `failed to read this machine's sync state` (WARN, with `error`, `storepicker`) — the picker's
+  read of `tasks.PublishStatus` failed (`Model.applySync`, `internal/mode/storepicker/model.go`):
+  a damaged publish state, or no machine ID. No toast and no sync line; the store list does not
+  change. Each open or reload of the picker reads it again and logs again.
+- `issue write failed` (WARN, with `error`, `cause`, and `issue` where one is known) — the
+  store refused a write or could not take it (`Model.logWriteFailure`, `internal/app/model.go`):
+  an issue editor save, a comment delete, or the agent link label written or removed. The screen
+  shows the refusal, on the issue editor or in a toast. `cause` is the SDK's own text, which the
+  screen leaves out; for a busy store (`domain.ErrorCodeTimeout`) it names the store directory and
+  how long the write waited for the lock.
 - `failed to open task-manager store`, `failed to switch task-manager store` — a store
   chosen in the picker did not become active. The app stays on the store it was on, and
   the toast carries the same cause.
