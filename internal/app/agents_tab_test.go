@@ -256,6 +256,22 @@ func TestAResumeInFlightIsShownAndNotStartedTwice(t *testing.T) {
 	}
 }
 
+// While the Agent pane is on screen the legend names the keys that scroll it;
+// on a screen too narrow for the pane it does not.
+func TestTheAgentsTabLegendNamesThePaneKeysWhileThePaneIsShown(t *testing.T) {
+	m, _ := agentsTab(t)
+	footer := func(m Model) string { return testui.Downsample(m.renderFooter()) }
+
+	m = send(t, m, tea.WindowSizeMsg{Width: 200, Height: 40})
+	if legend := footer(m); !strings.Contains(legend, "pgdown/pgup message") {
+		t.Errorf("legend beside the pane = %q, want pgdown/pgup message", legend)
+	}
+	m = send(t, m, tea.WindowSizeMsg{Width: 90, Height: 40})
+	if legend := footer(m); strings.Contains(legend, "message") {
+		t.Errorf("legend without the pane = %q, names the pane keys", legend)
+	}
+}
+
 // The legend names the keys that act on the selected row as they act on it:
 // a gone agent is resumed and unlinked, an agent linked to no issue has no
 // issue to open, and without a row no key acts on one.
@@ -291,7 +307,7 @@ func TestAgentsAreOffWithoutAnAccessibleProjectPath(t *testing.T) {
 	for _, tc := range []struct {
 		name, root, empty, toast string
 	}{
-		{"no project path", "", "the store has no project path to ask the agent host about", "Agents are off: the store has no project path"},
+		{"no project path", "", "the store has no project path", "Agents are off: the store has no project path"},
 		{"path not accessible", missing, "the project path is not accessible", "Agents are off: project path not accessible"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

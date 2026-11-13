@@ -43,7 +43,7 @@ func TestFooterLegendDropsTrailingHintsRatherThanOverflow(t *testing.T) {
 	}
 
 	for _, active := range []mode.ID{mode.Board, mode.Docs, mode.Detail} {
-		hints := footerHints(active, keys, nil)
+		hints := footerHints(active, keys, nil, false)
 		full := testui.Downsample(styles.KeyLegend(hints, 0))
 		fullWidth := lipgloss.Width(full)
 		if got := strings.Count(full, footerSeparator); got != len(hints)-1 {
@@ -156,7 +156,7 @@ func TestFooterKeepsTheLaunchersOffNoticeAtANarrowWidth(t *testing.T) {
 	if !strings.HasPrefix(wide, " "+notice+footerSeparator) {
 		t.Fatalf("the notice does not lead the legend: %q", wide)
 	}
-	hints := footerHints(mode.Detail, m.keys, nil)
+	hints := footerHints(mode.Detail, m.keys, nil, false)
 	if got := strings.Count(wide, footerSeparator); got != len(hints) {
 		t.Fatalf("at width 200 the legend holds %d hints behind the notice, want all %d: %q", got, len(hints), wide)
 	}

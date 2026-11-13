@@ -190,7 +190,7 @@ func RenderCompact(config RenderConfig) []string {
 
 	if config.Styled && textWidth > lipgloss.Width(indent) {
 		first = renderhelpers.CompactIssueTypeStyled(config.Issue.Type) + " " +
-			markMatches(textutil.TruncateString(title, metaWidth), config.Match, lipgloss.NewStyle())
+			MarkMatches(textutil.TruncateString(title, metaWidth), config.Match, lipgloss.NewStyle())
 		if idWidth >= 1 {
 			metaStyled := []string{
 				renderhelpers.CompactPriorityStyled(config.Issue.Priority),
@@ -200,7 +200,7 @@ func RenderCompact(config RenderConfig) []string {
 				metaStyled = append(metaStyled, styles.AgentStatusStyle(config.Agent).Render(styles.Glyphs.Agent))
 			}
 			second = indent + strings.Join(append(metaStyled,
-				markMatches(renderhelpers.CompactIssueID(config.Issue.ID, idWidth), config.Match, styles.IssueIDMutedStyle)), " ")
+				MarkMatches(renderhelpers.CompactIssueID(config.Issue.ID, idWidth), config.Match, styles.IssueIDMutedStyle)), " ")
 		}
 	}
 
@@ -219,11 +219,11 @@ func RenderCompact(config RenderConfig) []string {
 	return lines
 }
 
-// markMatches draws text in base, and every occurrence of a word in it as
+// MarkMatches draws text in base, and every occurrence of a word in it as
 // matched text, whatever the case. text is plain and already cut to its width:
 // styling a run adds no cell, so the caller's width math holds. A word the cut
 // went through is not marked.
-func markMatches(text string, words []string, base lipgloss.Style) string {
+func MarkMatches(text string, words []string, base lipgloss.Style) string {
 	runes := []rune(text)
 	folded := foldRunes(runes)
 	matched := make([]bool, len(runes))

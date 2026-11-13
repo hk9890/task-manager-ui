@@ -606,15 +606,10 @@ func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
 	return meta
 }
 
-// contentHeaderRule renders the thin full-width horizontal divider that separates the
-// Content pane header (meta row + title) from the description body, in the border colour.
-// The style is built on each call: a package variable would keep the colour of the theme
-// the styles package starts on, whatever styles.Apply assigned after it.
+// contentHeaderRule is styles.ContentRule: the divider under the Content pane
+// header and between two comments.
 func contentHeaderRule(width int) string {
-	if width < 1 {
-		return ""
-	}
-	return lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width))
+	return styles.ContentRule(width)
 }
 
 // contentLines is the lines of the Content pane before the scroll window, and
@@ -802,37 +797,7 @@ func (k ButtonKeys) withDefaults() ButtonKeys {
 }
 
 func sliceWithOffset(lines []string, offset, height, width int) ([]string, int) {
-	if height <= 0 {
-		return nil, 0
-	}
-	if len(lines) == 0 {
-		lines = []string{""}
-	}
-
-	maxOffset := max(0, len(lines)-height)
-	if offset < 0 {
-		offset = 0
-	}
-	if offset > maxOffset {
-		offset = maxOffset
-	}
-
-	start := offset
-	end := min(len(lines), start+height)
-	window := append([]string(nil), lines[start:end]...)
-
-	if offset > 0 && len(window) > 0 {
-		window[0] = textutil.TruncateString(scroll.Earlier(offset), width)
-	}
-	if end < len(lines) && len(window) > 0 {
-		window[len(window)-1] = textutil.TruncateString(scroll.More(len(lines)-end), width)
-	}
-
-	for len(window) < height {
-		window = append(window, "")
-	}
-
-	return window, offset
+	return scroll.Window(lines, offset, height, width)
 }
 
 func renderCompact(detail domain.IssueDetail, width int) string {

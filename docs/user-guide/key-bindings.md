@@ -9,7 +9,7 @@ overridden through runtime config.
 ## Shell / Global
 
 Outside a dialog no action is on a bare letter, digit or symbol key: on the
-Board and Docs tabs and in the store search those keys type into the filter or
+Board, Docs and Agents tabs and in the store search those keys type into the filter or
 the query, and in the issue editor into the field. The actions sit on `alt+`
 chords and on keys that print nothing.
 
@@ -56,7 +56,7 @@ key to `Esc+` (iTerm2). Every action can be rebound in the config.
 
 ## Filter
 
-The Board and Docs tabs each have a filter on the line above the columns. It is
+The Board, Docs and Agents tabs each have a filter on the line above the list. It is
 always live: no key enters it, you type.
 
 - any letter, digit, symbol or `space` — add to the filter; pasted text is added too
@@ -116,7 +116,17 @@ open issue. Without an agent the tab says why: no agent host, no project path,
 the path not accessible, the path is no revier project, the error revier gave, or that
 revier has not answered yet.
 
-- `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
+Type to filter the agents: every word must be in the agent's name, its tab or
+what it does, or in the ID or title of its issue. `esc` clears the filter.
+
+From 100 columns the Agent pane stands beside the list. It shows the selected
+agent: its status and what it does, its issue, its tab and session, and the last
+thing it said, which revier reads once the selection rests on the agent and again
+when the agent moves on to other work. A `gone` agent has nothing to read.
+
+- `up`, `down`, `home`, `end` — move
+- `pgup`, `pgdown` — scroll the Agent pane; without the pane, move a page. The
+  wheel over the pane scrolls it too
 - `enter` — bring the selected agent to the front; resume a `gone` one first,
   and the legend reads `enter resume`. A resume takes seconds: a toast says it
   started, the spinner turns until it ends, and a second `enter` meanwhile opens
@@ -399,9 +409,9 @@ instead.
   ends the issue is read again and a toast shows its summary, over up to three
   lines. A summary longer than that is cut, and the toast stays until `esc` or
   the next toast. When the agent
-  has a question, a dialog offers to bring it to the front, in detail mode or on
-  the Agents tab with nothing else open; anywhere else a toast says so, and you
-  answer from the agent dialog or the Agents tab. The agent stays
+  has a question, a dialog offers to bring it to the front, in detail mode with
+  nothing else open; anywhere else a toast says so, and you answer from the
+  agent dialog or the Agents tab, where the agent comes first as `needs you`. The agent stays
   open, linked to the issue. Switch stores before its turn ends and no summary
   comes.
 - Quote and search leave out the pane borders, the selection bar and the

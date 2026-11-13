@@ -76,7 +76,7 @@ func TestBuildRowsGroupsTheAgentsByTheirLink(t *testing.T) {
 
 func newTab(t *testing.T) *Model {
 	t.Helper()
-	m := NewModel(context.Background(), memory.New(), nil, keys(t))
+	m := NewModel(context.Background(), memory.New(), nil, keys(t), nil)
 	m.SetSize(80, 24)
 	return m
 }
@@ -206,7 +206,7 @@ func TestTheFirstSelectionIsTheTopRowOnceTheRowsSettle(t *testing.T) {
 // succeeded and ends the read, so the next reload reads again.
 func TestAFailedReadKeepsTheRowsAndReadsAgain(t *testing.T) {
 	t.Parallel()
-	m := NewModel(context.Background(), memory.New(), slog.New(slog.DiscardHandler), keys(t))
+	m := NewModel(context.Background(), memory.New(), slog.New(slog.DiscardHandler), keys(t), nil)
 	m.SetSize(80, 24)
 	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-1"}}}})
 	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, "", nil)
@@ -263,7 +263,7 @@ func TestInitReadsTheIssuesWithALinkLabel(t *testing.T) {
 	repo := memory.New()
 	repo.Seed(memory.Issue{ID: "tm-1", Title: "linked", Status: "open", Labels: []string{"agent-session:s-1"}})
 	repo.Seed(memory.Issue{ID: "tm-2", Title: "plain", Status: "open"})
-	m := NewModel(context.Background(), repo, nil, keys(t))
+	m := NewModel(context.Background(), repo, nil, keys(t), nil)
 	cmd := m.Init()
 	if !m.IsLoading() || m.Reload() != nil {
 		t.Fatal("Init does not hold the read in flight")

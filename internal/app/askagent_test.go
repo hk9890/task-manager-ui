@@ -163,6 +163,23 @@ func TestAQuestionWhileAQueryIsTypedIsAToast(t *testing.T) {
 	}
 }
 
+// The Agents tab types every key into its query, so a question there is a
+// toast too, not an offer a typed `y` would confirm.
+func TestAQuestionOnTheAgentsTabIsAToast(t *testing.T) {
+	m, _ := agentsTab(t)
+	if m.active != mode.Agents {
+		t.Fatalf("fixture is on %q, want the Agents tab", m.active)
+	}
+	m = send(t, m, agentAnsweredMsg{issueID: "tm-1", agent: startedOnTab9(), stoppedOn: agent.Idle, reply: `{"status":"question","summary":"Which?"}`})
+
+	if m.showActionModal {
+		t.Fatal("a question on the Agents tab opened the offer")
+	}
+	if view := m.toast.View(); !strings.Contains(view, "answer it from the agent dialog") {
+		t.Fatalf("toast = %q, want the pointer to the agent dialog", view)
+	}
+}
+
 func TestAReplyWithoutAStatusLineIsReportedAsFinished(t *testing.T) {
 	m, _ := askedShell(t, `Done. {"status": maybe}`)
 	if view := m.toast.View(); !strings.Contains(view, "Tab 9 on tm-1 finished") {
@@ -279,7 +296,9 @@ func TestAskIsOffOnAClosedIssueOfTheAgentsTab(t *testing.T) {
 		t.Fatalf("fixture: the selection is %+v, want closed tm-1", sel)
 	}
 	m.copyText = func(string) tea.Cmd { return nil }
-	x, y := testui.FindCell(t, testui.View(m), "Ready first")
+	// The list row, not the Agent pane beside it.
+	x, y := testui.FindCell(t, testui.View(m), "tm-1  Ready first")
+	x += len("tm-1  ")
 	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
 	m = send(t, m, testui.Drag(x+4, y))
 	m = send(t, m, testui.Release(x+4, y))
