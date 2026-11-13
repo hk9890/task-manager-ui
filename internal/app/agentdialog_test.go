@@ -532,3 +532,19 @@ func TestTheAgentDialogOnAClosedIssueStartsNothing(t *testing.T) {
 		t.Fatalf("a click on an intent that is off started %+v", specs)
 	}
 }
+
+// A started agent's row is running at once, not gone until the next poll
+// tick: the start lists the agents again after its link label is written.
+func TestAStartedAgentIsNotDrawnGoneBeforeTheNextPoll(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.Started = startedOnTab9()
+
+	m = pressKey(t, m, "alt+i")
+	m = pressKey(t, m, "enter")
+
+	view := plainShell(m)
+	if strings.Contains(view, "gone  Session s-9") {
+		t.Errorf("Detail draws the started agent gone:\n%s", view)
+	}
+	testui.AssertContainsAll(t, view, "idle  Tab 9")
+}
