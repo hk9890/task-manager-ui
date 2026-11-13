@@ -6,6 +6,86 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
+## v0.22.0
+
+- **Action required if your config binds `alt+i` in the `shell` keys, or
+  `alt+o` or `alt+x` in the `board` keys.** These keys now have default
+  actions: `alt+i` is `launch_agent`, `alt+o` is `open_issue` and `alt+x` is
+  `close_agent`. If your config gives one of these keys to another action in
+  the same group, startup and `--check-config` fail, for example with
+  `key "alt+i" conflicts between actions "launch_agent" and "update_issue" in
+  shell context`. Give the new action a different key, for example
+  `keybindings.shell.launch_agent: [ctrl+g]`, or move your own action to a
+  different key.
+- **Start a coding agent on an issue from Detail.** This needs `revier` on
+  the `PATH` and a store whose project is a revier project. Press `alt+i`, or
+  click the `agent` button on the ID line, to open `Agents on <id>`. The
+  dialog lists the agents linked to the issue: `Focus` or `Close` a live
+  agent, `Resume` or `Unlink` a gone one. `Start new` holds `implement`,
+  `review` and the intents from your config. An intent starts an agent in the
+  background and keeps the focus in taskmgr-ui. To add an intent, write a
+  `name` and a one-line `prompt` under `agent.intents`. The prompt can use the
+  launcher placeholders, such as `{{issue.id}}`. On a closed issue, the entry
+  reads `Start new: off, the issue is closed`. If revier is not installed, no
+  agent status shows and a start fails with an error toast.
+- **Issues show their linked agents.** An agent started from taskmgr-ui is
+  linked through an `agent-session:` label on the issue: taskmgr-ui hides the
+  label, and `taskmgr` shows it. An agent that commented on an In Progress
+  issue is linked too. The Details pane (before: Metadata) lists the linked
+  agents under `Agents`, with the status `running`, `idle`, `needs you` or
+  `gone`. A board card with a live linked agent shows a mark: green while the
+  agent runs, grey while it is idle, orange while it needs you.
+- **A new Agents tab lists every agent of the project.** It comes after Docs,
+  so `tab` goes Board → Docs → Agents → Board. `Linked` shows each agent with
+  the ID and title of its issue. `Not linked` shows live agents with no issue.
+  Type to filter. `enter` brings the agent to the front, and resumes it first
+  if it is gone. `alt+x` closes the agent, and asks first while it runs or
+  needs you. On a gone agent, `alt+x` unlinks it. `alt+o` opens the linked
+  issue, and `alt+r` reads the agents again. On a terminal 100 columns wide or
+  more, the Agent pane beside the list shows the status, the issue, the
+  session and the last message of the selected agent. `pgup`, `pgdown` and the
+  mouse wheel over the pane scroll it. A click on an agent in the Details pane
+  opens this tab on that agent. With no agents, the tab says why.
+- **Letting go of a drag now opens a menu beside the pointer.** The text still
+  goes to the clipboard first, as it is drawn, and the menu is headed `Sent N
+  characters to the clipboard`. `Quote in a comment on <id>` opens the comment
+  editor with the text as a Markdown quote. `Search the store` opens the store
+  search with the text as its query. The quote and the search leave out pane
+  borders and the screen indent. Use `up`/`down` and `enter`, or click an
+  entry. `esc` or a click outside the menu closes it, and that click does
+  nothing else. The entries are off where they would drop work in progress,
+  such as in the issue editor.
+- **Ask an agent about selected text.** The drag menu has `Ask an agent about
+  it on <id>`. Type a one-line instruction and press `Ask`. The agent works on
+  the issue in the background. When it is done, the issue loads again and a
+  toast shows its summary. taskmgr-ui waits up to 30 minutes for the answer.
+  After that, a toast says the agent did not report back, and the agent keeps
+  running. If the agent has a question or needs you, a dialog on Detail asks
+  `Bring it to the front?`. On any other screen, a toast tells you to answer
+  from the agent dialog or the Agents tab. The entry is off on a closed issue.
+- **The Docs tab shows the selected doc in a Preview pane beside the list.**
+  On a terminal 100 columns wide or more, the preview follows the selection
+  and shows the title, the description and the notes. `pgup` and `pgdown`
+  now scroll the preview, not the list, and so does the mouse wheel over the
+  preview. `enter` still opens the doc in detail mode. On a narrower terminal
+  the tab is one list, as before.
+- **The store picker shows when this machine last synced its stores.** When
+  `taskmgr sync` is set up, the last line of the store picker (`alt+s`) reads,
+  for example, `Last sync 18 min ago · machine/<id>`. While a sync runs, it
+  reads `Sync running`, and before the first sync `Not synced yet`. With no
+  sync set up, there is no line. To set up sync, use `taskmgr sync init` from
+  taskmgr v0.14.0 or later.
+- **Fixed: a save to a busy store could wait forever on `Saving…`.** When
+  another write or a running `taskmgr sync` held the store, a save waited with
+  no limit. Now the save fails after 10 seconds with an error that ends
+  `store busy: another write holds the lock; try again`. Nothing is written,
+  and your text stays in the editor, so you can save again. This applies to
+  every change to an issue or a comment.
+- **Fixed: a comment that quotes three lines or more was drawn as plain
+  text,** with its `>` marks, like a log. It is now drawn as a quote.
+- **Changed: the Docs list no longer shows the `older than 1 day` and `older
+  than 1 week` dividers.** The Board still shows them.
+
 ## v0.21.0
 
 - **Action required on macOS 12 Monterey.** The macOS binaries now need
