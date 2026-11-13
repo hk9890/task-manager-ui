@@ -165,6 +165,11 @@ suppressed for the interactive session.
   toast. The tab keeps the issues of the last read that succeeded. When none did, it shows only
   the live agents and those linked by a comment, with no label-linked and no `gone` agent, until a
   reload or an auto refresh of the tab reads them.
+- `reading the last message of an agent failed` (DEBUG, with `error`, `component=agents`) — the
+  `Host.Read` of the agent selected on the Agents tab failed (`Model.messageRead`,
+  `internal/mode/agents/model.go`). No toast. The Agent pane shows `⚠ read failed:` with the same
+  cause; the next poll that reports another activity or status of the agent reads it again.
+  Visible only under `--debug`.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.

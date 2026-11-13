@@ -9,7 +9,7 @@ overridden through runtime config.
 ## Shell / Global
 
 Outside a dialog no action is on a bare letter, digit or symbol key: on the
-Board and Docs tabs and in the store search those keys type into the filter or
+Board, Docs and Agents tabs and in the store search those keys type into the filter or
 the query, and in the issue editor into the field. The actions sit on `alt+`
 chords and on keys that print nothing.
 
@@ -56,7 +56,7 @@ key to `Esc+` (iTerm2). Every action can be rebound in the config.
 
 ## Filter
 
-The Board and Docs tabs each have a filter on the line above the columns. It is
+The Board, Docs and Agents tabs each have a filter on the line above the list. It is
 always live: no key enters it, you type.
 
 - any letter, digit, symbol or `space` — add to the filter; pasted text is added too

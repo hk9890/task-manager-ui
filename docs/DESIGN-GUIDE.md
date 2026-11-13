@@ -120,7 +120,7 @@ The rest is the same in every set, and each has one definition:
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
-| `─` in `BorderDefaultColor` | the rule under the Content header and between two comments | `contentHeaderRule` in `internal/ui/detail/details.go` |
+| `─` in `BorderDefaultColor` | the rule under the Content header, between two comments, and under the head of the Agent pane | `styles.ContentRule` in `internal/ui/styles/format.go` |
 | `• ` | a list item of the Details pane | `internal/ui/detail/metadata.go` |
 | ` • ` | separator between legend hints | `legendSeparator` in `internal/ui/styles/legend.go` |
 | `·` | separator between fields, between menu-bar buttons and between the buttons in a pane | inline at the call site; `buttonSeparator` in `internal/ui/detail/buttons.go` |
@@ -414,7 +414,7 @@ the Docs tab too.
 
 ## Keys and the query line
 
-Board, Docs and the store search each hold one `mode.Query` (`internal/mode/query.go`) and draw it
+Board, Docs, Agents and the store search each hold one `mode.Query` (`internal/mode/query.go`) and draw it
 on the line above their columns, under a rule. It is always live: no key enters it and nothing
 focuses it.
 
@@ -465,7 +465,7 @@ focuses it.
 - `board.Render` draws the list head (`renderHead`, `internal/ui/board/board.go`), two lines: a
   rule from `styles.Rule`, across the whole width, and the query line, indented
   one cell so the prompt stands under the label of the first menu-bar button. `HitTest` reports no column on
-  either. The query line (`renderQueryLine`, `internal/ui/board/query.go`) comes from
+  either. The query line (`RenderQueryLine`, `internal/ui/board/query.go`) comes from
   `State.Query` and `State.Placeholder`: `Glyphs.Prompt`, the text, then a cursor block, the prompt
   and the cursor in `QueryAccentColor`. An empty query shows the placeholder in `TextMutedColor`,
   so the line says what a key press does. A text wider than the line loses its front. A board too

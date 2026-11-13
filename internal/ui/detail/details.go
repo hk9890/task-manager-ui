@@ -606,15 +606,10 @@ func contentHeaderMetaRow(summary domain.IssueSummary, width int) string {
 	return meta
 }
 
-// contentHeaderRule renders the thin full-width horizontal divider that separates the
-// Content pane header (meta row + title) from the description body, in the border colour.
-// The style is built on each call: a package variable would keep the colour of the theme
-// the styles package starts on, whatever styles.Apply assigned after it.
+// contentHeaderRule is styles.ContentRule: the divider under the Content pane
+// header and between two comments.
 func contentHeaderRule(width int) string {
-	if width < 1 {
-		return ""
-	}
-	return lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width))
+	return styles.ContentRule(width)
 }
 
 // contentLines is the lines of the Content pane before the scroll window, and

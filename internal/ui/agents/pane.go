@@ -83,7 +83,7 @@ func paneLines(pane Pane, row *Row, width int) []string {
 			lines = append(lines, muted(line))
 		}
 	}
-	lines = append(lines, lipgloss.NewStyle().Foreground(styles.BorderDefaultColor).Render(strings.Repeat("─", width)))
+	lines = append(lines, styles.ContentRule(width))
 	lines = append(lines, issueLines(row, width)...)
 	if a.Title() != a.Label {
 		lines = append(lines, field("Label", displaytext.OneLine(a.Label), width))

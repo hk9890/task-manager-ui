@@ -111,7 +111,7 @@ must report `changed: false`. The `--cwd` store persists between the capture run
   ([CONFIGURATION.md](CONFIGURATION.md#runtime-configuration)).
 - **The Done column needs a wide terminal.** At `--width 120` only Not Ready, Ready and In Progress
   fit, so a `wait-for-text:Done` never settles. Use `--width 200` for any flow that touches Done.
-- **A single character is typed, not run.** On Board, Docs and the store search `send-key:j` puts
+- **A single character is typed, not run.** On Board, Docs, Agents and the store search `send-key:j` puts
   `j` in the query and narrows the rows. Every action is an `ALT+<letter>` chord or a named key;
   type text one `send-key` per character, and clear it with `ESC` before a step that counts rows.
 - **A modal holds the keyboard until it is dismissed.** Keys sent meanwhile are typed into the

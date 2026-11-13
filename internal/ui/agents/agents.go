@@ -1,8 +1,3 @@
-// Package agents renders the Agents tab: the query line, the agents of the
-// store's project in two groups, those linked to an issue and those that are
-// not, each agent a row of two lines, and on a wide screen the Agent pane
-// beside them (pane.go). HitTest reads the same layout, so a click lands on
-// the row drawn under it.
 package agents
 
 import (
@@ -42,9 +37,11 @@ type State struct {
 	// Hover is the row under the pointer, -1 for none.
 	Hover int
 	// Query is the filter text as typed, and Placeholder what the query line
-	// says while it is empty. Rows holds the agents the query matched.
+	// says while it is empty. Rows holds the agents the query matched, of
+	// Loaded agents in all.
 	Query       string
 	Placeholder string
+	Loaded      int
 	// Pane is what the Agent pane shows of the selected row. It is drawn
 	// only where styles.SplitWidths splits the screen.
 	Pane Pane
@@ -158,6 +155,12 @@ func renderList(state State, width int) string {
 
 	var content []string
 	topRight := ""
+	switch {
+	case state.Query != "" && state.Loaded > 0:
+		topRight = fmt.Sprintf("%d of %d", len(state.Rows), state.Loaded)
+	case len(state.Rows) > 0:
+		topRight = fmt.Sprintf("%d", len(state.Rows))
+	}
 	if len(state.Rows) == 0 {
 		title, why := emptyText, state.Empty
 		if state.Query != "" && state.Empty == "" {
@@ -168,7 +171,6 @@ func renderList(state State, width int) string {
 			content = append(content, " "+muted(line))
 		}
 	} else {
-		topRight = fmt.Sprintf("%d", len(state.Rows))
 		lines := layout(state.Rows)
 		offset := clampOffset(state.ScrollOffset, len(lines), window)
 		for _, l := range lines[offset:min(len(lines), offset+window)] {

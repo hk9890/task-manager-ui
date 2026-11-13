@@ -116,3 +116,29 @@ func TestOnPaneIsThePaneOnly(t *testing.T) {
 		t.Errorf("OnPane is true while the screen is not split")
 	}
 }
+
+// The query marks its words in the rows in the match style, and the pane's
+// rule is the content rule, in the border colour.
+func TestTheMatchMarksAndThePaneRuleCarryTheirRoles(t *testing.T) {
+	testui.ForceTrueColor(t)
+	state := splitState()
+	state.Query = "board"
+	view := Render(state)
+	if !strings.Contains(view, styles.MatchTextStyle.Render("board")) {
+		t.Errorf("the query word is not marked in the match style:\n%q", view)
+	}
+	_, pane, _ := styles.SplitWidths(state.Width)
+	if !strings.Contains(view, styles.ContentRule(pane-2-2*panePad)) {
+		t.Errorf("the pane rule is not the content rule:\n%q", view)
+	}
+}
+
+// Under a filter the header counts the matches of the loaded agents.
+func TestTheHeaderCountsTheMatchesOfTheLoadedAgents(t *testing.T) {
+	t.Parallel()
+	state := sampleState()
+	state.Query, state.Loaded, state.Rows = "board", 4, state.Rows[:1]
+	if view := testui.Downsample(Render(state)); !strings.Contains(view, " 1 of 4 ") {
+		t.Errorf("the header does not read 1 of 4:\n%s", view)
+	}
+}

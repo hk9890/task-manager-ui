@@ -409,6 +409,7 @@ func (m *Model) viewState() uiagents.State {
 		Hover:        -1,
 		Query:        m.query.Text(),
 		Placeholder:  queryPlaceholder,
+		Loaded:       len(m.all),
 		Pane:         m.pane(),
 	}
 }

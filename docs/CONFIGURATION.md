@@ -207,7 +207,7 @@ Keybindings are resolved once at startup from the `keybindings` section.
 - **A printable key is refused outside `modal`.** A key that is one printable character, or
   `space`, fails startup and `--check-config` in `shell`, `board` and `detail`:
   `key "s" for action "open_store_picker" in shell context is a printable key, which types
-  into the filter; bind it with alt+ or ctrl+`. The Board and Docs tabs and the store search
+  into the filter; bind it with alt+ or ctrl+`. The Board, Docs and Agents tabs and the store search
   type every such key into their query (`mode.Query`, `internal/mode/query.go`), so an action
   on one would never run there. `isPrintableKey` (`internal/config/keybindings.go`) is the test.
 - **`backspace`, `ctrl+w`, `ctrl+u` and `ctrl+t` are refused in `shell` and `board`.** The first
