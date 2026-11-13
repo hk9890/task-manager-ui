@@ -527,7 +527,7 @@ func (m Model) renderFooter() string {
 	if row, ok := m.agents.SelectedRow(); ok && m.active == mode.Agents {
 		agentRow = &row
 	}
-	hints := footerHints(m.active, m.keys, agentRow, m.docs.Previewing())
+	hints := footerHints(m.active, m.keys, agentRow, m.paneScrolls())
 	// Detail is where the launch keys work, so it is where their being off is
 	// said, before the operator presses one. It leads the legend so that it is
 	// the last hint a narrow terminal drops.
@@ -590,12 +590,24 @@ func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
 	}
 }
 
+// paneScrolls reports whether the active tab draws the pane beside its list,
+// the Docs Preview or the Agent pane, which the page keys then scroll.
+func (m Model) paneScrolls() bool {
+	switch m.active {
+	case mode.Docs:
+		return m.docs.Previewing()
+	case mode.Agents:
+		return m.agents.PaneShown()
+	}
+	return false
+}
+
 // footerHints is the legend of the active surface, the keys an operator needs
 // first leading: KeyLegend drops from the end. agentRow is the row selected on
 // the Agents tab, nil without one: the keys that act on a row are named only
-// with one, and the issue key only with a linked issue. previewing says the
-// Docs tab draws its preview, which the page keys then scroll.
-func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row, previewing bool) []styles.KeyHint {
+// with one, and the issue key only with a linked issue. paneScrolls says the
+// active tab draws the pane beside its list, which the page keys then scroll.
+func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row, paneScrolls bool) []styles.KeyHint {
 	primary := keys.DisplayPrimary
 	pair := func(context, first, second string) string {
 		return primary(context, first) + "/" + primary(context, second)
@@ -615,7 +627,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "detail"},
 		}
 		// Without the preview the page keys page the list, as the move keys say.
-		if previewing {
+		if paneScrolls {
 			hints = append(hints, styles.KeyHint{Key: pair(config.BoardContext, config.BoardActionPageUp, config.BoardActionPageDown), Desc: "scroll"})
 		}
 		return append(hints,
@@ -639,8 +651,13 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 			if agentRow.Issue != nil {
 				hints = append(hints, styles.KeyHint{Key: primary(config.BoardContext, config.BoardActionOpenIssue), Desc: "issue"})
 			}
+			// Only the scroll marker would otherwise say the pane scrolls.
+			if paneScrolls {
+				hints = append(hints, styles.KeyHint{Key: pair(config.DetailContext, config.DetailActionPageDown, config.DetailActionPageUp), Desc: "message"})
+			}
 		}
 		return append(hints,
+			filter, clear,
 			styles.KeyHint{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
 		)

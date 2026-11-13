@@ -341,7 +341,11 @@ func (m *Model) bindStore(services Services) {
 	m.board = boardmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "board"), m.keys)
 	m.docs = docsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "docs"), m.keys)
 	m.search = searchmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "search"), m.keys)
-	m.agents = agentsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "agents"), m.keys)
+	var readAgent agentsmode.Read
+	if services.Agents != nil {
+		readAgent = services.Agents.Read
+	}
+	m.agents = agentsmode.NewModel(m.ctx, services.Repo, logging.WithComponent(services.Logger, "agents"), m.keys, readAgent)
 	m.detail = detail.Model{Keys: m.keys}
 	// The agents belong to the previous store's project. The poll a caller
 	// starts after the bind resolves the new one.
@@ -560,7 +564,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 	refreshCmd := model.refreshAfterStoreChangeCmd()
 	model.trackSurfaceLoads()
-	return model, batchCmds(cmd, refreshCmd, model.ensureSpinnerTickCmd())
+	// Whatever moved the screen, a tab switch or a resize, the Agents tab
+	// learns here whether its pane is on screen to read for.
+	var agentsCmd tea.Cmd
+	if model.agents != nil {
+		agentsCmd = model.scoped(model.agents.SetShown(model.active == mode.Agents))
+	}
+	return model, batchCmds(cmd, refreshCmd, agentsCmd, model.ensureSpinnerTickCmd())
 }
 
 // ensureSpinnerTickCmd arms the spinner tick when work is in flight and no tick

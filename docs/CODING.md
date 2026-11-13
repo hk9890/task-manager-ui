@@ -59,6 +59,10 @@ mise run ci          # the merge gate; see What the tools enforce
      `internal/app/askagent.go`): `Host.Start` without the focus and the link label in the
      unscoped start command, then `Host.Wait` and `Host.Read` in one scoped command on the
      store's context, so a store switch ends the wait and drops the answer. The agent is never closed by the app.
+   - The Agents tab reads the last message of the selected agent itself, through the `Host.Read`
+     the shell hands `agentsmode.NewModel` as `agents.Read`, nil without a host. It is a read, as
+     the tab's issue read is, so it runs on the store's context and is scoped with the tab's other
+     commands; every call that changes an agent stays with the shell.
    - The agents of an issue are `agent.Linked`: its link labels and, on an In Progress issue, its
      comment sessions, merged with the last poll. `agent.Link` is the one copy of that rule; Detail
      and the Agents tab both call it. A link label no live agent holds is `agent.Gone`, on an issue

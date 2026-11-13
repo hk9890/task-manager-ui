@@ -183,14 +183,13 @@ func withSummary(head, summary string) string {
 }
 
 // offerAgentFocus asks whether to bring the agent to the front, in the action
-// modal, only on Detail or the Agents tab with nothing else open: no key
-// typed there is text. Anywhere else the question could take a key from work
-// on screen — a board, docs or search query takes typed text with no prefix,
-// a question, a menu, help, a drag, a surface above the shell — so a warning
-// toast points to the agent dialog and the Agents tab instead.
+// modal, only on Detail with nothing else open: no key typed there is text.
+// Anywhere else the question could take a key from work on screen — a board,
+// docs, agents or search query takes typed text with no prefix, a question, a
+// menu, help, a drag, a surface above the shell — so a warning toast points
+// to the agent dialog and the Agents tab instead.
 func (m *Model) offerAgentFocus(a agent.Agent, question string) tea.Cmd {
-	onAgentSurface := m.active == mode.Detail || m.active == mode.Agents
-	if !onAgentSurface || m.overlayOpen() || m.selMenu != nil || m.press != nil {
+	if m.active != mode.Detail || m.overlayOpen() || m.selMenu != nil || m.press != nil {
 		return m.showToast(question+" (answer it from the agent dialog or the Agents tab)", toaster.StyleWarn)
 	}
 	m.agentFocusOffer = &a

@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"slices"
 	"strings"
 	"unicode"
 
@@ -129,9 +130,18 @@ func (q *Query) set(text string) {
 // Matches reports whether every word of the query is in the issue's title or
 // its ID, whatever the case. An empty query matches every issue.
 func (q Query) Matches(issue domain.IssueSummary) bool {
-	title, id := strings.ToLower(issue.Title), strings.ToLower(issue.ID)
+	return q.MatchesAny(issue.Title, issue.ID)
+}
+
+// MatchesAny reports whether every word of the query is in one of texts,
+// whatever the case. An empty query matches.
+func (q Query) MatchesAny(texts ...string) bool {
+	folded := make([]string, len(texts))
+	for i, text := range texts {
+		folded[i] = strings.ToLower(text)
+	}
 	for _, word := range q.words {
-		if !strings.Contains(title, word) && !strings.Contains(id, word) {
+		if !slices.ContainsFunc(folded, func(text string) bool { return strings.Contains(text, word) }) {
 			return false
 		}
 	}

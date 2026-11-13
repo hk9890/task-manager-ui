@@ -43,7 +43,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: shell(config.ShellActionEscape), Desc: "back to where the surface was opened from; hide a toast"},
 		}},
 		{Title: "Filter and search", Entries: []helpscreen.Entry{
-			{Key: "type", Desc: "filter the rows of a tab by title or ID; every word must match"},
+			{Key: "type", Desc: "filter the rows of a tab by title or ID, on the Agents tab also by tab and activity; every word must match"},
 			{Key: "backspace", Desc: "delete a character of the query"},
 			{Key: "ctrl+w", Desc: "delete a word"},
 			{Key: "ctrl+u", Desc: "delete the query"},
@@ -62,6 +62,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
 			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent, asking first while it is running or needs you; unlink a gone one"},
 			{Key: board(config.BoardActionOpenIssue), Desc: "open the issue the selected agent is linked to in Detail"},
+			{Key: pair(detail(config.DetailActionPageUp), detail(config.DetailActionPageDown)), Desc: "from 100 columns, scroll the Agent pane, not the list"},
 		}},
 		{Title: "Issue", Entries: []helpscreen.Entry{
 			{Key: shell(config.ShellActionCreateIssue), Desc: "create an issue, in the issue editor"},
@@ -120,7 +121,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 			{Key: "click", Desc: "press a button: on the menu bar, in a Detail pane, Save and Cancel in the issue editor"},
 			{Key: "click", Desc: "an agent in the Details pane: select it on the Agents tab"},
 			{Key: "second click", Desc: "open the row; on the Agents tab, bring the agent to the front"},
-			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the docs Preview, the text of the issue editor and this screen"},
+			{Key: "wheel", Desc: "move the selection, or scroll Detail text, the docs Preview, the Agent pane, the text of the issue editor and this screen"},
 			{Key: "drag", Desc: "select a box of text; letting go sends it to the terminal clipboard and opens a menu"},
 			{Key: "shift+drag", Desc: "select text with the terminal instead"},
 		}},

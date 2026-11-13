@@ -120,7 +120,7 @@ The rest is the same in every set, and each has one definition:
 | `╭ ╮ ╰ ╯ ─ │` | a section border (a modal or toast frames itself with `lipgloss.RoundedBorder()`) | `styles.FormSection` |
 | `░` | skeleton loading bar | `issuerow.SkeletonGlyph` |
 | `├─ └─ │` | comment output tree | `internal/ui/detail/comments.go` |
-| `─` in `BorderDefaultColor` | the rule under the Content header and between two comments | `contentHeaderRule` in `internal/ui/detail/details.go` |
+| `─` in `BorderDefaultColor` | the rule under the Content header, between two comments, and under the head of the Agent pane | `styles.ContentRule` in `internal/ui/styles/format.go` |
 | `• ` | a list item of the Details pane | `internal/ui/detail/metadata.go` |
 | ` • ` | separator between legend hints | `legendSeparator` in `internal/ui/styles/legend.go` |
 | `·` | separator between fields, between menu-bar buttons and between the buttons in a pane | inline at the call site; `buttonSeparator` in `internal/ui/detail/buttons.go` |
@@ -373,8 +373,14 @@ opens Detail.
 ### The Agents tab
 
 The Agents tab (`internal/mode/agents`, drawn by `internal/ui/agents`) lists every agent of the
-store's project. It has no query line: a rule, then one box titled `Agents` with the number of
-agents.
+store's project. It draws the list head of the board — the rule and the query line
+(`board.RenderQueryLine`) — then one box titled `Agents` with the number of agents and, from
+`styles.SplitMinWidth` columns, the Agent pane beside it, at the widths `styles.SplitWidths` gives.
+
+- The query filters the rows in memory (`Model.matching`): every word is in the agent's title, its
+  label or what it does, or in the ID or the title of its issue (`Query.MatchesAny`). The selection
+  follows the [query-line rules](#keys-and-the-query-line). The rows mark each query word
+  (`issuerow.MarkMatches`). A query that matches nothing says `No agent matches the filter`.
 
 - Two groups, each under a muted bold heading with its count: `Linked`, the agents linked to an
   issue, then `Not linked`, the live agents linked to none. A group with no agent is left out.
@@ -392,9 +398,28 @@ agents.
   status (`agentLine`, `internal/ui/agents/agents.go`). The second, muted, is the label when the title is a
   name, and the ID and the title of the linked issue. The selection gutter and the band stand on
   both lines.
-- Without a row the box says `No agents` and, on the next line, why: no agent host, no project
+- Without a row the box says `No agents` and, wrapped under it, why: no agent host, no project
   path, the path not accessible, no project of the host, the error of the last poll, or that the
   host has not answered yet (`Model.agentsAbsent`).
+- The Agent pane (`RenderPane`, `internal/ui/agents/pane.go`) is a `FormSection` that never takes
+  the focus. It shows the selected agent: the title and the status as the row draws them, what it
+  does wrapped and muted, a rule in `BorderDefaultColor`, the linked issue as the Content pane of
+  Detail heads it — type, priority, status and ID, the title bold under them — or `none`, the label
+  when the title is a name, the session, then `Last message` as markdown, also where it looks
+  like plain text (`markdown.Renderer.RenderMarkdown`): an agent writes markdown.
+- The last message is `agent.Host.Read`, which the shell hands the tab as `agents.Read`. It is read
+  once the selection rests on an agent for `readPause`, only while the pane is on screen, and never
+  for a gone agent (`Model.readSoon`). The shell calls `agents.Model.SetShown` after every message
+  (`Model.Update`), so a tab switch or a resize that puts the pane on screen starts the read, and
+  the tab reads nothing while another surface is up. One read per agent is in flight at a time.
+- The message is kept by agent with what the agent did when it was read; a poll that reports
+  another activity or status reads it again, and the older message stays on screen until the answer
+  comes. A failed read is tried again on the next poll, never at once. The tab's reload forgets
+  every message.
+- While the pane is drawn the `page_up` and `page_down` keys of the detail context scroll it by its
+  height less the two scroll-marker lines, and the wheel over it scrolls it (`OnPane`); below
+  `styles.SplitMinWidth` they page the list. A new selection starts the pane at its top.
+- `agents.Model.Select` clears the query, which could hide the agent asked for.
 - The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
   the front and resumes a gone one first (`ActionOpenAgent`). A resume raises an info toast,
   `Resuming <title>…`, and turns the header spinner until it ends; an Enter on the same session
@@ -406,7 +431,9 @@ agents.
   the toast an empty selection raises. The legend names the keys that act on the selected row as
   they act on it: `open_detail` as `resume` and `close_agent` as `unlink` on a gone row,
   `open_issue` only on a linked one, and none of the three without a row (`footerHints`,
-  `internal/app/render.go`); the tab has no button.
+  `internal/app/render.go`), then the page keys of the detail context as `message` while the
+  Agent pane is on screen; `type` → `filter` and Escape → `clear` follow them. The tab has no
+  button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
   none, so the issue keys act on that issue. A read that changes that issue, its status say,
   announces it again. Until the live agents and the linked issues are both known the selection
@@ -414,7 +441,8 @@ agents.
   selection stays on its agent when a poll moves the rows. A failed poll empties the tab but keeps that agent, and the next poll that answers selects
   it again. A Detail opened with `open_issue` keeps its issue while a poll moves or removes the row
   under it: the shell holds that issue as a drill-in (`ActionOpenDetail` in `Model.update`).
-- One click selects a row, a second brings its agent to the front; the wheel moves the selection.
+- One click selects a row, a second brings its agent to the front; the wheel over the list moves the
+  selection.
 - The agents come from the shell's poll (`Model.publishAgents`), the comment links with them in
   one `agents.Model.SetAgents`. The tab reads the issues with a link label itself, with
   `SearchIssuesQuery.LabelContains`, on its first entry, its reload and its auto refresh. Its
@@ -431,7 +459,7 @@ agents.
 
 ## Keys and the query line
 
-Board, Docs and the store search each hold one `mode.Query` (`internal/mode/query.go`) and draw it
+Board, Docs, Agents and the store search each hold one `mode.Query` (`internal/mode/query.go`) and draw it
 on the line above their columns, under a rule. It is always live: no key enters it and nothing
 focuses it.
 
@@ -442,8 +470,8 @@ focuses it.
   to an `alt+` chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything
   else ([CONFIGURATION.md](CONFIGURATION.md#keybindings)).
 - A built-in key that prints nothing — `backspace`, `ctrl+w`, `ctrl+u`, the scope key of the store
-  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in the
-  `shell` and `board` contexts. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
+  search — is also in `reservedKeys` (`internal/config/keybindings.go`), which refuses it in every
+  context but `modal`. `TestReservedKeysOfTheConfigAreTheKeysTheSurfacesTake`
   (`internal/mode/search/model_test.go`) fails while that list and the surfaces disagree.
 - The startup-error screen (`internal/ui/fatalerror`) is the one exception: it quits on `q` as well
   as on the quit key. It has no query line and no other action, so the key can type into nothing.
@@ -482,7 +510,7 @@ focuses it.
 - `board.Render` draws the list head (`renderHead`, `internal/ui/board/board.go`), two lines: a
   rule from `styles.Rule`, across the whole width, and the query line, indented
   one cell so the prompt stands under the label of the first menu-bar button. `HitTest` reports no column on
-  either. The query line (`renderQueryLine`, `internal/ui/board/query.go`) comes from
+  either. The query line (`RenderQueryLine`, `internal/ui/board/query.go`) comes from
   `State.Query` and `State.Placeholder`: `Glyphs.Prompt`, the text, then a cursor block, the prompt
   and the cursor in `QueryAccentColor`. An empty query shows the placeholder in `TextMutedColor`,
   so the line says what a key press does. A text wider than the line loses its front. A board too
@@ -860,10 +888,10 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   (`Model.offerAgentFocus`). The delete and close questions have no input, a
   `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
   `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
-  `storeForm.kind`. The focus offer opens only on Detail or the Agents tab with no overlay, menu or
-  drag open: no key typed there is text. Board, Docs and the store search take a typed key as
-  query text with no prefix, so anywhere else a warning toast names the agent dialog and the
-  Agents tab instead. A new field of an issue is a row of the issue editor, never a modal.
+  `storeForm.kind`. The focus offer opens only on Detail with no overlay, menu or drag open: no
+  key typed there is text. Board, Docs, Agents and the store search take a typed key as query text
+  with no prefix, so anywhere else a warning toast names the agent dialog and the Agents tab
+  instead; on the Agents tab the agent's row says `needs you` and comes first. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

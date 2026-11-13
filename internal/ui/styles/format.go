@@ -17,6 +17,13 @@ func Rule(width int) string {
 	return lipgloss.NewStyle().Foreground(ShellRuleColor).Render(strings.Repeat(ruleGlyph, max(0, width)))
 }
 
+// ContentRule is the thin divider inside a pane, in the border colour: under
+// the header of Detail's Content pane, between two comments, and under the
+// head of the Agent pane.
+func ContentRule(width int) string {
+	return lipgloss.NewStyle().Foreground(BorderDefaultColor).Render(strings.Repeat(ruleGlyph, max(0, width)))
+}
+
 // InsetRule is the rule under the first line of the screen, the menu bar or a
 // full screen's title. It starts one cell in, in the column that line's text
 // starts in, and ends at width.
