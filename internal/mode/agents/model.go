@@ -593,6 +593,9 @@ func (m *Model) settled() bool {
 	return m.liveKnown && m.issuesKnown && !m.loading
 }
 
+// PaneShown reports whether the Agent pane is on screen, for the legend.
+func (m *Model) PaneShown() bool { return m.paneShown }
+
 // SelectedRow is the selected row, for the legend: ok is false while the tab
 // has no row.
 func (m *Model) SelectedRow() (uiagents.Row, bool) {

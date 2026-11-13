@@ -527,7 +527,7 @@ func (m Model) renderFooter() string {
 	if row, ok := m.agents.SelectedRow(); ok && m.active == mode.Agents {
 		agentRow = &row
 	}
-	hints := footerHints(m.active, m.keys, agentRow)
+	hints := footerHints(m.active, m.keys, agentRow, m.agents.PaneShown())
 	// Detail is where the launch keys work, so it is where their being off is
 	// said, before the operator presses one. It leads the legend so that it is
 	// the last hint a narrow terminal drops.
@@ -594,7 +594,7 @@ func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
 // first leading: KeyLegend drops from the end. agentRow is the row selected on
 // the Agents tab, nil without one: the keys that act on a row are named only
 // with one, and the issue key only with a linked issue.
-func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row) []styles.KeyHint {
+func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiagents.Row, agentPane bool) []styles.KeyHint {
 	primary := keys.DisplayPrimary
 	pair := func(context, first, second string) string {
 		return primary(context, first) + "/" + primary(context, second)
@@ -631,6 +631,10 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 			)
 			if agentRow.Issue != nil {
 				hints = append(hints, styles.KeyHint{Key: primary(config.BoardContext, config.BoardActionOpenIssue), Desc: "issue"})
+			}
+			// Only the scroll marker would otherwise say the pane scrolls.
+			if agentPane {
+				hints = append(hints, styles.KeyHint{Key: pair(config.DetailContext, config.DetailActionPageDown, config.DetailActionPageUp), Desc: "message"})
 			}
 		}
 		return append(hints,

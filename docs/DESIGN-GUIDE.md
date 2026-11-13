@@ -392,7 +392,8 @@ store's project. It draws the list head of the board — the rule and the query 
   the toast an empty selection raises. The legend names the keys that act on the selected row as
   they act on it: `open_detail` as `resume` and `close_agent` as `unlink` on a gone row,
   `open_issue` only on a linked one, and none of the three without a row (`footerHints`,
-  `internal/app/render.go`); `type` → `filter` and Escape → `clear` follow them. The tab has no
+  `internal/app/render.go`), then the page keys of the detail context as `message` while the
+  Agent pane is on screen; `type` → `filter` and Escape → `clear` follow them. The tab has no
   button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
   none, so the issue keys act on that issue. A read that changes that issue, its status say,
