@@ -13,10 +13,14 @@ carries its `vX.Y.Z` section of this file as its notes.
   actions: `alt+i` is `launch_agent`, `alt+o` is `open_issue` and `alt+x` is
   `close_agent`. If your config gives one of these keys to another action in
   the same group, startup and `--check-config` fail, for example with
-  `key "alt+i" conflicts between actions "launch_agent" and "update_issue" in
-  shell context`. Give the new action a different key, for example
+  this error:
+  `key "alt+i" conflicts between actions "launch_agent" and "update_issue" in shell context`.
+  Give the new action a different key, for example
   `keybindings.shell.launch_agent: [ctrl+g]`, or move your own action to a
-  different key.
+  different key. If your config binds one of these keys in another group,
+  for example `alt+i` in the `detail` keys or `alt+o` in the `shell` keys, the
+  app starts, but the two actions get in each other's way. Move one of them to
+  a different key.
 - **Start a coding agent on an issue from Detail.** This needs `revier` on
   the `PATH` and a store whose project is a revier project. Press `alt+i`, or
   click the `agent` button on the ID line, to open `Agents on <id>`. The
@@ -30,8 +34,8 @@ carries its `vX.Y.Z` section of this file as its notes.
   agent status shows and a start fails with an error toast.
 - **Issues show their linked agents.** An agent started from taskmgr-ui is
   linked through an `agent-session:` label on the issue: taskmgr-ui hides the
-  label, and `taskmgr` shows it. An agent that commented on an In Progress
-  issue is linked too. The Details pane (before: Metadata) lists the linked
+  label, and `taskmgr` shows it. While an agent runs, it is linked too to an
+  In Progress issue that it commented on. The Details pane (before: Metadata) lists the linked
   agents under `Agents`, with the status `running`, `idle`, `needs you` or
   `gone`. A board card with a live linked agent shows a mark: green while the
   agent runs, grey while it is idle, orange while it needs you.
@@ -47,20 +51,21 @@ carries its `vX.Y.Z` section of this file as its notes.
   mouse wheel over the pane scroll it. A click on an agent in the Details pane
   opens this tab on that agent. With no agents, the tab says why.
 - **Letting go of a drag now opens a menu beside the pointer.** The text still
-  goes to the clipboard first, as it is drawn, and the menu is headed `Sent N
-  characters to the clipboard`. `Quote in a comment on <id>` opens the comment
+  goes to the clipboard first, as it is drawn, and the menu is headed
+  `Sent N characters to the clipboard`. `Quote in a comment on <id>` opens the comment
   editor with the text as a Markdown quote. `Search the store` opens the store
   search with the text as its query. The quote and the search leave out pane
   borders and the screen indent. Use `up`/`down` and `enter`, or click an
   entry. `esc` or a click outside the menu closes it, and that click does
   nothing else. The entries are off where they would drop work in progress,
   such as in the issue editor.
-- **Ask an agent about selected text.** The drag menu has `Ask an agent about
-  it on <id>`. Type a one-line instruction and press `Ask`. The agent works on
+- **Ask an agent about selected text.** The drag menu has
+  `Ask an agent about it on <id>`. Type a one-line instruction and press `Ask`. The agent works on
   the issue in the background. When it is done, the issue loads again and a
   toast shows its summary. taskmgr-ui waits up to 30 minutes for the answer.
   After that, a toast says the agent did not report back, and the agent keeps
-  running. If the agent has a question or needs you, a dialog on Detail asks
+  running. A switch to another store ends the wait: no toast comes, and the
+  agent keeps running. If the agent has a question or needs you, a dialog on Detail asks
   `Bring it to the front?`. On any other screen, a toast tells you to answer
   from the agent dialog or the Agents tab. The entry is off on a closed issue.
 - **The Docs tab shows the selected doc in a Preview pane beside the list.**
@@ -78,13 +83,16 @@ carries its `vX.Y.Z` section of this file as its notes.
 - **Fixed: a save to a busy store could wait forever on `Saving…`.** When
   another write or a running `taskmgr sync` held the store, a save waited with
   no limit. Now the save fails after 10 seconds with an error that ends
-  `store busy: another write holds the lock; try again`. Nothing is written,
-  and your text stays in the editor, so you can save again. This applies to
+  `store busy: another write holds the lock; try again`. The write that
+  timed out writes nothing. When a save also closes the issue, its other
+  changes can already be saved, and the editor then says
+  `The other changes are saved.` Your text stays in the editor, so you can
+  save again. This applies to
   every change to an issue or a comment.
 - **Fixed: a comment that quotes three lines or more was drawn as plain
   text,** with its `>` marks, like a log. It is now drawn as a quote.
-- **Changed: the Docs list no longer shows the `older than 1 day` and `older
-  than 1 week` dividers.** The Board still shows them.
+- **Changed: the Docs list no longer shows the `older than 1 day` and
+  `older than 1 week` dividers.** The Board still shows them.
 
 ## v0.21.0
 
