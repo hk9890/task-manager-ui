@@ -35,7 +35,7 @@ func TestRenderQueryLine(t *testing.T) {
 		{name: "long text is cut from the front", query: "abcdefgh", width: 10, want: prompt + "…cdefgh "},
 	}
 	for _, tc := range cases {
-		line := renderQueryLine(tc.query, "filter issues", tc.width)
+		line := RenderQueryLine(tc.query, "filter issues", tc.width)
 		if got := plain(line); got != tc.want {
 			t.Errorf("%s: line %q, want %q", tc.name, got, tc.want)
 		}
@@ -54,12 +54,12 @@ func TestRenderQueryLineDrawsPromptCursorAndPlaceholderInTheirRoles(t *testing.T
 	muted := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 	prompt := accent.Render(styles.Glyphs.Prompt + " ")
 
-	empty := renderQueryLine("", "filter issues", 40)
+	empty := RenderQueryLine("", "filter issues", 40)
 	if want := prompt + accent.Reverse(true).Render("f") + muted.Render("ilter issues"); empty != want {
 		t.Errorf("empty line %q, want %q", empty, want)
 	}
 
-	typed := renderQueryLine("abc", "filter issues", 40)
+	typed := RenderQueryLine("abc", "filter issues", 40)
 	if !strings.HasPrefix(typed, prompt) || !strings.HasSuffix(typed, accent.Reverse(true).Render(" ")) {
 		t.Errorf("typed line %q does not start with the prompt and end with the cursor block", typed)
 	}

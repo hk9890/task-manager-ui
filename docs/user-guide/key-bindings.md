@@ -116,7 +116,17 @@ open issue. Without an agent the tab says why: no agent host, no project path,
 the path not accessible, the path is no revier project, the error revier gave, or that
 revier has not answered yet.
 
-- `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
+Type to filter the agents: every word must be in the agent's name, its tab or
+what it does, or in the ID or title of its issue. `esc` clears the filter.
+
+From 100 columns the Agent pane stands beside the list. It shows the selected
+agent: its status and what it does, its issue, its tab and session, and the last
+thing it said, which revier reads once the selection rests on the agent and again
+when the agent moves on to other work. A `gone` agent has nothing to read.
+
+- `up`, `down`, `home`, `end` — move
+- `pgup`, `pgdown` — scroll the Agent pane; without the pane, move a page. The
+  wheel over the pane scrolls it too
 - `enter` — bring the selected agent to the front; resume a `gone` one first,
   and the legend reads `enter resume`. A resume takes seconds: a toast says it
   started, the spinner turns until it ends, and a second `enter` meanwhile opens

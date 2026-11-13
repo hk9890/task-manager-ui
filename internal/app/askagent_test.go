@@ -279,7 +279,9 @@ func TestAskIsOffOnAClosedIssueOfTheAgentsTab(t *testing.T) {
 		t.Fatalf("fixture: the selection is %+v, want closed tm-1", sel)
 	}
 	m.copyText = func(string) tea.Cmd { return nil }
-	x, y := testui.FindCell(t, testui.View(m), "Ready first")
+	// The list row, not the Agent pane beside it.
+	x, y := testui.FindCell(t, testui.View(m), "tm-1  Ready first")
+	x += len("tm-1  ")
 	m = send(t, m, testui.Click(x, y, tea.MouseLeft))
 	m = send(t, m, testui.Drag(x+4, y))
 	m = send(t, m, testui.Release(x+4, y))

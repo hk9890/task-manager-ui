@@ -291,7 +291,7 @@ func TestAgentsAreOffWithoutAnAccessibleProjectPath(t *testing.T) {
 	for _, tc := range []struct {
 		name, root, empty, toast string
 	}{
-		{"no project path", "", "the store has no project path to ask the agent host about", "Agents are off: the store has no project path"},
+		{"no project path", "", "the store has no project path", "Agents are off: the store has no project path"},
 		{"path not accessible", missing, "the project path is not accessible", "Agents are off: project path not accessible"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

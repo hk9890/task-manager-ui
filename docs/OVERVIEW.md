@@ -28,7 +28,8 @@ internal/
     board/                  the columns and the query line above them; the docs tab and the
                             store search draw through it too
     detail/                 the issue detail panes, the comments and the buttons in them
-    agents/                 the list of the Agents tab: the agents in two groups, two lines each
+    agents/                 the Agents tab: the query line, the agents in two groups, two lines
+                            each, and the Agent pane beside them on a wide screen
     storepicker/            the full-screen store list; not a tab, so it renders instead of the shell
     configscreen/           the full-screen configuration screen: the theme and the glyph set;
                             it renders instead of the shell too

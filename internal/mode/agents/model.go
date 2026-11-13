@@ -1,8 +1,10 @@
 // Package agents is the Agents tab: every agent of the store's project, those
-// linked to an issue and those that are not. The shell hands it the agents of
-// each poll and the issues In Progress agents commented on; the tab reads the
-// issues that carry a link label itself. Its keys act on the selected agent
-// through the shell, which owns the agent host.
+// linked to an issue and those that are not, filtered by the query, and on a
+// wide screen the Agent pane of the selected one. The shell hands it the
+// agents of each poll and the issues In Progress agents commented on; the tab
+// reads the issues that carry a link label itself, and the last message of the
+// selected agent through the read the shell gives it. Its keys act on the
+// selected agent through the shell, which owns the agent host.
 package agents
 
 import (
@@ -10,6 +12,7 @@ import (
 	"log/slog"
 	"reflect"
 	"slices"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -19,7 +22,46 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/repository"
 	uiagents "github.com/hk9890/task-manager-ui/internal/ui/agents"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
+
+const (
+	queryPlaceholder = "filter agents"
+	// readPause is how long the selection rests on an agent before its last
+	// message is read: moving through the list reads nothing.
+	readPause = 250 * time.Millisecond
+	// paneWheelLines is the lines one wheel notch scrolls the pane.
+	paneWheelLines = 3
+)
+
+// Read is the last thing agent a said: agent.Host.Read.
+type Read func(ctx context.Context, a agent.Agent) (string, error)
+
+// readDueMsg ends the pause before the read of the agent of key.
+type readDueMsg struct {
+	key        string
+	generation int
+}
+
+// messageReadMsg carries the last message of the agent of key, read while it
+// did what activity and status say.
+type messageReadMsg struct {
+	key      string
+	activity string
+	status   agent.Status
+	message  string
+	err      error
+}
+
+// lastMessage is the last read message of one agent, and what the agent did
+// when it was read: a poll that reports another activity or status makes it
+// stale.
+type lastMessage struct {
+	activity string
+	status   agent.Status
+	message  string
+	err      error
+}
 
 // linkedIssuesMsg carries the issues that carry a link label.
 type linkedIssuesMsg struct {
@@ -31,6 +73,7 @@ type linkedIssuesMsg struct {
 type Model struct {
 	ctx    context.Context
 	repo   repository.Repository
+	read   Read
 	logger *slog.Logger
 	keys   config.ResolvedKeyBindings
 	width  int
@@ -52,7 +95,12 @@ type Model struct {
 	// read may still carry on an open issue: a read begun before the unlink.
 	dropped map[string]bool
 
+	// all is every row; rows is the rows the query matches, and is all
+	// itself while the query is empty. Selection, scroll, hit test and View
+	// read rows.
+	all      []uiagents.Row
 	rows     []uiagents.Row
+	query    mode.Query
 	selected int
 	offset   int
 	// chosen is the key of the agent the selection belongs on. It outlives
@@ -64,18 +112,34 @@ type Model struct {
 
 	pointer *mode.Pointer
 	clicks  mode.ClickTracker
+
+	// entered is set by Init: the tab reads no message before the operator
+	// first opens it.
+	entered bool
+	// messages is the last read message of each agent, by key; reading the
+	// key of the read in flight, and readGeneration the pause that may start
+	// the next one. paneOffset is the scroll of the Agent pane.
+	messages       map[string]lastMessage
+	reading        string
+	readGeneration int
+	paneOffset     int
 }
 
-// NewModel builds the Agents tab.
-func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logger, keys config.ResolvedKeyBindings) *Model {
+// NewModel builds the Agents tab. read is nil when there is no agent host:
+// the pane then reads no message.
+func NewModel(ctx context.Context, repo repository.Repository, logger *slog.Logger, keys config.ResolvedKeyBindings, read Read) *Model {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &Model{ctx: ctx, repo: repo, logger: logger, keys: keys}
+	return &Model{ctx: ctx, repo: repo, read: read, logger: logger, keys: keys, messages: make(map[string]lastMessage)}
 }
 
-// Init reads the issues that carry a link label.
-func (m *Model) Init() tea.Cmd { return m.load() }
+// Init reads the issues that carry a link label, and the last message of the
+// selected agent.
+func (m *Model) Init() tea.Cmd {
+	m.entered = true
+	return tea.Batch(m.load(), m.readSoon())
+}
 
 // Reload reads them again; nil while a read is in flight.
 func (m *Model) Reload() tea.Cmd { return m.load() }
@@ -106,16 +170,22 @@ func (m *Model) IsLoading() bool { return m.loading }
 func (m *Model) SetSize(width, height int) {
 	m.width, m.height = width, height
 	m.offset = uiagents.EnsureVisible(m.rows, m.selected, m.offset, m.height)
+	m.paneOffset = min(m.paneOffset, uiagents.PaneMaxOffset(m.viewState()))
 }
 
-// ClearQuery does nothing: the tab has no query.
-func (m *Model) ClearQuery() (bool, tea.Cmd) { return false, nil }
+// ClearQuery empties the query, and reports whether it held text.
+func (m *Model) ClearQuery() (bool, tea.Cmd) {
+	if !m.query.Clear() {
+		return false, nil
+	}
+	return true, m.queryChanged()
+}
 
-// HasQuery is false: the tab has no query.
-func (m *Model) HasQuery() bool { return false }
+// HasQuery reports whether the query holds text.
+func (m *Model) HasQuery() bool { return !m.query.Empty() }
 
-// TakesKey is false: every key of the tab is a binding.
-func (m *Model) TakesKey(tea.KeyPressMsg) bool { return false }
+// TakesKey reports whether msg is typed into the query.
+func (m *Model) TakesKey(msg tea.KeyPressMsg) bool { return mode.IsQueryKey(msg) }
 
 // SetAgents replaces the live agents with those of a poll, and the In
 // Progress issues agents commented on with the board's. known is false when
@@ -181,17 +251,66 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		}
 		m.issues, m.issuesKnown = m.withoutDropped(msg.issues), true
 		return m.rebuild()
+	case readDueMsg:
+		return m.readDue(msg)
+	case messageReadMsg:
+		return m.messageRead(msg)
 	case mode.MouseMsg:
 		return m.mouse(msg)
+	case tea.PasteMsg:
+		if !m.query.Paste(msg.Content) {
+			return nil
+		}
+		return m.queryChanged()
 	case tea.KeyPressMsg:
+		if consumed, changed := m.query.HandleKey(msg); consumed {
+			if !changed {
+				return nil
+			}
+			return m.queryChanged()
+		}
 		return m.key(msg)
 	}
 	return nil
 }
 
+// queryChanged filters the rows again. The selection stays on its agent while
+// it still matches, and otherwise takes the first match.
+func (m *Model) queryChanged() tea.Cmd {
+	if !slices.ContainsFunc(m.matching(m.all), func(r uiagents.Row) bool { return r.Agent.Key() == m.chosen }) {
+		m.selected, m.chosen = 0, ""
+	}
+	return m.rebuild()
+}
+
+// matching is the rows the query matches: on the agent's title, label and
+// activity, and the ID and title of its issue.
+func (m *Model) matching(rows []uiagents.Row) []uiagents.Row {
+	if m.query.Empty() {
+		return rows
+	}
+	return slices.DeleteFunc(slices.Clone(rows), func(r uiagents.Row) bool {
+		texts := []string{r.Agent.Title(), r.Agent.Label, r.Agent.Activity}
+		if r.Issue != nil {
+			texts = append(texts, r.Issue.ID, r.Issue.Title)
+		}
+		return !m.query.MatchesAny(texts...)
+	})
+}
+
 func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	match := func(action string) bool { return m.keys.Match(config.BoardContext, action, msg) }
 	page := max(1, uiagents.InnerHeight(m.height)/uiagents.RowLines)
+	if m.split() {
+		switch {
+		case m.keys.Match(config.DetailContext, config.DetailActionPageUp, msg):
+			m.scrollPane(-uiagents.InnerHeight(m.height))
+			return nil
+		case m.keys.Match(config.DetailContext, config.DetailActionPageDown, msg):
+			m.scrollPane(uiagents.InnerHeight(m.height))
+			return nil
+		}
+	}
 	switch {
 	case match(config.BoardActionMoveUp):
 		return m.move(-1)
@@ -231,10 +350,19 @@ func (m *Model) mouse(msg mode.MouseMsg) tea.Cmd {
 	if m.pointer == nil {
 		return nil
 	}
+	onPane := uiagents.OnPane(m.viewState(), msg.X, msg.Y)
 	switch msg.Kind {
 	case mode.MouseWheelUp:
+		if onPane {
+			m.scrollPane(-paneWheelLines)
+			return nil
+		}
 		return m.move(-1)
 	case mode.MouseWheelDown:
+		if onPane {
+			m.scrollPane(paneWheelLines)
+			return nil
+		}
 		return m.move(1)
 	case mode.MouseClick:
 		target := ""
@@ -279,7 +407,88 @@ func (m *Model) viewState() uiagents.State {
 		Height:       m.height,
 		Empty:        empty,
 		Hover:        -1,
+		Query:        m.query.Text(),
+		Placeholder:  queryPlaceholder,
+		Pane:         m.pane(),
 	}
+}
+
+// pane is what the Agent pane shows of the selected agent's last message.
+// A stale message stays on screen while the next one is read.
+func (m *Model) pane() uiagents.Pane {
+	pane := uiagents.Pane{ScrollOffset: m.paneOffset}
+	row, ok := m.selectedRow()
+	if !ok {
+		return pane
+	}
+	last, known := m.messages[row.Agent.Key()]
+	switch {
+	case !known && m.read != nil:
+		pane.Reading = true
+	case known && last.err != nil:
+		pane.Error = last.err.Error()
+	case known:
+		pane.Message = last.message
+	}
+	return pane
+}
+
+func (m *Model) split() bool {
+	_, _, split := styles.SplitWidths(m.width)
+	return split
+}
+
+func (m *Model) scrollPane(delta int) {
+	m.paneOffset = max(0, min(m.paneOffset+delta, uiagents.PaneMaxOffset(m.viewState())))
+}
+
+// readSoon starts the pause before the read of the selected agent's last
+// message, when the pane is drawn and that message is not known or stale. A
+// later call ends the pause before it.
+func (m *Model) readSoon() tea.Cmd {
+	m.readGeneration++
+	row, ok := m.selectedRow()
+	if !ok || !m.wantsRead(row.Agent) {
+		return nil
+	}
+	due := readDueMsg{key: row.Agent.Key(), generation: m.readGeneration}
+	return tea.Tick(readPause, func(time.Time) tea.Msg { return due })
+}
+
+func (m *Model) wantsRead(a agent.Agent) bool {
+	if m.read == nil || !m.entered || !m.split() || a.Status == agent.Gone || m.reading == a.Key() {
+		return false
+	}
+	last, known := m.messages[a.Key()]
+	return !known || last.activity != a.Activity || last.status != a.Status
+}
+
+// readDue reads the selected agent's last message when the selection rested
+// on it for the whole pause.
+func (m *Model) readDue(msg readDueMsg) tea.Cmd {
+	row, ok := m.selectedRow()
+	if msg.generation != m.readGeneration || !ok || row.Agent.Key() != msg.key || !m.wantsRead(row.Agent) {
+		return nil
+	}
+	a, ctx, read := row.Agent, m.ctx, m.read
+	m.reading = a.Key()
+	return func() tea.Msg {
+		message, err := read(ctx, a)
+		return messageReadMsg{key: a.Key(), activity: a.Activity, status: a.Status, message: message, err: err}
+	}
+}
+
+func (m *Model) messageRead(msg messageReadMsg) tea.Cmd {
+	if m.reading == msg.key {
+		m.reading = ""
+	}
+	if msg.err != nil {
+		m.logger.Debug("reading the last message of an agent failed", "error", msg.err.Error())
+	}
+	m.messages[msg.key] = lastMessage{activity: msg.activity, status: msg.status, message: msg.message, err: msg.err}
+	m.paneOffset = min(m.paneOffset, uiagents.PaneMaxOffset(m.viewState()))
+	// The agent may have moved on while it was read.
+	return m.readSoon()
 }
 
 func (m *Model) move(delta int) tea.Cmd {
@@ -293,7 +502,8 @@ func (m *Model) move(delta int) tea.Cmd {
 	if m.selected == previous {
 		return nil
 	}
-	return m.selectionChangedCmd()
+	m.paneOffset = 0
+	return tea.Batch(m.selectionChangedCmd(), m.readSoon())
 }
 
 // rebuild works out the rows again and keeps the selection on the agent it
@@ -302,8 +512,9 @@ func (m *Model) move(delta int) tea.Cmd {
 // key is given up; once they are settled, an agent without a row is gone
 // from the tab and the selection stays on the row at its place.
 func (m *Model) rebuild() tea.Cmd {
-	before := m.selectedIssue()
-	m.rows = buildRows(m.live, m.liveKnown, m.issues, m.commentLinks)
+	before, beforeKey := m.selectedIssue(), m.selectedKey()
+	m.all = buildRows(m.live, m.liveKnown, m.issues, m.commentLinks)
+	m.rows = m.matching(m.all)
 	rowOf := func(key string) int {
 		if key == "" {
 			return -1
@@ -326,12 +537,16 @@ func (m *Model) rebuild() tea.Cmd {
 		m.chosen = m.selectedKey()
 	}
 	m.offset = uiagents.EnsureVisible(m.rows, m.selected, m.offset, m.height)
+	if m.selectedKey() != beforeKey {
+		m.paneOffset = 0
+	}
+	read := m.readSoon()
 	// A read that changed the selected issue, its status say, announces it
 	// too: the shell's issue keys and Ask read the selection.
 	if reflect.DeepEqual(m.selectedIssue(), before) {
-		return nil
+		return read
 	}
-	return m.selectionChangedCmd()
+	return tea.Batch(m.selectionChangedCmd(), read)
 }
 
 // settled reports whether the rows are final until the next poll or read:

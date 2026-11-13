@@ -1,7 +1,8 @@
-// Package agents renders the Agents tab: the agents of the store's project in
-// two groups, those linked to an issue and those that are not, each agent a
-// row of two lines. HitTest reads the same layout, so a click lands on the row
-// drawn under it.
+// Package agents renders the Agents tab: the query line, the agents of the
+// store's project in two groups, those linked to an issue and those that are
+// not, each agent a row of two lines, and on a wide screen the Agent pane
+// beside them (pane.go). HitTest reads the same layout, so a click lands on
+// the row drawn under it.
 package agents
 
 import (
@@ -13,6 +14,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/displaytext"
 	"github.com/hk9890/task-manager-ui/internal/domain"
+	"github.com/hk9890/task-manager-ui/internal/ui/board"
+	"github.com/hk9890/task-manager-ui/internal/ui/shared/issuerow"
 	"github.com/hk9890/task-manager-ui/internal/ui/shared/textutil"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
@@ -38,11 +41,21 @@ type State struct {
 	Empty string
 	// Hover is the row under the pointer, -1 for none.
 	Hover int
+	// Query is the filter text as typed, and Placeholder what the query line
+	// says while it is empty. Rows holds the agents the query matched.
+	Query       string
+	Placeholder string
+	// Pane is what the Agent pane shows of the selected row. It is drawn
+	// only where styles.SplitWidths splits the screen.
+	Pane Pane
 }
 
 const (
-	// headLines is the rule above the list box.
-	headLines = 1
+	// headLines is the rule and the query line above the list box.
+	headLines = 2
+	// queryIndent puts the prompt under the first menu-bar button, as on
+	// the board.
+	queryIndent = 1
 	// RowLines is the lines of one row: the agent, then its details.
 	RowLines = 2
 	// gapLines is the blank line between the two groups.
@@ -51,6 +64,7 @@ const (
 	linkedTitle   = "Linked"
 	unlinkedTitle = "Not linked"
 	emptyText     = "No agents"
+	noMatchText   = "No agent matches the filter"
 )
 
 // line is one line of the list: a group heading, a gap, or a line of a row.
@@ -85,7 +99,7 @@ func layout(rows []Row) []line {
 }
 
 // InnerHeight is the lines of rows a frame of height lines shows: what the
-// rule and the box's two borders leave.
+// head and the box's two borders leave.
 func InnerHeight(height int) int {
 	return max(1, height-headLines-2)
 }
@@ -123,18 +137,35 @@ func clampOffset(offset, total, window int) int {
 	return max(0, min(offset, total-window))
 }
 
-// Render draws the rule and the list box under it.
+// Render draws the head, the list box under it and, on a screen wide enough,
+// the Agent pane beside the list.
 func Render(state State) string {
 	width := max(state.Width, 6)
+	listWidth, paneWidth, split := styles.SplitWidths(width)
+	head := styles.Rule(width) + "\n" + strings.Repeat(" ", queryIndent) +
+		board.RenderQueryLine(state.Query, state.Placeholder, width-queryIndent)
+	list := renderList(state, listWidth)
+	if !split {
+		return head + "\n" + list
+	}
+	pane := RenderPane(state.Pane, selectedRow(state), paneWidth, InnerHeight(state.Height)+2)
+	return head + "\n" + lipgloss.JoinHorizontal(lipgloss.Top, list, strings.Repeat(" ", styles.SplitGap), pane)
+}
+
+func renderList(state State, width int) string {
 	inner := width - 2
 	window := InnerHeight(state.Height)
 
 	var content []string
 	topRight := ""
 	if len(state.Rows) == 0 {
-		content = append(content, " "+lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Render(emptyText))
-		if state.Empty != "" {
-			content = append(content, " "+muted(textutil.TruncateString(displaytext.OneLine(state.Empty), inner-1)))
+		title, why := emptyText, state.Empty
+		if state.Query != "" && state.Empty == "" {
+			title, why = noMatchText, ""
+		}
+		content = append(content, " "+lipgloss.NewStyle().Foreground(styles.TextPrimaryColor).Render(textutil.TruncateString(title, inner-1)))
+		for _, line := range textutil.WrapAtSpaces(displaytext.OneLine(why), inner-2) {
+			content = append(content, " "+muted(line))
 		}
 	} else {
 		topRight = fmt.Sprintf("%d", len(state.Rows))
@@ -145,13 +176,20 @@ func Render(state State) string {
 		}
 	}
 
-	return styles.Rule(width) + "\n" + styles.FormSection(styles.FormSectionConfig{
+	return styles.FormSection(styles.FormSectionConfig{
 		Content:  content,
 		Width:    width,
 		Height:   window + 2,
 		TopLeft:  "Agents",
 		TopRight: topRight,
 	})
+}
+
+func selectedRow(state State) *Row {
+	if state.SelectedRow < 0 || state.SelectedRow >= len(state.Rows) {
+		return nil
+	}
+	return &state.Rows[state.SelectedRow]
 }
 
 func renderLine(state State, l line, width int) string {
@@ -166,10 +204,11 @@ func renderLine(state State, l line, width int) string {
 	plain, gutter := styles.SelectionPrefix(selected, true)
 	room := width - lipgloss.Width(plain)
 	var text string
+	match := strings.Fields(state.Query)
 	if l.first {
-		text = agentLine(row.Agent, room)
+		text = agentLine(row.Agent, room, match)
 	} else {
-		text = muted(textutil.TruncateString(detailText(row), room))
+		text = issuerow.MarkMatches(textutil.TruncateString(detailText(row), room), match, mutedStyle())
 	}
 	return styles.RowHighlight(gutter+text, width, selected, l.row == state.Hover)
 }
@@ -177,14 +216,14 @@ func renderLine(state State, l line, width int) string {
 // agentLine is the name of a, its status in the colour of the status, and
 // what it does, cut to room cells. The name is cut first, so the status the
 // tab sorts by stays while there is room for it and one cell of the name.
-func agentLine(a agent.Agent, room int) string {
+func agentLine(a agent.Agent, room int, match []string) string {
 	status := "  " + displaytext.OneLine(agent.StatusWord(a.Status))
 	nameRoom := room
 	if room > lipgloss.Width(status) {
 		nameRoom = room - lipgloss.Width(status)
 	}
 	name := textutil.TruncateString(displaytext.OneLine(a.Title()), nameRoom)
-	out := lipgloss.NewStyle().Bold(true).Foreground(styles.TextPrimaryColor).Render(name)
+	out := issuerow.MarkMatches(name, match, lipgloss.NewStyle().Bold(true).Foreground(styles.TextPrimaryColor))
 	left := room - lipgloss.Width(name)
 	if left < lipgloss.Width(status) {
 		return out
@@ -192,7 +231,7 @@ func agentLine(a agent.Agent, room int) string {
 	out += statusStyle(a.Status).Render(status)
 	left -= lipgloss.Width(status)
 	if activity := strings.TrimSpace(displaytext.OneLine(a.Activity)); activity != "" && left > 4 {
-		out += muted(textutil.TruncateString(" · "+activity, left))
+		out += issuerow.MarkMatches(textutil.TruncateString(" · "+activity, left), match, mutedStyle())
 	}
 	return out
 }
@@ -220,13 +259,17 @@ func detailText(row Row) string {
 }
 
 func muted(text string) string {
-	return lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(text)
+	return mutedStyle().Render(text)
+}
+
+func mutedStyle() lipgloss.Style {
+	return lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 }
 
 // HitTest is the row drawn at cell (x, y) of Render's output: ok is false on
-// the rule, a border, a heading, a gap and below the last row.
+// the head, a border, a heading, a gap, below the last row and on the pane.
 func HitTest(state State, x, y int) (row int, ok bool) {
-	width := max(state.Width, 6)
+	width, _, _ := styles.SplitWidths(max(state.Width, 6))
 	window := InnerHeight(state.Height)
 	content := y - headLines - 1
 	if x <= 0 || x >= width-1 || content < 0 || content >= window {
@@ -238,4 +281,11 @@ func HitTest(state State, x, y int) (row int, ok bool) {
 		return 0, false
 	}
 	return lines[at].row, true
+}
+
+// OnPane reports whether cell (x, y) of Render's output is on the Agent pane,
+// borders included. It is false while the screen is not split.
+func OnPane(state State, x, y int) bool {
+	list, _, split := styles.SplitWidths(max(state.Width, 6))
+	return split && x >= list+styles.SplitGap && y >= headLines
 }

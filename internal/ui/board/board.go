@@ -174,11 +174,11 @@ func renderHead(state State, f frame) string {
 	indent := strings.Repeat(" ", queryIndent)
 	room := width - queryIndent
 	if f.end-f.start == len(state.Columns) {
-		return styles.Rule(width) + "\n" + indent + renderQueryLine(state.Query, state.Placeholder, room)
+		return styles.Rule(width) + "\n" + indent + RenderQueryLine(state.Query, state.Placeholder, room)
 	}
 	window := fmt.Sprintf(" · cols %d-%d/%d", f.start+1, f.end, len(state.Columns))
 	return styles.Rule(width) + "\n" + indent +
-		renderQueryLine(state.Query, state.Placeholder, room-lipgloss.Width(window)) +
+		RenderQueryLine(state.Query, state.Placeholder, room-lipgloss.Width(window)) +
 		lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(window)
 }
 

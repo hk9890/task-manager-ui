@@ -10,8 +10,8 @@ import (
 )
 
 func sampleRows() []Row {
-	issue := &domain.IssueSummary{ID: "tm-1", Title: "Fix the board"}
-	other := &domain.IssueSummary{ID: "tm-2", Title: "Write the docs"}
+	issue := &domain.IssueSummary{ID: "tm-1", Title: "Fix the board", Type: "bug", Priority: 1, Status: "in_progress"}
+	other := &domain.IssueSummary{ID: "tm-2", Title: "Write the docs", Type: "task", Priority: 2, Status: "open"}
 	return []Row{
 		{Agent: agent.Agent{Ref: "demo:home:3", Session: "s-3", Label: "Tab 3", Name: "fix-board", Status: agent.NeedsYou}, Issue: issue},
 		{Agent: agent.Agent{Ref: "demo:home:4", Session: "s-4", Label: "Tab 4", Status: agent.Running, Activity: "Editing model.go"}, Issue: other},
@@ -115,7 +115,7 @@ func TestTheSelectedAndTheHoveredRowCarryABand(t *testing.T) {
 func TestEnsureVisibleShowsTheWholeSelectedRow(t *testing.T) {
 	t.Parallel()
 	rows := sampleRows()
-	const height = 7 // a window of four lines: two rows
+	const height = 8 // a window of four lines: two rows
 	for _, tc := range []struct {
 		selected, offset, want int
 	}{

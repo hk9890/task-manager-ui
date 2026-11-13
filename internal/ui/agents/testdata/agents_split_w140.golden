@@ -1,0 +1,24 @@
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ❯ filter agents
+╭─ Agents ─────────────────────────────── 4 ─╮  ╭─ Agent ──────────────────────────────────────────────────────────────────────────────────╮
+│ Linked (3)                                 │  │ Tab 4  running                                                                           │
+│  fix-board  needs you                      │  │ Editing model.go                                                                         │
+│  Tab 3 · tm-1  Fix the board               │  │ ──────────────────────────────────────────────────────────────────────────────────────── │
+│▌ Tab 4  running · Editing model.go         │  │ Issue    T P2 OPN tm-2                                                                   │
+│▌ tm-2  Write the docs                      │  │          Write the docs                                                                  │
+│  Session s-gone-0  gone                    │  │ Session  s-4                                                                             │
+│  tm-1  Fix the board                       │  │                                                                                          │
+│                                            │  │ Last message                                                                             │
+│ Not linked (1)                             │  │                                                                                          │
+│  scratch  idle                             │  │   ## Done                                                                                │
+│  Tab 7                                     │  │                                                                                          │
+│                                            │  │   I moved the query line into  board.go .                                                │
+│                                            │  │                                                                                          │
+│                                            │  │   • the list keeps its rows                                                              │
+│                                            │  │   • the pane scrolls                                                                     │
+│                                            │  │                                                                                          │
+│                                            │  │                                                                                          │
+│                                            │  │                                                                                          │
+│                                            │  │                                                                                          │
+│                                            │  │                                                                                          │
+╰────────────────────────────────────────────╯  ╰──────────────────────────────────────────────────────────────────────────────────────────╯

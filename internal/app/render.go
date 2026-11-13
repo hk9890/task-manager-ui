@@ -634,6 +634,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 			}
 		}
 		return append(hints,
+			filter, clear,
 			styles.KeyHint{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,
 		)

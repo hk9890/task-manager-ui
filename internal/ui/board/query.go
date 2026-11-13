@@ -7,13 +7,13 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
-// renderQueryLine is the line a surface's filter text is typed on: the prompt,
+// RenderQueryLine is the line a surface's filter text is typed on: the prompt,
 // the text, then a cursor block. An empty query shows the placeholder, dim,
 // with the cursor on its first cell, so the line says what a key press does.
 //
 // A text too long for width is cut from the front: the end is where the next
 // key lands. The line is never wider than width.
-func renderQueryLine(query, placeholder string, width int) string {
+func RenderQueryLine(query, placeholder string, width int) string {
 	accent := lipgloss.NewStyle().Foreground(styles.QueryAccentColor)
 	cursor := accent.Reverse(true)
 	prompt := styles.Glyphs.Prompt + " "
