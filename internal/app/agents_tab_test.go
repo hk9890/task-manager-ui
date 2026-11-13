@@ -18,6 +18,8 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uiagents "github.com/hk9890/task-manager-ui/internal/ui/agents"
+	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
 func idleOnTab4() agent.Agent {
@@ -269,6 +271,41 @@ func TestTheAgentsTabLegendNamesThePaneKeysWhileThePaneIsShown(t *testing.T) {
 	m = send(t, m, tea.WindowSizeMsg{Width: 90, Height: 40})
 	if legend := footer(m); strings.Contains(legend, "pgup/pgdown scroll") {
 		t.Errorf("legend without the pane = %q, names the pane keys", legend)
+	}
+}
+
+// The legend and the help name the board page keys for the Agent pane: with
+// the board and the detail page keys rebound apart, both show the board's.
+func TestTheAgentPaneKeysInTheLegendAndTheHelpAreTheBoardKeys(t *testing.T) {
+	t.Parallel()
+	bindings := config.DefaultKeyBindings()
+	bindings.Board[config.BoardActionPageUp] = []string{"alt+u"}
+	bindings.Board[config.BoardActionPageDown] = []string{"alt+j"}
+	bindings.Detail[config.DetailActionPageUp] = []string{"alt+y"}
+	bindings.Detail[config.DetailActionPageDown] = []string{"alt+k"}
+	keys, err := config.ResolveKeyBindings(bindings)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	legend := testui.Downsample(styles.KeyLegend(footerHints(mode.Agents, keys, &uiagents.Row{}, true), 0))
+	if !strings.Contains(legend, "alt+u/alt+j scroll") {
+		t.Errorf("legend = %q, want the board page keys alt+u/alt+j", legend)
+	}
+	found := false
+	for _, section := range helpSections(keys) {
+		for _, entry := range section.Entries {
+			if section.Title != "Agents tab" || !strings.Contains(entry.Desc, "Agent pane") {
+				continue
+			}
+			found = true
+			if !strings.Contains(entry.Key, "alt+u") || !strings.Contains(entry.Key, "alt+j") {
+				t.Errorf("help entry %q has the key %q, want the board page keys", entry.Desc, entry.Key)
+			}
+		}
+	}
+	if !found {
+		t.Error("the help has no Agents tab entry for the Agent pane")
 	}
 }
 

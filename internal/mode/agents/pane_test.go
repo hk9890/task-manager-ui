@@ -165,13 +165,15 @@ func TestThePageKeysScrollThePane(t *testing.T) {
 }
 
 // The pane scrolls with the board page keys, as the Docs preview does: a
-// rebound board page_down scrolls it, a rebound detail page_down does not,
-// and without the pane the board key pages the list.
+// rebound board page key scrolls it, a rebound detail page key does not, and
+// without the pane the board key pages the list.
 func TestThePaneScrollsWithTheBoardPageKeys(t *testing.T) {
 	t.Parallel()
 	bindings := config.DefaultKeyBindings()
 	bindings.Board[config.BoardActionPageDown] = []string{"alt+j"}
+	bindings.Board[config.BoardActionPageUp] = []string{"alt+u"}
 	bindings.Detail[config.DetailActionPageDown] = []string{"alt+k"}
+	bindings.Detail[config.DetailActionPageUp] = []string{"alt+i"}
 	rebound, err := config.ResolveKeyBindings(bindings)
 	if err != nil {
 		t.Fatal(err)
@@ -192,8 +194,18 @@ func TestThePaneScrollsWithTheBoardPageKeys(t *testing.T) {
 		t.Errorf("the detail page_down scrolled the pane to %d", m.paneOffset)
 	}
 	m.Update(testui.Press("alt+j"))
+	m.Update(testui.Press("alt+j"))
 	if m.paneOffset == 0 || m.selected != 0 {
-		t.Errorf("the board page_down: pane offset %d, selected %d; want the pane scrolled", m.paneOffset, m.selected)
+		t.Fatalf("the board page_down: pane offset %d, selected %d; want the pane scrolled", m.paneOffset, m.selected)
+	}
+	scrolled := m.paneOffset
+	m.Update(testui.Press("alt+i"))
+	if m.paneOffset != scrolled {
+		t.Errorf("the detail page_up scrolled the pane from %d to %d", scrolled, m.paneOffset)
+	}
+	m.Update(testui.Press("alt+u"))
+	if m.paneOffset >= scrolled {
+		t.Errorf("the board page_up left the pane at %d, want above %d", m.paneOffset, scrolled)
 	}
 
 	m.SetSize(90, 30)

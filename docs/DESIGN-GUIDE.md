@@ -418,7 +418,8 @@ store's project. It draws the list head of the board — the rule and the query 
   every message.
 - While the pane is drawn the `page_up` and `page_down` keys of the board context scroll it by its
   height less the two scroll-marker lines, and the wheel over it scrolls it (`OnPane`); below
-  `styles.SplitMinWidth` they page the list. A new selection starts the pane at its top.
+  `styles.SplitMinWidth` they page the list; above it no key pages the list, which `home`, `end`
+  and the wheel still cross (`Model.page`). A new selection starts the pane at its top.
 - `agents.Model.Select` clears the query, which could hide the agent asked for.
 - The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
   the front and resumes a gone one first (`ActionOpenAgent`). A resume raises an info toast,

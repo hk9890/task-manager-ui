@@ -619,6 +619,8 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 	// No key enters the filter, so the legend names the typing itself.
 	filter := styles.KeyHint{Key: "type", Desc: "filter"}
 	clear := styles.KeyHint{Key: primary(config.ShellContext, config.ShellActionEscape), Desc: "clear"}
+	// The page keys scroll the pane beside a list, on the Docs and Agents tabs alike.
+	paneScroll := styles.KeyHint{Key: pair(config.BoardContext, config.BoardActionPageUp, config.BoardActionPageDown), Desc: "scroll"}
 
 	switch active {
 	case mode.Docs:
@@ -628,7 +630,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 		}
 		// Without the preview the page keys page the list, as the move keys say.
 		if paneScrolls {
-			hints = append(hints, styles.KeyHint{Key: pair(config.BoardContext, config.BoardActionPageUp, config.BoardActionPageDown), Desc: "scroll"})
+			hints = append(hints, paneScroll)
 		}
 		return append(hints,
 			filter, clear,
@@ -653,7 +655,7 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings, agentRow *uiag
 			}
 			// Only the scroll marker would otherwise say the pane scrolls.
 			if paneScrolls {
-				hints = append(hints, styles.KeyHint{Key: pair(config.BoardContext, config.BoardActionPageUp, config.BoardActionPageDown), Desc: "scroll"})
+				hints = append(hints, paneScroll)
 			}
 		}
 		return append(hints,

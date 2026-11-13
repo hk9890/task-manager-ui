@@ -37,7 +37,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		{Title: "Moving and opening", Entries: []helpscreen.Entry{
 			{Key: pair(board(config.BoardActionMoveLeft), board(config.BoardActionMoveRight)), Desc: "the column to the left / right, on the Board"},
 			{Key: pair(board(config.BoardActionMoveUp), board(config.BoardActionMoveDown)), Desc: "the row above / below"},
-			{Key: pair(board(config.BoardActionPageUp), board(config.BoardActionPageDown)), Desc: "a page up / down"},
+			{Key: pair(board(config.BoardActionPageUp), board(config.BoardActionPageDown)), Desc: "a page up / down; beside the Docs preview or the Agent pane, scroll the pane"},
 			{Key: pair(board(config.BoardActionMoveHome), board(config.BoardActionMoveEnd)), Desc: "the first / last row"},
 			{Key: board(config.BoardActionOpenDetail), Desc: "open the selected issue in Detail"},
 			{Key: shell(config.ShellActionEscape), Desc: "back to where the surface was opened from; hide a toast"},
