@@ -36,10 +36,10 @@ directory is gone — the project was moved or deleted — they are refused with
 message, and the detail footer reads `launchers off`.
 
 The `agent-session:<session>` labels are not shown, in Detail, in the issue editor
-or in `{{issue.labels}}`, and a save in the editor keeps them. A label that starts
-with `agent:` is an ordinary label. Detail lists each linked agent under
-`Agents` with its status: `running`, `idle`, `needs you`, or `gone` for a
-labelled agent that no longer runs. What it does is on the Agents tab.
+or in `{{issue.labels}}`, and a save in the editor keeps them. Detail lists each
+linked agent under `Agents` with its status: `running`, `idle`, `needs you`, or
+`gone` for a labelled agent that no longer runs. A closed issue shows no `gone`
+agent, as on the Agents tab. What it does is on the Agents tab.
 
 A close from the agent dialog or the Agents tab removes the agent's label from
 its open issues, so the issue is no longer linked. An agent that ends by itself
@@ -118,7 +118,8 @@ or the error revier gave.
 - `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
 - `enter` — bring the selected agent to the front; resume a `gone` one first
 - `alt+x` — close the selected agent; one that runs or needs you asks first.
-  On a `gone` agent it unlinks the agent from its open issues
+  On a `gone` agent it unlinks the agent from its open issues, and the legend
+  reads `alt+x unlink`
 - `alt+o` — open the issue the selected agent is linked to in detail mode;
   `esc` there returns to the tab
 - `alt+r` — read the linked issues again

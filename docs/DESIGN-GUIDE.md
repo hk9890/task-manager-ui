@@ -342,6 +342,9 @@ agents.
 - An agent is linked by a link label on any issue, closed ones included, or by a comment on an In
   Progress card (`Board.CommentLinks`); a label wins over a comment (`buildRows`). A link label no
   live agent holds is a `gone` row, on an open issue only and only after a poll that answered.
+  The Details pane and the agent dialog of Detail follow the same rule: a closed issue has no
+  `gone` agent (`linkedAgents`, `internal/mode/detail/model.go`), because the store refuses the
+  unlink of its label.
 - A row is two lines. The first is the agent's title (`agent.Agent.Title`: the harness's name, or
   the label without one), bold, its status word in the colour of `styles.AgentStatusStyle` (`gone`
   muted), and ` · ` and what it does, muted. The second, muted, is the label when the title is a
@@ -356,7 +359,8 @@ agents.
   one it unlinks the agent without a host call (`Model.unlinkGoneAgent`), and a success toast says
   `Unlinked <title>`. A close unlinks the agent, as the agent dialog's does. `open_issue` opens the
   linked issue in Detail, and Escape there returns to the tab; on an agent linked to none it raises
-  the toast an empty selection raises. The legend names the four; the tab has no button.
+  the toast an empty selection raises. The legend names the four, `close_agent` as `unlink` while
+  a gone row is selected (`footerHints`, `internal/app/render.go`); the tab has no button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
   none, so the issue keys act on that issue. The selection stays on its agent when a poll moves the
   rows. A failed poll empties the tab but keeps that agent, and the next poll that answers selects
@@ -760,8 +764,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   does. The issue and its agents are taken when it opens. Its entries, in order:
   - `Focus <title>` and `Close <title>` for each live linked agent, `Resume <title>` and
     `Unlink <title>` for each gone one. Unlink removes the link label from every open issue
-    without a host call (`Model.unlinkGoneAgent`); it is off on a closed issue, whose label the
-    store does not change. A close of an agent that is running or needs you asks first and then forces the close; an
+    without a host call (`Model.unlinkGoneAgent`). A closed issue lists no gone agent, so no
+    Unlink is offered where the store would refuse it. A close of an agent that is running or needs you asks first and then forces the close; an
     idle one closes at once. A close that succeeds unlinks the agent: its link label leaves every
     open issue that carries it (`Model.closeAgent`), so it is no `gone` row afterwards. A closed
     issue keeps the label, because the store refuses the change. A removal that fails raises an

@@ -57,7 +57,7 @@ func helpSections(keys config.ResolvedKeyBindings) []helpscreen.Section {
 		}},
 		{Title: "Agents tab", Entries: []helpscreen.Entry{
 			{Key: board(config.BoardActionOpenDetail), Desc: "bring the selected agent to the front, resuming a gone one first"},
-			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent; asks first while it is running or needs you"},
+			{Key: board(config.BoardActionCloseAgent), Desc: "close the selected agent, asking first while it is running or needs you; unlink a gone one"},
 			{Key: board(config.BoardActionOpenIssue), Desc: "open the issue the selected agent is linked to in Detail"},
 		}},
 		{Title: "Issue", Entries: []helpscreen.Entry{

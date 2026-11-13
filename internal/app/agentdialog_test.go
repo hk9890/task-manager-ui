@@ -82,8 +82,8 @@ func TestTheAgentDialogResumesAGoneAgent(t *testing.T) {
 }
 
 // The agent dialog unlinks a gone agent without a host call: its link label
-// leaves the issue. On a closed issue the store refuses that, so Unlink is
-// off there.
+// leaves the issue. On a closed issue the store refuses that, so the gone
+// agent is left out of the Details pane and of the dialog, as on the Agents tab.
 func TestTheAgentDialogUnlinksAGoneAgent(t *testing.T) {
 	m, client, _, _ := agentShell(t)
 	m = withLinkLabel(t, m, "s-gone-0123")
@@ -104,10 +104,13 @@ func TestTheAgentDialogUnlinksAGoneAgent(t *testing.T) {
 	m, _, _, _ = agentShell(t)
 	m = withLinkLabel(t, m, "s-gone-0123")
 	m.detail.Detail.Summary.Status = domain.StatusClosed
+	if view := plainShell(m); strings.Contains(view, "Session s-gone-0") {
+		t.Errorf("the Details pane of a closed issue shows the gone agent:\n%s", view)
+	}
 	m = pressKey(t, m, "alt+i")
 	for _, entry := range m.selMenu.entries {
-		if entry.entry.Label == "Unlink Session s-gone-0" && !entry.entry.Disabled {
-			t.Error("Unlink is on for a closed issue")
+		if strings.HasSuffix(entry.entry.Label, "Session s-gone-0") {
+			t.Errorf("the dialog of a closed issue offers %q", entry.entry.Label)
 		}
 	}
 }

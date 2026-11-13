@@ -41,7 +41,8 @@ type agentStart struct {
 	linkErr error
 }
 
-// agentStartedMsg carries the start of an agent in front.
+// agentStartedMsg carries the start of an agent from an intent of the agent
+// dialog, which leaves the focus in the app.
 type agentStartedMsg agentStart
 
 // agentAskStartedMsg carries the start of an agent asked in the background.

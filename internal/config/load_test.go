@@ -252,6 +252,8 @@ keybindings:
   shell:
     mode_board: ["1"]
     toggle_search: ["ctrl+s"]
+    focus_agent: ["alt+a"]
+    agent_menu: ["alt+m"]
   board:
     load_more: [">"]
   search:
@@ -266,6 +268,8 @@ keybindings:
 	for _, expected := range []string{
 		`unknown config key "keybindings.shell.mode_board" ignored`,
 		`unknown config key "keybindings.shell.toggle_search" ignored`,
+		`unknown config key "keybindings.shell.focus_agent" ignored`,
+		`unknown config key "keybindings.shell.agent_menu" ignored`,
 		`unknown config key "keybindings.board.load_more" ignored`,
 		`unknown config key "keybindings.search" ignored`,
 	} {

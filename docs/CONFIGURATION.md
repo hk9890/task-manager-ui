@@ -237,8 +237,8 @@ Supported actions by context:
     of its own would ask for the same movement to be rebound twice. In the picker
     `open_detail` opens the highlighted store.
   - The Agents tab reads the row movement and `reload` from this context too. There
-    `open_detail` brings the selected agent to the front, `close_agent` closes it and
-    `open_issue` opens its issue in Detail; the other surfaces ignore the last two.
+    `open_detail` brings the selected agent to the front, `close_agent` closes it, or
+    unlinks a gone one, and `open_issue` opens its issue in Detail; the other surfaces ignore the last two.
   - The configuration screen reads `move_up` and `move_down` from this context. The keys that
     step a value there, `left`, `right` and `enter`, are built in and follow no binding.
 - `detail`

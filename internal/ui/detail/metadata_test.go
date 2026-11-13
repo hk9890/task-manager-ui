@@ -325,7 +325,7 @@ func TestRenderMetadataRailWithChildrenGolden(t *testing.T) {
 // The Agents group follows Core, one field per linked agent in the order
 // given, with attention said as "needs you", so a short pane keeps it. A pane
 // with no linked agent draws no group.
-func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
+func TestTheDetailsPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	t.Parallel()
 
 	state := DetailsPaneState{

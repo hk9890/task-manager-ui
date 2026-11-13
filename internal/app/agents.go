@@ -171,12 +171,11 @@ func (m *Model) openAgentDialog() tea.Cmd {
 		backdrop:    m.frozenScreen(),
 		screenWidth: m.width,
 	}
-	closed := issue.Summary.Status == domain.StatusClosed
 	for _, a := range linked {
-		menu.entries = append(menu.entries, linkedAgentActions(a, closed)...)
+		menu.entries = append(menu.entries, linkedAgentActions(a)...)
 	}
 	if len(intents) > 0 {
-		heading, off := "Start new", closed
+		heading, off := "Start new", issue.Summary.Status == domain.StatusClosed
 		if off {
 			heading = "Start new: off, the issue is closed"
 		}
@@ -195,8 +194,7 @@ func (m *Model) openAgentDialog() tea.Cmd {
 
 // linkedAgentActions are the entries of one linked agent in the agent
 // dialog: Focus and Close for a live one, Resume and Unlink for a gone one.
-// Unlink is off on a closed issue: the store refuses every change to it.
-func linkedAgentActions(a agent.Agent, issueClosed bool) []selectionAction {
+func linkedAgentActions(a agent.Agent) []selectionAction {
 	label := displaytext.OneLine(a.Title())
 	if a.Status == agent.Gone {
 		return []selectionAction{
@@ -205,7 +203,7 @@ func linkedAgentActions(a agent.Agent, issueClosed bool) []selectionAction {
 				run:   func(m *Model) tea.Cmd { return m.resumeAgent(a) },
 			},
 			{
-				entry: selectmenu.Entry{Label: "Unlink " + label, Disabled: issueClosed},
+				entry: selectmenu.Entry{Label: "Unlink " + label},
 				run:   func(m *Model) tea.Cmd { return m.unlinkGoneAgent(a) },
 			},
 		}

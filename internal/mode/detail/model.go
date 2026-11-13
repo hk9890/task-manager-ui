@@ -177,7 +177,8 @@ func (m *Model) SetLiveAgents(agents map[string]agent.Agent) {
 
 // LinkedAgents is the agents linked to the issue open in Detail, by its link
 // labels and its comment sessions (agent.Linked). The first is the one that
-// needs the operator most; the gone ones are last.
+// needs the operator most; the gone ones are last. A closed issue has no gone
+// agent, as on the Agents tab: the store refuses the unlink of its label.
 func (m *Model) LinkedAgents() []agent.Agent {
 	return linkedAgents(m.liveAgents, m.Detail)
 }
@@ -187,7 +188,11 @@ func linkedAgents(live map[string]agent.Agent, d domain.IssueDetail) []agent.Age
 	for _, comment := range d.Comments {
 		sessions = append(sessions, comment.Session)
 	}
-	return agent.Linked(live, d.Summary.Labels, sessions)
+	linked := agent.Linked(live, d.Summary.Labels, sessions)
+	if d.Summary.Status == domain.StatusClosed {
+		linked = slices.DeleteFunc(linked, func(a agent.Agent) bool { return a.Status == agent.Gone })
+	}
+	return linked
 }
 
 // SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation

@@ -303,6 +303,13 @@ func (m *Model) settled() bool {
 	return m.liveKnown && m.issuesKnown && !m.loading
 }
 
+// SelectedGone reports whether the selected row is a gone agent, which
+// close_agent unlinks rather than closes.
+func (m *Model) SelectedGone() bool {
+	row, ok := m.selectedRow()
+	return ok && row.Agent.Status == agent.Gone
+}
+
 func (m *Model) selectedRow() (uiagents.Row, bool) {
 	if m.selected < 0 || m.selected >= len(m.rows) {
 		return uiagents.Row{}, false

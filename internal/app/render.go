@@ -521,7 +521,7 @@ func (m Model) renderFooter() string {
 		return ""
 	}
 
-	hints := footerHints(m.active, m.keys)
+	hints := footerHints(m.active, m.keys, m.active == mode.Agents && m.agents.SelectedGone())
 	// Detail is where the launch keys work, so it is where their being off is
 	// said, before the operator presses one. It leads the legend so that it is
 	// the last hint a narrow terminal drops.
@@ -584,8 +584,9 @@ func configScreenHints(keys config.ResolvedKeyBindings) []styles.KeyHint {
 }
 
 // footerHints is the legend of the active surface, the keys an operator needs
-// first leading: KeyLegend drops from the end.
-func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHint {
+// first leading: KeyLegend drops from the end. goneAgent is a gone agent
+// selected on the Agents tab, which close_agent unlinks.
+func footerHints(active mode.ID, keys config.ResolvedKeyBindings, goneAgent bool) []styles.KeyHint {
 	primary := keys.DisplayPrimary
 	pair := func(context, first, second string) string {
 		return primary(context, first) + "/" + primary(context, second)
@@ -609,10 +610,14 @@ func footerHints(active mode.ID, keys config.ResolvedKeyBindings) []styles.KeyHi
 			help, quit,
 		}
 	case mode.Agents:
+		closeDesc := "close"
+		if goneAgent {
+			closeDesc = "unlink"
+		}
 		return []styles.KeyHint{
 			{Key: pair(config.BoardContext, config.BoardActionMoveDown, config.BoardActionMoveUp), Desc: "agents"},
 			{Key: primary(config.BoardContext, config.BoardActionOpenDetail), Desc: "focus"},
-			{Key: primary(config.BoardContext, config.BoardActionCloseAgent), Desc: "close"},
+			{Key: primary(config.BoardContext, config.BoardActionCloseAgent), Desc: closeDesc},
 			{Key: primary(config.BoardContext, config.BoardActionOpenIssue), Desc: "issue"},
 			{Key: pair(config.ShellContext, config.ShellActionModeCycleNext, config.ShellActionModeCyclePrev), Desc: "tabs"},
 			help, quit,

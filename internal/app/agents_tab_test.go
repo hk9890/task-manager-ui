@@ -124,12 +124,19 @@ func TestTheAgentsTabWithoutAHostSaysWhy(t *testing.T) {
 }
 
 // The close key on a gone agent unlinks it: no host call, the link label
-// leaves the issue, and the row leaves the tab.
+// leaves the issue, and the row leaves the tab. The legend names the key
+// close on a live agent and unlink on a gone one.
 func TestTheAgentsTabUnlinksAGoneAgent(t *testing.T) {
 	m, client := agentsTab(t)
 	m = withLinkLabel(t, m, "s-gone-0123")
 	m = send(t, m, agentPollTickMsg{})
+	if footer := testui.Downsample(m.renderFooter()); !strings.Contains(footer, "alt+x close") {
+		t.Errorf("legend on a live agent = %q, want alt+x close", footer)
+	}
 	m = pressKey(t, m, "down")
+	if footer := testui.Downsample(m.renderFooter()); !strings.Contains(footer, "alt+x unlink") {
+		t.Errorf("legend on a gone agent = %q, want alt+x unlink", footer)
+	}
 	m = pressKey(t, m, "alt+x")
 
 	if got := hostCalls(client, "Close"); len(got) != 0 {
