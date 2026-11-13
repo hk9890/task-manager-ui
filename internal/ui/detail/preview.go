@@ -18,7 +18,8 @@ const previewTitle = "Preview"
 // read only. It has no button and no comment; Detail has those.
 type PreviewState struct {
 	// Detail is the issue to show. While Skeleton is set only its Summary is
-	// read, so the header shows the row the operator selected.
+	// read, so the header shows the row the operator selected; with no ID the
+	// pane is skeleton rows alone.
 	Detail       domain.IssueDetail
 	Width        int
 	Height       int
@@ -61,15 +62,17 @@ func PreviewPageRows(state PreviewState) int {
 }
 
 func previewLines(state PreviewState, width, height int) []string {
-	muted := lipgloss.NewStyle().Foreground(styles.TextMutedColor)
 	if state.Empty {
-		return []string{muted.Render(textutil.TruncateString("Nothing selected", width))}
+		return []string{lipgloss.NewStyle().Foreground(styles.TextMutedColor).Render(textutil.TruncateString("Nothing selected", width))}
 	}
 
 	summary := state.Detail.Summary
+	if state.Skeleton && summary.ID == "" {
+		return renderProseContentSkeleton(width, height, state.SkeletonPhase)
+	}
 	lines := []string{
 		contentHeaderMetaRow(summary, width),
-		lipgloss.NewStyle().Bold(true).Render(textutil.TruncateString(displaytext.OneLine(emptyFallback(summary.Title, "(untitled)")), width)),
+		textutil.TruncateString(displaytext.OneLine(emptyFallback(summary.Title, "(untitled)")), width),
 		contentHeaderRule(width),
 	}
 
@@ -82,7 +85,7 @@ func previewLines(state PreviewState, width, height int) []string {
 	default:
 		lines = append(lines, renderMarkdownMultiline(state.Detail.Description, "(no description)", width)...)
 		if strings.TrimSpace(state.Detail.Notes) != "" {
-			lines = append(lines, "", muted.Bold(true).Render("Notes"))
+			lines = append(lines, "", "Notes")
 			lines = append(lines, renderMarkdownMultiline(state.Detail.Notes, "(no notes)", width)...)
 		}
 	}

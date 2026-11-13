@@ -818,6 +818,13 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.detail.FinishLoad(msg.err)
 		m.markSurfaceRefreshed(mode.Detail)
+		// The Docs preview draws the selected doc from this read: the tab
+		// reads nothing itself.
+		if msg.err != nil {
+			m.docs.ShowDocFailure(msg.issueID, msg.err.Error())
+		} else {
+			m.docs.ShowDoc(msg.detail)
+		}
 		if msg.err != nil {
 			// The store watch reloads a failed Detail on every change, so the
 			// toast is shown for the first failure of an issue and not again.

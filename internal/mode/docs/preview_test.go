@@ -1,14 +1,11 @@
 package docs
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"testing"
-	"time"
 
-	tea "charm.land/bubbletea/v2"
-
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
@@ -25,51 +22,50 @@ var longBody = func() string {
 	return strings.Join(lines, "\n")
 }()
 
-// previewDocs is a docs tab wide enough for the preview, with three docs: a
-// tall one first, then two short ones.
-func previewDocs(t *testing.T) (*Model, *fakes.TrackedRepository) {
+// docOf is the read of doc id the shell would hand the tab.
+func docOf(id, title, body string) domain.IssueDetail {
+	return domain.IssueDetail{
+		Summary:     domain.IssueSummary{ID: id, Title: title, Type: "doc", Status: "open"},
+		Description: body,
+	}
+}
+
+// previewDocs is a docs tab wide enough for the preview, with three docs, and
+// the read of the first, the tall one, already handed over.
+func previewDocs(t *testing.T) *Model {
 	t.Helper()
 	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Auth redesign", Type: "doc", Description: longBody})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Session notes", Type: "doc", Description: "Notes body of tm-2."})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Handover", Type: "doc", Description: "Handover body of tm-3."})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Auth redesign", Type: "doc"})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Session notes", Type: "doc"})
+	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-3", Title: "Handover", Type: "doc"})
 	m := newModel(t, gw)
 	m.SetSize(160, 30)
-	run(m, m.Init())
-	return m, gw
+	resolve(t, m, m.Init())
+	m.ShowDoc(docOf("tm-1", "Auth redesign", longBody))
+	return m
 }
 
-// run executes cmd and feeds every message it yields back into m, batches
-// included, until no command is left. The shell's messages are dropped.
-func run(m *Model, cmd tea.Cmd) {
-	if cmd == nil {
-		return
-	}
-	switch msg := cmd().(type) {
-	case tea.BatchMsg:
-		for _, each := range msg {
-			run(m, each)
-		}
-	case mode.SelectionChangedMsg, mode.ActionRequestMsg:
-	default:
-		run(m, m.Update(msg))
-	}
-}
+func TestThePreviewDrawsTheReadOfTheSelectedDocOnly(t *testing.T) {
+	m := previewDocs(t)
+	testui.AssertContainsAll(t, m.View(0), "Preview", "Paragraph line 01.")
 
-func TestThePreviewShowsTheSelectedDocAndFollowsTheSelection(t *testing.T) {
-	m, _ := previewDocs(t)
-
+	// The next doc has no read yet: its header over skeleton rows, and never
+	// the body of the doc before.
+	m.Update(testui.Press("down"))
 	view := m.View(0)
-	testui.AssertContainsAll(t, view, "Preview", "Paragraph line 01.")
-
-	run(m, m.Update(testui.Press("down")))
-	view = m.View(0)
-	testui.AssertContainsAll(t, view, "Notes body of tm-2.")
+	testui.AssertContainsAll(t, view, "░")
 	testui.AssertNotContainsAny(t, view, "Paragraph line 01.")
+
+	// A read of another issue, the one the shell loaded last, is not drawn.
+	m.ShowDoc(docOf("tm-9", "Some task", "Body of tm-9."))
+	testui.AssertNotContainsAny(t, m.View(0), "Body of tm-9.")
+
+	m.ShowDoc(docOf("tm-2", "Session notes", "Notes body of tm-2."))
+	testui.AssertContainsAll(t, m.View(0), "Notes body of tm-2.")
 }
 
 func TestThePreviewIsLeftOutOnAScreenTooNarrowForIt(t *testing.T) {
-	m, _ := previewDocs(t)
+	m := previewDocs(t)
 	m.SetSize(styles.SplitMinWidth-1, 30)
 
 	testui.AssertNotContainsAny(t, m.View(0), "Preview", "Paragraph line 01.")
@@ -78,63 +74,19 @@ func TestThePreviewIsLeftOutOnAScreenTooNarrowForIt(t *testing.T) {
 	}
 }
 
-func TestAReadThatLandsAfterTheSelectionMovedOnDoesNotShowTheOldDoc(t *testing.T) {
-	gw := fakes.NewTracked()
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-1", Title: "Auth redesign", Type: "doc", Description: "Body of tm-1."})
-	gw.Memory.Seed(memoryrepo.Issue{ID: "tm-2", Title: "Session notes", Type: "doc", Description: "Body of tm-2."})
-	m := newModel(t, gw)
-	m.SetSize(160, 30)
-	// The list lands; the read of tm-1 it starts is held back.
-	held := m.Update(m.Init()())
-
-	run(m, m.Update(testui.Press("down")))
-	run(m, held)
-
+func TestAFailedReadIsShownUntilAReadOfThatDocLands(t *testing.T) {
+	m := previewDocs(t)
+	m.ShowDocFailure("tm-1", "store is gone")
 	view := m.View(0)
-	testui.AssertContainsAll(t, view, "Body of tm-2.")
-	testui.AssertNotContainsAny(t, view, "Body of tm-1.")
+	testui.AssertContainsAll(t, view, "Auth redesign", "load failed: store is gone")
+	testui.AssertNotContainsAny(t, view, "Paragraph line 01.")
 
-	// The read of tm-1 is kept: selecting it again reads nothing.
-	start := gw.CallCount()
-	run(m, m.Update(testui.Press("up")))
-	if reads := gw.CallCountSince(start, fakes.MethodIssue); reads != 0 {
-		t.Fatalf("selecting a doc read before read it %d more times", reads)
-	}
-	testui.AssertContainsAll(t, m.View(0), "Body of tm-1.")
-}
-
-func TestADocThatChangedIsReadAgain(t *testing.T) {
-	m, gw := previewDocs(t)
-
-	start := gw.CallCount()
-	run(m, m.AutoRefresh())
-	if reads := gw.CallCountSince(start, fakes.MethodIssue); reads != 0 {
-		t.Fatalf("a refresh that changed nothing read the selected doc %d times", reads)
-	}
-
-	m.issues[0].UpdatedAt = m.issues[0].UpdatedAt.Add(time.Hour)
-	start = gw.CallCount()
-	run(m, m.selectionChangedCmd())
-	if reads := gw.CallCountSince(start, fakes.MethodIssue); reads != 1 {
-		t.Fatalf("a doc with a later UpdatedAt was read %d times, want 1", reads)
-	}
-}
-
-func TestAFailedReadIsShownAndAReloadTriesAgain(t *testing.T) {
-	m, gw := previewDocs(t)
-	gw.SetError(fakes.MethodIssue, errors.New("store is gone"))
-	run(m, m.Update(testui.Press("down")))
-
-	testui.AssertContainsAll(t, m.View(0), "Session notes", "load failed: store is gone")
-
-	gw.SetError(fakes.MethodIssue, nil)
-	run(m, m.Reload())
-	run(m, m.Update(testui.Press("down")))
-	testui.AssertContainsAll(t, m.View(0), "Notes body of tm-2.")
+	m.ShowDoc(docOf("tm-1", "Auth redesign", longBody))
+	testui.AssertContainsAll(t, m.View(0), "Paragraph line 01.")
 }
 
 func TestThePageKeysScrollThePreviewAndLeaveTheSelection(t *testing.T) {
-	m, _ := previewDocs(t)
+	m := previewDocs(t)
 
 	if cmd := m.Update(testui.Press("pgdown")); cmd != nil {
 		t.Fatalf("pgdown over the preview sent %T", cmd())
@@ -148,17 +100,32 @@ func TestThePageKeysScrollThePreviewAndLeaveTheSelection(t *testing.T) {
 
 	m.Update(testui.Press("pgup"))
 	testui.AssertContainsAll(t, m.View(0), "Paragraph line 01.")
+}
 
-	// The scroll is the doc's: another doc opens at its top.
+func TestEveryDocOpensAtItsTop(t *testing.T) {
+	m := previewDocs(t)
+
 	m.Update(testui.Press("pgdown"))
-	run(m, m.Update(testui.Press("down")))
+	m.Update(testui.Press("down"))
 	if m.preview.offset != 0 {
 		t.Fatalf("another doc opened scrolled to %d", m.preview.offset)
+	}
+
+	// A reload puts the selection on the first doc at once: that doc opens at
+	// its top too, before the list lands.
+	m.Update(testui.Press("up"))
+	m.Update(testui.Press("pgdown"))
+	m.Update(testui.Press("down"))
+	m.ShowDoc(docOf("tm-2", "Session notes", longBody))
+	m.Update(testui.Press("pgdown"))
+	_ = m.Reload()
+	if m.preview.offset != 0 {
+		t.Fatalf("the reload left the first doc scrolled to %d", m.preview.offset)
 	}
 }
 
 func TestThePreviewScrollStopsAtTheEndOfTheDoc(t *testing.T) {
-	m, _ := previewDocs(t)
+	m := previewDocs(t)
 	for range 20 {
 		m.Update(testui.Press("pgdown"))
 	}
@@ -167,8 +134,22 @@ func TestThePreviewScrollStopsAtTheEndOfTheDoc(t *testing.T) {
 	testui.AssertNotContainsAny(t, view, "more)")
 }
 
+func TestAResizeHoldsTheScrollInsideTheDoc(t *testing.T) {
+	m := previewDocs(t)
+	for range 20 {
+		m.Update(testui.Press("pgdown"))
+	}
+	m.SetSize(160, 50)
+
+	before := m.preview.offset
+	m.Update(testui.Press("pgup"))
+	if m.preview.offset >= before {
+		t.Fatalf("after a resize pgup left the offset at %d (was %d)", m.preview.offset, before)
+	}
+}
+
 func TestTheWheelOverThePreviewScrollsItAndMovesNoSelection(t *testing.T) {
-	m, _ := previewDocs(t)
+	m := previewDocs(t)
 	x, y := testui.FindCell(t, m.View(0), "Paragraph line 05.")
 
 	cmd := m.Update(mode.MouseMsg{Kind: mode.MouseWheelDown, X: x, Y: y})
@@ -181,15 +162,28 @@ func TestTheWheelOverThePreviewScrollsItAndMovesNoSelection(t *testing.T) {
 
 	// The same notch over the list still moves the selection.
 	lx, ly := testui.FindCell(t, m.View(0), "Session notes")
-	run(m, m.Update(mode.MouseMsg{Kind: mode.MouseWheelDown, X: lx, Y: ly}))
+	m.Update(mode.MouseMsg{Kind: mode.MouseWheelDown, X: lx, Y: ly})
 	if m.list.SelectedRow != 1 {
 		t.Fatalf("the wheel over the list left the selection on row %d", m.list.SelectedRow)
 	}
 }
 
 func TestThePreviewSaysSoWhenNothingIsSelected(t *testing.T) {
-	m, _ := previewDocs(t)
+	m := previewDocs(t)
 	typeText(m, "zzz")
 
 	testui.AssertContainsAll(t, m.View(0), "Preview", "Nothing selected")
+	if m.Previewing() {
+		t.Fatal("Previewing reports a pane with no doc to scroll")
+	}
+}
+
+func TestThePreviewIsASkeletonWhileTheFirstListLoads(t *testing.T) {
+	m := newModel(t, fakes.NewTracked())
+	m.SetSize(160, 30)
+	_ = m.Init()
+
+	view := m.View(0)
+	testui.AssertContainsAll(t, view, "Preview", "░")
+	testui.AssertNotContainsAny(t, view, "Nothing selected")
 }

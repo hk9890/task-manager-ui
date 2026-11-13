@@ -40,22 +40,6 @@ func newModel(t *testing.T, gw *fakes.TrackedRepository) *Model {
 	return m
 }
 
-// selectionChanged is the SelectionChangedMsg cmd sends, alone or in a batch
-// with the read of the preview.
-func selectionChanged(cmd tea.Cmd) (mode.SelectionChangedMsg, bool) {
-	msg := cmd()
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		for _, each := range batch {
-			if changed, ok := each().(mode.SelectionChangedMsg); ok {
-				return changed, true
-			}
-		}
-		return mode.SelectionChangedMsg{}, false
-	}
-	changed, ok := msg.(mode.SelectionChangedMsg)
-	return changed, ok
-}
-
 // resolve runs cmd and feeds the resulting message back into the model,
 // returning whatever the handler dispatched next.
 func resolve(t *testing.T, m *Model, cmd tea.Cmd) tea.Cmd {
@@ -144,7 +128,7 @@ func TestDocsModeMovementEmitsSelectionAndEnterOpensDetail(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("expected a selection-changed command after moving down")
 	}
-	selection, ok := selectionChanged(cmd)
+	selection, ok := cmd().(mode.SelectionChangedMsg)
 	if !ok {
 		t.Fatalf("expected SelectionChangedMsg, got %T", cmd())
 	}

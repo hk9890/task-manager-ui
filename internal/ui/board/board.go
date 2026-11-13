@@ -236,7 +236,7 @@ func layoutFrame(state State) frame {
 	}
 
 	if state.AsideWidth > 0 {
-		width -= state.AsideWidth + columnGap
+		width = max(width-state.AsideWidth-columnGap, minRenderableWidth)
 	}
 
 	var f frame

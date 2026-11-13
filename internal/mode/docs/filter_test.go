@@ -107,7 +107,7 @@ func TestDocsFilterKeepsTheSelectionOnItsDoc(t *testing.T) {
 	if m.selectedIssueID() != "tm-1" {
 		t.Fatalf("selection %q, want the first match tm-1", m.selectedIssueID())
 	}
-	changed, ok := selectionChanged(cmd)
+	changed, ok := cmd().(mode.SelectionChangedMsg)
 	if !ok || changed.Mode != mode.Docs || changed.Selection == nil || changed.Selection.Issue.ID != "tm-1" {
 		t.Fatalf("the query reported %#v, want the docs selection tm-1", cmd())
 	}

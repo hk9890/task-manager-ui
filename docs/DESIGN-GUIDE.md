@@ -344,17 +344,20 @@ The Docs tab (`internal/mode/docs`) lists every doc, open and closed, in one boa
 description and the notes as markdown. It has no button, no comment and no focus; Enter still
 opens Detail.
 
-- The preview follows the selection. The model reads the doc with `Repository.Issue` and keeps each
-  read by ID, stamped with the `UpdatedAt` its row had when the read started (`docRead`,
-  `internal/mode/docs/preview.go`): a row with a later stamp is read again, and a read that lands
-  after the selection moved on is kept for that doc and not drawn. Stamp with the row, not the
-  read: a backend that stamps the two differently would read the doc forever.
-- Until the read lands the pane draws the row's header over skeleton rows; a failed read draws the
-  error in place of the body until a reload.
+- The preview follows the selection and reads nothing itself. The shell reads the selected issue
+  for Detail on every selection change, and its `detailLoadedMsg` handler hands each read to the
+  tab (`docs.Model.ShowDoc`, `ShowDocFailure`). The pane draws a read only while its issue is the
+  selected doc, so a read of another issue, or one that lands after the selection moved on, is
+  not drawn. Do not give the tab a read of its own: a move would read the doc twice.
+- Until the read lands the pane draws the row's header over skeleton rows, and skeleton rows alone
+  while the first list loads; a failed read draws the error in place of the body until a read of
+  that doc lands.
 - The page keys of the board context scroll the preview while it is drawn (`previewKey`): the tab
   reads every key from that context, so the reserved keys stay refused for it. Below
-  `styles.SplitMinWidth` they page the list. The legend names them only while they scroll
-  (`footerHints`). Each doc opens at its top.
+  `styles.SplitMinWidth` they page the list; above it no key pages the list, which `home`, `end`
+  and the wheel still cross. The legend names them only while they scroll
+  (`footerHints`). Each doc opens at its top, a reload's included, and a resize holds the scroll
+  inside the doc (`clampPreview`).
 - The wheel over the preview scrolls it `previewWheelLines` lines a notch and moves no selection;
   a click there does nothing. `board.OverAside` says whether a cell is on the pane, from the
   layout `Render` draws.

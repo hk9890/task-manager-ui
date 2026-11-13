@@ -129,9 +129,6 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	case docsLoadedMsg:
 		return m.apply(msg)
 
-	case docLoadedMsg:
-		return m.applyDoc(msg)
-
 	case mode.MouseMsg:
 		return m.handleMouse(msg)
 
@@ -209,6 +206,7 @@ func (m *Model) SetSize(width, height int) {
 	m.width = width
 	m.height = height
 	m.clampSelection()
+	m.clampPreview()
 }
 
 // IsLoading reports whether the column is in its loading state.
@@ -236,12 +234,12 @@ func (m *Model) startReload(rm mode.RefreshMode) tea.Cmd {
 	m.inflight = true
 	m.loading = true
 	m.err = nil
-	m.forgetFailures()
 
 	m.anchorIssueID = ""
 	if rm == mode.RefreshReload {
 		m.list.SelectedRow = 0
 		m.list.ScrollOffset = 0
+		m.followSelection()
 	} else if selection := m.currentSelection(); selection != nil {
 		m.anchorIssueID = selection.Issue.ID
 	}
@@ -352,11 +350,11 @@ func (m *Model) selectionMovedCmd(moved bool) tea.Cmd {
 }
 
 func (m *Model) selectionChangedCmd() tea.Cmd {
+	m.followSelection()
 	selection := m.currentSelection()
-	announce := func() tea.Msg {
+	return func() tea.Msg {
 		return mode.SelectionChangedMsg{Mode: mode.Docs, Selection: selection}
 	}
-	return tea.Batch(announce, m.previewCmd())
 }
 
 func loadDocsCmd(ctx context.Context, repo repository.Repository, query domain.SearchIssuesQuery) tea.Cmd {
