@@ -23,7 +23,7 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 	labels := []string{"backend", "agent-session:s-label", "agent-session:0123456789abcdef"}
 	comments := []string{"s-comment", "s-label", "s-old", ""}
 
-	got := Linked(live, labels, comments)
+	got := Linked(live, IssueLinks{Labels: labels, CommentSessions: comments})
 	want := []Agent{
 		live["s-comment"],
 		live["s-label"],
@@ -38,12 +38,55 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 // Gone; a known list with no agent makes it Gone.
 func TestLinkedReportsNoGoneAgentWhileTheLiveListIsNotKnown(t *testing.T) {
 	labels := []string{"agent-session:s-1"}
-	if got := Linked(nil, labels, nil); len(got) != 0 {
+	if got := Linked(nil, IssueLinks{Labels: labels}); len(got) != 0 {
 		t.Fatalf("Linked(nil) = %+v, want no agent", got)
 	}
-	got := Linked(map[string]Agent{}, labels, nil)
+	got := Linked(map[string]Agent{}, IssueLinks{Labels: labels})
 	if len(got) != 1 || got[0].Status != Gone {
 		t.Fatalf("Linked(empty) = %+v, want s-1 gone", got)
+	}
+}
+
+// A closed issue has no gone agent: its agent finished, and the store
+// refuses the unlink of its label. A live one stays linked.
+func TestLinkedReportsNoGoneAgentOfAClosedIssue(t *testing.T) {
+	live := map[string]Agent{"s-live": {Session: "s-live", Label: "Tab 1", Status: Idle}}
+	labels := []string{"agent-session:s-live", "agent-session:s-old"}
+	got := Linked(live, IssueLinks{Labels: labels, Closed: true})
+	if want := []Agent{live["s-live"]}; !slices.Equal(got, want) {
+		t.Fatalf("Linked(closed) = %+v, want %+v", got, want)
+	}
+}
+
+// Agents of one rank are ordered by Title, the name the operator reads, not
+// by Label.
+func TestLinkOrdersAgentsOfARankByTitle(t *testing.T) {
+	live := map[string]Agent{
+		"s-1": {Session: "s-1", Label: "Tab 1", Name: "zeta", Status: Idle},
+		"s-2": {Session: "s-2", Label: "Tab 2", Name: "alpha", Status: Idle},
+	}
+	got := Linked(live, IssueLinks{Labels: []string{"agent-session:s-1", "agent-session:s-2"}})
+	if want := []Agent{live["s-2"], live["s-1"]}; !slices.Equal(got, want) {
+		t.Fatalf("Linked = %+v, want alpha first", got)
+	}
+}
+
+// A session two issues link is linked to the first: a label on any issue
+// before a comment, and among the comments the first issue.
+func TestLinkLinksASessionToTheFirstIssue(t *testing.T) {
+	live := map[string]Agent{
+		"s-1": {Session: "s-1", Label: "Tab 1", Status: Idle},
+		"s-2": {Session: "s-2", Label: "Tab 2", Status: Idle},
+	}
+	issues := []IssueLinks{
+		{CommentSessions: []string{"s-1", "s-2"}},
+		{CommentSessions: []string{"s-2"}},
+		{Labels: []string{"agent-session:s-1"}},
+	}
+	got := Link(live, issues)
+	want := []LinkedAgent{{Agent: live["s-1"], Issue: 2}, {Agent: live["s-2"], Issue: 0}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Link = %+v, want %+v", got, want)
 	}
 }
 

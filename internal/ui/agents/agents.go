@@ -178,7 +178,7 @@ func renderLine(state State, l line, width int) string {
 // what it does, cut to room cells. The name is cut first, so the status the
 // tab sorts by stays while there is room for it and one cell of the name.
 func agentLine(a agent.Agent, room int) string {
-	status := "  " + agent.StatusWord(a.Status)
+	status := "  " + displaytext.OneLine(agent.StatusWord(a.Status))
 	nameRoom := room
 	if room > lipgloss.Width(status) {
 		nameRoom = room - lipgloss.Width(status)

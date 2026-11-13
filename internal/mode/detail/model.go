@@ -202,17 +202,13 @@ func (m *Model) LinkedAgents() []agent.Agent {
 }
 
 func linkedAgents(live map[string]agent.Agent, d domain.IssueDetail) []agent.Agent {
-	var sessions []string
+	issue := agent.IssueLinks{Labels: d.Summary.Labels, Closed: d.Summary.Status == domain.StatusClosed}
 	if d.Summary.Status == domain.StatusInProgress {
 		for _, comment := range d.Comments {
-			sessions = append(sessions, comment.Session)
+			issue.CommentSessions = append(issue.CommentSessions, comment.Session)
 		}
 	}
-	linked := agent.Linked(live, d.Summary.Labels, sessions)
-	if d.Summary.Status == domain.StatusClosed {
-		linked = slices.DeleteFunc(linked, func(a agent.Agent) bool { return a.Status == agent.Gone })
-	}
-	return linked
+	return agent.Linked(live, issue)
 }
 
 // SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation

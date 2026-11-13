@@ -341,14 +341,15 @@ agents.
   issue, then `Not linked`, the live agents linked to none. A group with no agent is left out.
   Within a group the agent that needs the operator most comes first (`agent.Rank`), then by title.
 - An agent is linked by a link label on any issue, closed ones included, or by a comment on an In
-  Progress card (`Board.CommentLinks`); a label wins over a comment (`buildRows`). A link label no
+  Progress card (`Board.CommentLinks`); a label wins over a comment, and the first issue over a
+  later one (`agent.Link`, which `buildRows` and Detail's `linkedAgents` share). A link label no
   live agent holds is a `gone` row, on an open issue only and only after a poll that answered.
   The Details pane and the agent dialog of Detail follow the same rule: a closed issue has no
   `gone` agent (`linkedAgents`, `internal/mode/detail/model.go`), because the store refuses the
   unlink of its label.
 - A row is two lines. The first is the agent's title (`agent.Agent.Title`: the harness's name, or
   the label without one), bold, its status word in the colour of `styles.AgentStatusStyle` (`gone`
-  muted), and ` · ` and what it does, muted. A long title is cut before the status, never the
+  muted), and ` · ` and what it does, muted; all three cleaned with `displaytext.OneLine`. A long title is cut before the status, never the
   status (`agentLine`, `internal/ui/agents/agents.go`). The second, muted, is the label when the title is a
   name, and the ID and the title of the linked issue. The selection gutter and the band stand on
   both lines.
@@ -375,9 +376,15 @@ agents.
   it again. A Detail opened with `open_issue` keeps its issue while a poll moves or removes the row
   under it: the shell holds that issue as a drill-in (`ActionOpenDetail` in `Model.update`).
 - One click selects a row, a second brings its agent to the front; the wheel moves the selection.
-- The agents come from the shell's poll (`Model.applyAgentList`), the comment links with it. The tab
-  reads the issues with a link label itself, with `SearchIssuesQuery.LabelContains`, on its first
-  entry, its reload and its auto refresh.
+- The agents come from the shell's poll (`Model.publishAgents`), the comment links with them in
+  one `agents.Model.SetAgents`. The tab reads the issues with a link label itself, with
+  `SearchIssuesQuery.LabelContains`, on its first entry, its reload and its auto refresh. Its
+  reload, the key and the `reload` button, also polls the host at once (`ActionPollAgents`,
+  `Model.pollAgentsNow`), with no auto refresh too.
+- An agent the app starts is live at once (`Model.addStartedAgent`), and one it closes leaves at
+  once (`Model.dropAgent`). A poll in flight at either began before it, so its result is dropped
+  and another poll runs (`Model.pollAgentsAgain`): it would draw the started agent `gone` or put
+  the closed one back.
 - `Model.selectAgent` switches to the tab with an agent selected. A row that is not there yet, a
   gone agent before the read, is selected when it comes (`agents.Model.Select`). When the live
   agents and the linked issues are both known and the agent has no row, such as a gone agent of a
@@ -814,8 +821,10 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   (`Model.offerAgentFocus`). The delete and close questions have no input, a
   `modal.ButtonDanger` confirm, and take `y` and `n`; the focus offer has no input either.
   `handleOverlayMessage` tells them apart by `agentClose`, `agentAsk`, `agentFocusOffer` and
-  `storeForm.kind`. The focus offer opens only where it takes no keys from work on screen, a
-  query with text in it included; there a warning toast names the agent dialog instead. A new field of an issue is a row of the issue editor, never a modal.
+  `storeForm.kind`. The focus offer opens only on Detail or the Agents tab with no overlay, menu or
+  drag open: no key typed there is text. Board, Docs and the store search take a typed key as
+  query text with no prefix, so anywhere else a warning toast names the agent dialog and the
+  Agents tab instead. A new field of an issue is a row of the issue editor, never a modal.
 - A toast carries an identity: `toaster.Model.Show` bumps `seq`, and a scheduled `DismissMsg` carries
   the `seq` it was scheduled for. Compare it on receipt, so a stale timer cannot dismiss the toast
   that replaced it.

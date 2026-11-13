@@ -89,12 +89,11 @@ func (a Agent) Key() string {
 	return a.Ref
 }
 
-// Spec is the agent Start opens: in the project at Root, prompted with Prompt
-// when it is not empty, and brought to the front when Focus is true.
+// Spec is the agent Start opens: in the project at Root, without the focus,
+// and prompted with Prompt when it is not empty.
 type Spec struct {
 	Root   string
 	Prompt string
-	Focus  bool
 }
 
 // ErrNoProject is the error a Host wraps when the root it is asked about is
@@ -105,8 +104,8 @@ var ErrNoProject = errors.New("not a project of the agent host")
 // context, and a Host sets its own timeout on top.
 type Host interface {
 	// Start opens an agent on spec and returns once its session is known.
-	// When a later step, such as the prompt or the focus, fails, it returns
-	// the agent it opened with the error.
+	// When a later step, such as the prompt, fails, it returns the agent it
+	// opened with the error.
 	Start(ctx context.Context, spec Spec) (Agent, error)
 	// List returns the live agents of the project at root on this machine.
 	List(ctx context.Context, root string) ([]Agent, error)
@@ -179,44 +178,83 @@ func GoneAgent(session string) Agent {
 	return Agent{Session: session, Label: "Session " + session[:min(len(session), goneLabelLength)], Status: Gone}
 }
 
-// Linked is the agents linked to an issue: those whose session a link label
-// among labels names, and those whose session wrote one of its comments,
-// merged by session with the live agents of the project. live is nil when
-// the live agents are not known: no poll answered yet, or the last one
-// failed. A session a link label names that no live agent holds is Gone, but
-// only when live is known: an unknown list must not report a live agent gone.
-// A comment session no live agent holds is left out: every past session that
-// commented would show. The one that needs the operator most is first: by
-// Rank, then by Label.
-func Linked(live map[string]Agent, labels, commentSessions []string) []Agent {
+// ByNeed orders a before b when it needs the operator more: by Rank, then by
+// Title.
+func ByNeed(a, b Agent) int {
+	if rank := Rank(a.Status) - Rank(b.Status); rank != 0 {
+		return rank
+	}
+	return strings.Compare(a.Title(), b.Title())
+}
+
+// IssueLinks is what links one issue to agents: its labels, among them the
+// link labels, the sessions of the agents that commented on it, and whether
+// it is closed. A caller gives the comment sessions of an In Progress issue
+// only.
+type IssueLinks struct {
+	Labels          []string
+	CommentSessions []string
+	Closed          bool
+}
+
+// LinkedAgent is an agent linked to an issue: Issue is the index of the
+// issue in the list Link was given.
+type LinkedAgent struct {
+	Agent Agent
+	Issue int
+}
+
+// Link is the agents linked to issues, merged by session with the live
+// agents of the project. live is nil when the live agents are not known: no
+// poll answered yet, or the last one failed.
+//
+//   - A session a link label names is linked to the issue of the label. A
+//     label wins over a comment, and the first issue over a later one.
+//   - A session a label names that no live agent holds is Gone, but only on
+//     an issue that is not closed and only when live is known: a closed
+//     issue's agent finished and the store refuses the unlink of its label,
+//     and an unknown list must not report a live agent gone.
+//   - A comment session no live agent holds is left out: every past session
+//     that commented would show.
+//
+// The agent that needs the operator most is first (ByNeed).
+func Link(live map[string]Agent, issues []IssueLinks) []LinkedAgent {
 	known := live != nil
-	var linked []Agent
+	var linked []LinkedAgent
 	seen := make(map[string]bool)
-	add := func(session string, keepGone bool) {
+	add := func(session string, issue int, mayBeGone bool) {
 		if session == "" || seen[session] {
 			return
 		}
 		a, ok := live[session]
-		if !ok && !keepGone {
+		if !ok && !mayBeGone {
 			return
 		}
 		if !ok {
 			a = GoneAgent(session)
 		}
 		seen[session] = true
-		linked = append(linked, a)
+		linked = append(linked, LinkedAgent{Agent: a, Issue: issue})
 	}
-	for _, session := range LinkSessions(labels) {
-		add(session, known)
-	}
-	for _, session := range commentSessions {
-		add(session, false)
-	}
-	slices.SortFunc(linked, func(a, b Agent) int {
-		if rank := Rank(a.Status) - Rank(b.Status); rank != 0 {
-			return rank
+	for i, issue := range issues {
+		for _, session := range LinkSessions(issue.Labels) {
+			add(session, i, known && !issue.Closed)
 		}
-		return strings.Compare(a.Label, b.Label)
-	})
+	}
+	for i, issue := range issues {
+		for _, session := range issue.CommentSessions {
+			add(session, i, false)
+		}
+	}
+	slices.SortStableFunc(linked, func(a, b LinkedAgent) int { return ByNeed(a.Agent, b.Agent) })
 	return linked
+}
+
+// Linked is the agents Link links to the one issue.
+func Linked(live map[string]Agent, issue IssueLinks) []Agent {
+	var agents []Agent
+	for _, linked := range Link(live, []IssueLinks{issue}) {
+		agents = append(agents, linked.Agent)
+	}
+	return agents
 }

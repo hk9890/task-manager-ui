@@ -127,7 +127,7 @@ revier has not answered yet.
   Details pane at once
 - `alt+o` — open the issue the selected agent is linked to in detail mode;
   `esc` there returns to the tab. The legend names it only on a linked agent
-- `alt+r` — read the linked issues again
+- `alt+r` — read the linked issues again and ask revier for the agents at once
 
 A click selects an agent and a second click brings it to the front. Edit,
 comment and close act on the issue of the selected agent.
@@ -212,8 +212,11 @@ green while the agent runs, grey while it is idle and orange while it needs you.
 
 When revier is not on the `PATH`, or the project is no revier project, the live
 agents are not known: no labelled agent is listed, none is offered for resume,
-and no card carries the mark. The agent dialog and Ask still open, and a start
-fails with an error toast.
+and no card carries the mark. The Agents tab says which of the two it is. The
+agent dialog and Ask still open, and a start fails with an error toast.
+
+A resume or a close of an agent runs to its end and is reported after a store
+switch too.
 
 `left`, `right` and `enter` are built in and cannot be rebound.
 
@@ -396,7 +399,9 @@ instead.
   ends the issue is read again and a toast shows its summary, over up to three
   lines. A summary longer than that is cut, and the toast stays until `esc` or
   the next toast. When the agent
-  has a question, a dialog offers to bring it to the front. The agent stays
+  has a question, a dialog offers to bring it to the front, in detail mode or on
+  the Agents tab with nothing else open; anywhere else a toast says so, and you
+  answer from the agent dialog or the Agents tab. The agent stays
   open, linked to the issue. Switch stores before its turn ends and no summary
   comes.
 - Quote and search leave out the pane borders, the selection bar and the

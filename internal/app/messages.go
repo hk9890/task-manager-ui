@@ -60,16 +60,20 @@ type agentAnsweredMsg struct {
 }
 
 // agentResumedMsg carries the result of reopening a gone agent's
-// conversation and bringing it to the front: err when either failed.
+// conversation and bringing it to the front: err when either failed. epoch
+// is the store the resume began on: the message is not scoped.
 type agentResumedMsg struct {
+	epoch int
 	agent agent.Agent
 	err   error
 }
 
 // agentClosedMsg carries the result of closing an agent: err when the close
 // failed, and else the issues its link label was removed from, and unlinkErr
-// when a removal failed.
+// when a removal failed. epoch is the store the close began on: the message
+// is not scoped.
 type agentClosedMsg struct {
+	epoch     int
 	agent     agent.Agent
 	err       error
 	unlinked  []string

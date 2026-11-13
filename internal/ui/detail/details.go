@@ -407,9 +407,6 @@ type ContentPaneState struct {
 	Hover Button
 }
 
-// contentPane is the Content pane of state at the size the layout gives it.
-// Render, HitTest and the scroll bounds build the same value, so a click lands
-// on what is drawn under it.
 // detailsPane is the Details pane of the state, width by height cells.
 func (state State) detailsPane(width, height int) DetailsPaneState {
 	pane := DetailsPaneState{
@@ -425,6 +422,9 @@ func (state State) detailsPane(width, height int) DetailsPaneState {
 	return pane
 }
 
+// contentPane is the Content pane of state at the size the layout gives it.
+// Render, HitTest and the scroll bounds build the same value, so a click lands
+// on what is drawn under it.
 func (state State) contentPane(width, height int) ContentPaneState {
 	pane := ContentPaneState{
 		Detail:          state.Detail,

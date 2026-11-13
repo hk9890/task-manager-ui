@@ -6,13 +6,10 @@
 package agents
 
 import (
-	"cmp"
 	"context"
 	"log/slog"
-	"maps"
 	"reflect"
 	"slices"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -46,11 +43,10 @@ type Model struct {
 	absent    string
 
 	// issues is every issue with a link label, closed ones included;
-	// commentLinks the In Progress issues by the session of an agent that
-	// commented on them.
+	// commentLinks the In Progress issues agents commented on.
 	issues       []domain.IssueSummary
 	issuesKnown  bool
-	commentLinks map[string]domain.IssueSummary
+	commentLinks []mode.CommentLink
 	loading      bool
 	// dropped is the sessions the app closed or unlinked whose link label a
 	// read may still carry on an open issue: a read begun before the unlink.
@@ -121,17 +117,12 @@ func (m *Model) HasQuery() bool { return false }
 // TakesKey is false: every key of the tab is a binding.
 func (m *Model) TakesKey(tea.KeyPressMsg) bool { return false }
 
-// SetAgents replaces the live agents with those of a poll. known is false
-// when the poll failed, and absent then, or when there is no host to ask,
-// says why no agent is shown.
-func (m *Model) SetAgents(live []agent.Agent, known bool, absent string) tea.Cmd {
-	m.live, m.liveKnown, m.absent = live, known, absent
-	return m.rebuild()
-}
-
-// SetCommentLinks replaces the In Progress issues by commenting session.
-func (m *Model) SetCommentLinks(links map[string]domain.IssueSummary) tea.Cmd {
-	m.commentLinks = links
+// SetAgents replaces the live agents with those of a poll, and the In
+// Progress issues agents commented on with the board's. known is false when
+// the poll failed, and absent then, or when there is no host to ask, says
+// why no agent is shown.
+func (m *Model) SetAgents(live []agent.Agent, known bool, absent string, commentLinks []mode.CommentLink) tea.Cmd {
+	m.live, m.liveKnown, m.absent, m.commentLinks = live, known, absent, commentLinks
 	return m.rebuild()
 }
 
@@ -215,7 +206,8 @@ func (m *Model) key(msg tea.KeyPressMsg) tea.Cmd {
 	case match(config.BoardActionMoveEnd):
 		return m.move(len(m.rows))
 	case match(config.BoardActionReload):
-		return m.Reload()
+		// The shell owns the agent host, so it asks the host for the agents.
+		return tea.Batch(m.Reload(), mode.RequestActionCmd(mode.Agents, mode.ActionPollAgents))
 	}
 	row, ok := m.selectedRow()
 	if !ok {
@@ -395,45 +387,36 @@ func selectionOf(row uiagents.Row) *mode.Selection {
 	return &mode.Selection{Issue: *row.Issue}
 }
 
-// buildRows is the list: first each agent linked to an issue, then each live
-// agent linked to none.
-//
-// An agent is linked by a link label on any issue, or by a comment on an In
-// Progress issue; a label wins over a comment, and the first issue over a
-// later one. A link label that no live agent holds is a gone row, but only
-// on an open issue and while the live agents are known: a closed issue's
-// agent finished, and an unknown list must not report a live agent gone.
-// Each group puts the agent that needs the operator most first, by
-// agent.Rank, then by title.
-func buildRows(live []agent.Agent, liveKnown bool, issues []domain.IssueSummary, commentLinks map[string]domain.IssueSummary) []uiagents.Row {
-	bySession := make(map[string]agent.Agent, len(live))
-	for _, a := range live {
-		if a.Session != "" {
-			bySession[a.Session] = a
-		}
-	}
-	var linked []uiagents.Row
-	seen := make(map[string]bool)
-	link := func(a agent.Agent, issue domain.IssueSummary) {
-		seen[a.Key()] = true
-		linked = append(linked, uiagents.Row{Agent: a, Issue: &issue})
-	}
-	for _, issue := range issues {
-		for _, session := range agent.LinkSessions(issue.Labels) {
-			a, isLive := bySession[session]
-			switch {
-			case seen[session]:
-			case isLive:
-				link(a, issue)
-			case liveKnown && issue.Status != domain.StatusClosed:
-				link(agent.GoneAgent(session), issue)
+// buildRows is the list: first each agent linked to an issue, by the link
+// labels of issues and the comments of commentLinks (agent.Link), then each
+// live agent linked to none. Each group puts the agent that needs the
+// operator most first (agent.ByNeed).
+func buildRows(live []agent.Agent, liveKnown bool, issues []domain.IssueSummary, commentLinks []mode.CommentLink) []uiagents.Row {
+	var bySession map[string]agent.Agent
+	if liveKnown {
+		bySession = make(map[string]agent.Agent, len(live))
+		for _, a := range live {
+			if a.Session != "" {
+				bySession[a.Session] = a
 			}
 		}
 	}
-	for _, session := range slices.Sorted(maps.Keys(commentLinks)) {
-		if a, isLive := bySession[session]; isLive && !seen[session] {
-			link(a, commentLinks[session])
-		}
+	targets := make([]domain.IssueSummary, 0, len(issues)+len(commentLinks))
+	links := make([]agent.IssueLinks, 0, cap(targets))
+	for _, issue := range issues {
+		targets = append(targets, issue)
+		links = append(links, agent.IssueLinks{Labels: issue.Labels, Closed: issue.Status == domain.StatusClosed})
+	}
+	for _, link := range commentLinks {
+		targets = append(targets, link.Issue)
+		links = append(links, agent.IssueLinks{CommentSessions: link.Sessions})
+	}
+	var rows []uiagents.Row
+	seen := make(map[string]bool)
+	for _, linked := range agent.Link(bySession, links) {
+		seen[linked.Agent.Key()] = true
+		issue := targets[linked.Issue]
+		rows = append(rows, uiagents.Row{Agent: linked.Agent, Issue: &issue})
 	}
 	var unlinked []uiagents.Row
 	for _, a := range live {
@@ -441,13 +424,6 @@ func buildRows(live []agent.Agent, liveKnown bool, issues []domain.IssueSummary,
 			unlinked = append(unlinked, uiagents.Row{Agent: a})
 		}
 	}
-	byNeed := func(x, y uiagents.Row) int {
-		return cmp.Or(
-			agent.Rank(x.Agent.Status)-agent.Rank(y.Agent.Status),
-			strings.Compare(x.Agent.Title(), y.Agent.Title()),
-		)
-	}
-	slices.SortStableFunc(linked, byNeed)
-	slices.SortStableFunc(unlinked, byNeed)
-	return append(linked, unlinked...)
+	slices.SortStableFunc(unlinked, func(x, y uiagents.Row) int { return agent.ByNeed(x.Agent, y.Agent) })
+	return append(rows, unlinked...)
 }

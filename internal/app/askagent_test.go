@@ -80,7 +80,7 @@ func TestAskAnAgentStartsItInTheBackgroundAndReportsItsSummary(t *testing.T) {
 	m, client := askedShell(t, "I shortened it.\n"+`{"status":"done","summary":"Shortened the title."}`)
 
 	specs := startCalls(client)
-	if len(specs) != 1 || specs[0].Focus || specs[0].Root != m.services.ProjectRoot {
+	if len(specs) != 1 || specs[0].Root != m.services.ProjectRoot {
 		t.Fatalf("Start calls = %+v, want one without the focus in the project", specs)
 	}
 	for _, part := range []string{"tm-1", `"Ready first"`, "make the title shorter", `{"status":"done"|"failed"|"question"`} {

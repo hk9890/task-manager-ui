@@ -20,14 +20,14 @@ import (
 // target work; with $REVIER_LIST_FAILS set it fails, and its first
 // $REVIER_SESSION_LATE calls leave out the agent of target home, as revier
 // does while a new tab has no session yet. `agent prompt` fails with
-// $REVIER_PROMPT_FAILS set, `agent focus` with $REVIER_FOCUS_FAILS.
-// `agent new` prints the address of demo:home:7, or of
-// demo:home:8 with --resume. The first `agent wait --until idle` fails, as it
-// does before the harness of a new tab has started; with
-// $REVIER_WAIT_TIMES_OUT set every wait exits 2. A wait until stopped prints
-// $REVIER_STOPPED_ON, idle when it is not set. `agent read` prints what the
-// agent said, `agent close` refuses without --force, and an unknown address
-// fails as revier does: demo:home:8 is known once a harness wait succeeded.
+// $REVIER_PROMPT_FAILS set. `agent new` prints the address of demo:home:7,
+// or of demo:home:8 with --resume. `agent wait` waits for the harness of a new tab
+// itself, as revier does; with $REVIER_WAIT_TIMES_OUT set every wait exits 2,
+// and with $REVIER_WAIT_FAILS set every wait exits 1. A wait until stopped
+// prints $REVIER_STOPPED_ON, idle when it is not set. `agent read` prints what
+// the agent said, `agent close` refuses without --force, and an unknown
+// address fails as revier does: demo:home:8 is known once a harness wait
+// succeeded.
 const fakeRevier = `#!/bin/sh
 printf '%s | %s\n' "$*" "$(pwd -P)" >> "$REVIER_LOG"
 case "$1" in
@@ -49,11 +49,7 @@ agent)
 		esac ;;
 	wait)
 		[ -z "$REVIER_WAIT_TIMES_OUT" ] || exit 2
-		if [ "$5" = idle ] && [ ! -e "$REVIER_LOG.started" ]; then
-			: > "$REVIER_LOG.started"
-			echo "no agent at $3" >&2
-			exit 1
-		fi
+		[ -z "$REVIER_WAIT_FAILS" ] || { echo "no agent at $3" >&2; exit 1; }
 		[ "$5" != idle ] || : > "$REVIER_LOG.harness"
 		[ "$5" != stopped ] || { echo "${REVIER_STOPPED_ON:-idle}"; exit 0; }
 		echo idle ;;
@@ -61,7 +57,6 @@ agent)
 		[ "$3" = "demo:home:7" ] || { [ "$3" = "demo:home:8" ] && [ -e "$REVIER_LOG.harness" ]; } || { echo "no agent at $3" >&2; exit 1; }
 		case "$2" in
 		prompt) [ -z "$REVIER_PROMPT_FAILS" ] || { echo "the prompt was refused" >&2; exit 1; } ;;
-		focus) [ -z "$REVIER_FOCUS_FAILS" ] || { echo "no window to raise" >&2; exit 1; } ;;
 		read) echo 'all done' ;;
 		close) [ "$4" = "--force" ] || { echo "the agent is running" >&2; exit 1; } ;;
 		esac ;;
@@ -165,22 +160,41 @@ func TestListRefusesARootRevierResolvesElsewhere(t *testing.T) {
 	}
 }
 
+// A revier that is not installed is a fault of the host, not a root that is
+// no revier project: the operator reads it as such.
 func TestListSaysRevierIsNotInstalled(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 
 	_, err := NewHost().List(context.Background(), t.TempDir())
-	if !errors.Is(err, agent.ErrNoProject) || !strings.Contains(err.Error(), "revier is not installed") {
-		t.Fatalf("expected a not-installed ErrNoProject error, got %v", err)
+	if err == nil || errors.Is(err, agent.ErrNoProject) || !strings.Contains(err.Error(), "revier is not installed") {
+		t.Fatalf("expected a not-installed error that is no ErrNoProject, got %v", err)
 	}
 }
 
-// Start opens the tab without the focus, waits again while the harness has
-// not started, reads the session from the list, then prompts and focuses.
-func TestStartPromptsAndFocusesTheNewAgentOnceItsSessionIsKnown(t *testing.T) {
+// A revier status that fails is no ErrNoProject either: it did not say
+// which project the root is.
+func TestAFailedStatusIsNoErrNoProject(t *testing.T) {
+	root := t.TempDir()
+	h, _ := withFakeRevier(t, root)
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "revier"), []byte("#!/bin/sh\necho 'no server' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	_, err := h.List(context.Background(), root)
+	if err == nil || errors.Is(err, agent.ErrNoProject) || !strings.Contains(err.Error(), "no server") {
+		t.Fatalf("expected revier's status error, and no ErrNoProject, got %v", err)
+	}
+}
+
+// Start opens the tab without the focus, waits once for its harness, reads
+// the session from the list, then prompts it. It never focuses it.
+func TestStartPromptsTheNewAgentOnceItsSessionIsKnown(t *testing.T) {
 	root := t.TempDir()
 	h, log := withFakeRevier(t, root)
 
-	started, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "talk about tm-1", Focus: true})
+	started, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "talk about tm-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -191,17 +205,15 @@ func TestStartPromptsAndFocusesTheNewAgentOnceItsSessionIsKnown(t *testing.T) {
 		"status",
 		"agent new --no-focus -p demo",
 		"agent wait demo:home:7 --until idle --timeout 60",
-		"agent wait demo:home:7 --until idle --timeout 60",
 		"list --json --conversations demo",
 		"agent prompt demo:home:7 -- talk about tm-1",
-		"agent focus demo:home:7",
 	}
 	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {
 		t.Errorf("revier calls = %q\nwant %q", calls, want)
 	}
 }
 
-func TestStartWithoutPromptOrFocusOnlyOpensTheAgent(t *testing.T) {
+func TestStartWithoutPromptOnlyOpensTheAgent(t *testing.T) {
 	root := t.TempDir()
 	h, log := withFakeRevier(t, root)
 
@@ -214,37 +226,41 @@ func TestStartWithoutPromptOrFocusOnlyOpensTheAgent(t *testing.T) {
 	}
 	for _, call := range readCalls(t, log) {
 		if strings.HasPrefix(call, "agent prompt") || strings.HasPrefix(call, "agent focus") {
-			t.Errorf("Start without prompt and focus ran %q", call)
+			t.Errorf("Start without a prompt ran %q", call)
 		}
 	}
 }
 
-// A wait that ran out of time is not tried again: the agent is there and not
-// idle, which no retry changes.
-func TestStartFailsOnAHarnessWaitThatTimesOut(t *testing.T) {
-	root := t.TempDir()
-	h, log := withFakeRevier(t, root)
-	t.Setenv("REVIER_WAIT_TIMES_OUT", "1")
+// The harness wait runs once, whether it ran out of time or failed: revier
+// agent wait already waits for the harness to start, so no retry helps.
+func TestStartFailsOnAHarnessWaitThatFails(t *testing.T) {
+	for _, env := range []string{"REVIER_WAIT_TIMES_OUT", "REVIER_WAIT_FAILS"} {
+		t.Run(env, func(t *testing.T) {
+			root := t.TempDir()
+			h, log := withFakeRevier(t, root)
+			t.Setenv(env, "1")
 
-	if _, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "hi"}); err == nil || !strings.Contains(err.Error(), "not idle") {
-		t.Fatalf("expected a not-idle error, got %v", err)
-	}
-	waits := 0
-	calls := readCalls(t, log)
-	for _, call := range calls {
-		if strings.HasPrefix(call, "agent wait") {
-			waits++
-		}
-		if strings.HasPrefix(call, "agent prompt") {
-			t.Errorf("a Start whose wait timed out prompted: %q", call)
-		}
-	}
-	if waits != 1 {
-		t.Errorf("a timed-out wait ran %d waits, want 1", waits)
-	}
-	// The tab is closed again: no label links it, so nothing could reach it.
-	if last := calls[len(calls)-1]; last != "agent close demo:home:7 --force" {
-		t.Errorf("last revier call = %q, want the force close of the new tab", last)
+			if _, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "hi"}); err == nil || !strings.Contains(err.Error(), "not idle") {
+				t.Fatalf("expected a not-idle error, got %v", err)
+			}
+			waits := 0
+			calls := readCalls(t, log)
+			for _, call := range calls {
+				if strings.HasPrefix(call, "agent wait") {
+					waits++
+				}
+				if strings.HasPrefix(call, "agent prompt") {
+					t.Errorf("a Start whose wait failed prompted: %q", call)
+				}
+			}
+			if waits != 1 {
+				t.Errorf("a failed wait ran %d waits, want 1", waits)
+			}
+			// The tab is closed again: no label links it, so nothing could reach it.
+			if last := calls[len(calls)-1]; last != "agent close demo:home:7 --force" {
+				t.Errorf("last revier call = %q, want the force close of the new tab", last)
+			}
+		})
 	}
 }
 
@@ -298,36 +314,25 @@ func TestStartClosesATabWhoseSessionIsNeverNamed(t *testing.T) {
 	}
 }
 
-// A prompt or a focus that fails returns the agent Start opened with the
-// error, and leaves its tab open: the caller links it, and it may work on
-// the issue.
-func TestAFailedPromptOrFocusReturnsTheOpenedAgent(t *testing.T) {
-	for _, tc := range []struct {
-		env, want string
-		status    agent.Status
-	}{
-		{"REVIER_PROMPT_FAILS", "the prompt was refused", agent.Idle},
-		{"REVIER_FOCUS_FAILS", "no window to raise", agent.Running},
-	} {
-		t.Run(tc.env, func(t *testing.T) {
-			root := t.TempDir()
-			h, log := withFakeRevier(t, root)
-			t.Setenv(tc.env, "1")
+// A prompt that fails returns the agent Start opened with the error, and
+// leaves its tab open: the caller links it, and it may work on the issue.
+func TestAFailedPromptReturnsTheOpenedAgent(t *testing.T) {
+	root := t.TempDir()
+	h, log := withFakeRevier(t, root)
+	t.Setenv("REVIER_PROMPT_FAILS", "1")
 
-			started, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "hi", Focus: true})
-			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Fatalf("expected the error %q, got %v", tc.want, err)
-			}
-			want := agent.Agent{Ref: "demo:home:7", Session: "s-7", Label: "Tab 7", Status: tc.status}
-			if started != want {
-				t.Errorf("started = %+v, want %+v", started, want)
-			}
-			for _, call := range readCalls(t, log) {
-				if strings.HasPrefix(call, "agent close") {
-					t.Errorf("Start closed the opened agent: %q", call)
-				}
-			}
-		})
+	started, err := h.Start(context.Background(), agent.Spec{Root: root, Prompt: "hi"})
+	if err == nil || !strings.Contains(err.Error(), "the prompt was refused") {
+		t.Fatalf("expected the refused prompt, got %v", err)
+	}
+	want := agent.Agent{Ref: "demo:home:7", Session: "s-7", Label: "Tab 7", Status: agent.Idle}
+	if started != want {
+		t.Errorf("started = %+v, want %+v", started, want)
+	}
+	for _, call := range readCalls(t, log) {
+		if strings.HasPrefix(call, "agent close") {
+			t.Errorf("Start closed the opened agent: %q", call)
+		}
 	}
 }
 
@@ -345,7 +350,6 @@ func TestResumeOpensTheConversationWithoutTheFocus(t *testing.T) {
 	want := []string{
 		"status",
 		"agent new --no-focus -p demo --resume s-8",
-		"agent wait demo:home:8 --until idle --timeout 60",
 		"agent wait demo:home:8 --until idle --timeout 60",
 	}
 	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {

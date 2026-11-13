@@ -42,16 +42,13 @@ type askReport struct {
 // the agent about text on issue.
 func (m *Model) openAgentAsk(issue domain.IssueSummary, text string) tea.Cmd {
 	m.agentAsk = &agentAsk{issue: issue, text: text}
-	m.actionModal = modal.NewWithKeys(modal.Config{
+	return m.openActionModal(modal.Config{
 		Title:       "Ask an agent",
 		Message:     "About the selection on " + displaytext.OneLine(issue.ID) + ". It works in the background.",
 		Inputs:      []modal.InputConfig{{Key: askInstructionKey, Label: "Instruction", Placeholder: "what to change"}},
 		ConfirmText: "Ask",
 		MinWidth:    72,
-	}, modal.BindingsFromConfig(m.keys))
-	m.actionModal.SetSize(m.width, m.height)
-	m.showActionModal = true
-	return m.actionModal.Init()
+	})
 }
 
 // submitAgentAsk closes the ask question and asks the agent. An empty
@@ -152,14 +149,7 @@ func (m *Model) waitForAnswer(issueID string, a agent.Agent) tea.Cmd {
 // offer to bring the agent to the front. A reply without a status line is
 // reported as finished: the reload shows what it did.
 func (m *Model) handleAgentAnswered(msg agentAnsweredMsg) tea.Cmd {
-	reload := []tea.Cmd{m.pollAgentsCmd()}
-	if !m.storeWatched() {
-		m.markBrowseSurfacesDirty()
-		reload = append(reload, m.maybeAutoRefreshActiveSurfaceCmd())
-		if m.detail.Detail.Summary.ID == msg.issueID {
-			reload = append(reload, m.reloadDetailAfterMutationCmd(msg.issueID))
-		}
-	}
+	reload := []tea.Cmd{m.pollAgentsCmd(), m.reloadAfterLink(msg.issueID)}
 
 	label, issueID := displaytext.OneLine(msg.agent.Title()), displaytext.OneLine(msg.issueID)
 	var report tea.Cmd
@@ -193,26 +183,22 @@ func withSummary(head, summary string) string {
 }
 
 // offerAgentFocus asks whether to bring the agent to the front, in the action
-// modal. Where a question would take keys from work on screen — another
-// question, a menu, help, a drag, a query being typed, a surface above the
-// shell — a warning toast points to the agent dialog instead.
+// modal, only on Detail or the Agents tab with nothing else open: no key
+// typed there is text. Anywhere else the question could take a key from work
+// on screen — a board, docs or search query takes typed text with no prefix,
+// a question, a menu, help, a drag, a surface above the shell — so a warning
+// toast points to the agent dialog and the Agents tab instead.
 func (m *Model) offerAgentFocus(a agent.Agent, question string) tea.Cmd {
-	tab := m.browseController(m.active)
-	busy := m.overlayOpen() || m.selMenu != nil || m.press != nil ||
-		(tab != nil && tab.HasQuery()) ||
-		m.active == mode.IssueEdit || m.active == mode.Config || m.active == mode.StorePicker
-	if busy {
-		return m.showToast(question+" (answer it from the agent dialog)", toaster.StyleWarn)
+	onAgentSurface := m.active == mode.Detail || m.active == mode.Agents
+	if !onAgentSurface || m.overlayOpen() || m.selMenu != nil || m.press != nil {
+		return m.showToast(question+" (answer it from the agent dialog or the Agents tab)", toaster.StyleWarn)
 	}
 	m.agentFocusOffer = &a
-	m.actionModal = modal.NewWithKeys(modal.Config{
+	return m.openActionModal(modal.Config{
 		Title:       "The agent asks",
 		Message:     displaytext.OneLine(question) + " Bring it to the front?",
 		ConfirmText: "Focus",
-	}, modal.BindingsFromConfig(m.keys))
-	m.actionModal.SetSize(m.width, m.height)
-	m.showActionModal = true
-	return m.actionModal.Init()
+	})
 }
 
 // confirmAgentFocus closes the focus offer and brings its agent to the front.

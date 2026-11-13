@@ -95,13 +95,14 @@ func (m *Model) handleAgentStarted(msg agentStartedMsg) tea.Cmd {
 
 // reloadAfterStart reloads after the link label of a start was written, when
 // the start began on the active store: the label went to the store it began
-// on, and another store's surfaces do not show it. It lists the agents too:
-// until a poll holds the new agent, its link label draws it gone.
+// on, and another store's surfaces do not show it. It puts the new agent
+// among the live ones too: until a poll holds it, its link label draws it
+// gone.
 func (m *Model) reloadAfterStart(start agentStart) tea.Cmd {
 	if start.epoch != m.storeEpoch {
 		return nil
 	}
-	return batchCmds(m.reloadAfterLink(start.issueID), m.pollAgentsCmd())
+	return batchCmds(m.reloadAfterLink(start.issueID), m.addStartedAgent(start.agent))
 }
 
 // reloadAfterLink reloads the browse surfaces, and Detail when it shows an

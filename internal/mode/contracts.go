@@ -121,6 +121,14 @@ type Selection struct {
 	Issue domain.IssueSummary
 }
 
+// CommentLink is an In Progress issue and the sessions of the agents that
+// commented on it: the agents it links without a link label. The board gives
+// them, in the order of its column, and the Agents tab takes them.
+type CommentLink struct {
+	Issue    domain.IssueSummary
+	Sessions []string
+}
+
 // SelectionChangedMsg is emitted by browse modes whenever the selected
 // issue changes so the shell can update detail presentation state.
 type SelectionChangedMsg struct {
@@ -205,6 +213,10 @@ const (
 	// pane of Detail: the shell switches to the Agents tab with that agent
 	// selected.
 	ActionSelectAgent Action = "select_agent"
+
+	// ActionPollAgents is the reload key of the Agents tab: the shell asks
+	// the agent host for the live agents at once, as its poll does.
+	ActionPollAgents Action = "poll_agents"
 )
 
 // MouseKind is what the pointer did.

@@ -27,22 +27,17 @@ const (
 	// promptTimeout bounds a prompt, which returns once the agent started on
 	// the text.
 	promptTimeout = 30 * time.Second
-	// harnessWait is the seconds one wait for a new agent's harness to come
-	// up may take, and harnessAttempts how many such waits Start makes: a
-	// wait fails until the harness in the new tab has started.
-	harnessWait     = 60
-	harnessAttempts = 30
+	// harnessWait is the seconds the wait for a new agent's harness to start
+	// and be idle may take.
+	harnessWait = 60
 	// sessionAttempts is how often Start lists the agents for the session of
 	// a new agent whose harness does not name it yet.
 	sessionAttempts = 5
-	// startTimeout bounds all of Start: the tab, its harness, its session,
-	// the prompt and the focus.
+	// startTimeout bounds all of Start: the tab, its harness, its session
+	// and the prompt.
 	startTimeout = 3 * time.Minute
 	// turnWait is the seconds Wait waits for a turn to end.
 	turnWait = 30 * 60
-	// waitTimedOut is the exit status of a revier agent wait that ran out
-	// of time.
-	waitTimedOut = 2
 )
 
 // Host is the agent.Host that runs revier. It remembers the revier project
@@ -65,10 +60,10 @@ func NewHost() *Host {
 }
 
 // Start opens an agent tab without the focus, waits for its harness, reads
-// its session from the list, then prompts and focuses it as spec asks.
-// revier has no command that prints the session of a new agent, hence the
-// list. A tab whose session Start could not read is closed again: nothing
-// could reach it. A failed prompt or focus returns the agent with the error.
+// its session from the list, then prompts it when spec has a prompt. revier
+// has no command that prints the session of a new agent, hence the list. A
+// tab whose session Start could not read is closed again: nothing could reach
+// it. A failed prompt returns the agent with the error.
 func (h *Host) Start(ctx context.Context, spec agent.Spec) (started agent.Agent, err error) {
 	ctx, cancel := context.WithTimeout(ctx, startTimeout)
 	defer cancel()
@@ -91,11 +86,6 @@ func (h *Host) Start(ctx context.Context, spec agent.Spec) (started agent.Agent,
 			return started, err
 		}
 		started.Status = agent.Running
-	}
-	if spec.Focus {
-		if err := h.Focus(ctx, started); err != nil {
-			return started, err
-		}
 	}
 	return started, nil
 }
@@ -132,7 +122,7 @@ func (h *Host) Resume(ctx context.Context, root, session string) (_ agent.Agent,
 	if err != nil {
 		return agent.Agent{}, err
 	}
-	if err := h.awaitHarness(ctx, addr); err != nil {
+	if err := awaitHarness(ctx, addr); err != nil {
 		closeOrphan(ctx, addr)
 		return agent.Agent{}, err
 	}
@@ -167,8 +157,10 @@ func (h *Host) Close(ctx context.Context, a agent.Agent, force bool) error {
 }
 
 // project returns the revier project whose path is root, from the cache or
-// from revier status. Every failure wraps agent.ErrNoProject and is not
-// cached, so a root that becomes a project is found on a later call.
+// from revier status. A status that names no project at root wraps
+// agent.ErrNoProject; a status that did not run, such as revier not installed
+// or out of time, is a plain error. Neither is cached, so a root that becomes
+// a project is found on a later call.
 func (h *Host) project(ctx context.Context, root string) (string, error) {
 	h.mu.Lock()
 	project, ok := h.projects[root]
@@ -177,9 +169,10 @@ func (h *Host) project(ctx context.Context, root string) (string, error) {
 		return project, nil
 	}
 	out, err := run(ctx, callTimeout, root, "status")
-	if err == nil {
-		project, err = projectFromStatus(out, root)
+	if err != nil {
+		return "", err
 	}
+	project, err = projectFromStatus(out, root)
 	if err != nil {
 		return "", fmt.Errorf("%w (%w)", err, agent.ErrNoProject)
 	}
@@ -202,30 +195,20 @@ func (h *Host) forgetOnError(root string, err *error) {
 // awaitStarted waits for the harness of the new agent at addr, then for its
 // session.
 func (h *Host) awaitStarted(ctx context.Context, project, addr string) (agent.Agent, error) {
-	if err := h.awaitHarness(ctx, addr); err != nil {
+	if err := awaitHarness(ctx, addr); err != nil {
 		return agent.Agent{}, err
 	}
 	return h.awaitSession(ctx, project, addr)
 }
 
-// awaitHarness waits until the agent at addr is idle. A wait fails at once
-// until the harness in the new tab has started, so a failed wait is tried
-// again, harnessAttempts times at most; a wait that ran out of time is not.
-func (h *Host) awaitHarness(ctx context.Context, addr string) error {
-	var err error
-	for range harnessAttempts {
-		if _, err = wait(ctx, addr, "idle", harnessWait); err == nil {
-			return nil
-		}
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) && exitErr.ExitCode() == waitTimedOut {
-			return fmt.Errorf("the agent at %s is not idle after %d seconds: %w", addr, harnessWait, err)
-		}
-		if err := h.sleep(ctx); err != nil {
-			return err
-		}
+// awaitHarness waits until the harness of the new agent at addr has started
+// and is idle, harnessWait seconds at most: revier agent wait itself waits
+// for the harness to start within its timeout.
+func awaitHarness(ctx context.Context, addr string) error {
+	if _, err := wait(ctx, addr, "idle", harnessWait); err != nil {
+		return fmt.Errorf("the agent at %s is not idle after %d seconds: %w", addr, harnessWait, err)
 	}
-	return fmt.Errorf("the harness of the agent at %s did not start: %w", addr, err)
+	return nil
 }
 
 // awaitSession lists the agents of project until the one at addr names its

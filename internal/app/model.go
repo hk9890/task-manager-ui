@@ -203,6 +203,18 @@ type Model struct {
 	agentPollFailing  bool
 	projectLookupWait int
 
+	// liveAgents is the agents of the last poll that answered, with each
+	// agent the app started since put in and each it closed taken out.
+	// liveAgentsKnown is false before the first answer and after a failed
+	// poll, and agentPollErr is the error of that poll. agentPollStale is
+	// set when the app started or closed an agent while a poll was in
+	// flight: that poll began before the change, so its result is dropped
+	// and another poll runs.
+	liveAgents      []agent.Agent
+	liveAgentsKnown bool
+	agentPollErr    error
+	agentPollStale  bool
+
 	// agentStarts is the starts of an agent in flight, from an intent or the
 	// selection menu's ask, and agentResumes the sessions a resume is in
 	// flight for. A start or a resume waits for the agent's harness, which
@@ -336,7 +348,8 @@ func (m *Model) bindStore(services Services) {
 	m.agentPollInFlight = false
 	m.agentPollFailing = false
 	m.projectLookupWait = 0
-	m.agents.SetAgents(nil, false, m.agentsAbsent(nil))
+	m.liveAgents, m.liveAgentsKnown, m.agentPollErr, m.agentPollStale = nil, false, nil, false
+	m.agents.SetAgents(nil, false, m.agentsAbsent(nil), nil)
 	m.applyWorkspaceSizeToBrowseModes()
 
 	m.active = mode.Board
@@ -720,7 +733,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.handleAgentAnswered(msg))
 	case agentResumedMsg:
 		delete(m.agentResumes, msg.agent.Session)
-		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.err))
+		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.epoch, msg.err))
 	case agentClosedMsg:
 		return m, batchCmds(modeCmd, m.handleAgentClosed(msg))
 	case agentUnlinkedMsg:
@@ -892,6 +905,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.requestAgentClose(msg.Agent))
 		case mode.ActionSelectAgent:
 			return m, batchCmds(modeCmd, m.selectAgent(msg.Agent.Session))
+		case mode.ActionPollAgents:
+			return m, batchCmds(modeCmd, m.pollAgentsNow())
 		}
 		if msg.Action != mode.ActionOpenDetail {
 			return m, modeCmd
@@ -1051,6 +1066,10 @@ func (m *Model) reloadActiveSurface() tea.Cmd {
 	}
 	// Board is the shell's home tab, so an unknown active mode draws it
 	// (renderBody) and the button reloads what is drawn.
+	if m.active == mode.Agents {
+		// The agents themselves come from the host, which the shell asks.
+		return batchCmds(m.scoped(m.agents.Reload()), m.pollAgentsNow())
+	}
 	if tab := m.browseController(m.active); tab != nil {
 		return m.scoped(tab.Reload())
 	}

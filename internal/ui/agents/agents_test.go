@@ -45,6 +45,18 @@ func TestTheListGroupsTheAgentsByTheirLink(t *testing.T) {
 	}
 }
 
+// A host passes a status it does not map through unchanged, so the status
+// word is cleaned as the name is: a newline in it would add a line to the
+// frame.
+func TestAStatusFromTheHostIsDrawnOnOneLine(t *testing.T) {
+	t.Parallel()
+	row := Row{Agent: agent.Agent{Ref: "demo:home:3", Session: "s-3", Label: "Tab 3", Status: "stuck\nhere\x1b[2J"}}
+	view := testui.Downsample(Render(State{Rows: []Row{row}, Width: 60, Height: 10, Hover: -1}))
+	if !strings.Contains(view, "Tab 3  stuck here [2J") || strings.Contains(view, "\x1b[2J") {
+		t.Errorf("the status is not on one line:\n%q", view)
+	}
+}
+
 // Without a row the list says there is no agent, and why when it knows.
 func TestAnEmptyListSaysWhy(t *testing.T) {
 	t.Parallel()

@@ -28,7 +28,7 @@ func TestAClosedAgentIsNotDrawnGoneOnTheAgentsTab(t *testing.T) {
 	client.Agents = []agent.Agent{idleOnTab4()}
 	dropLinkLabel(t, m, "s-1")
 
-	m = updateOnly(m, agentClosedMsg{agent: runningOnTab3(), unlinked: []string{"tm-1"}})
+	m = updateOnly(m, agentClosedMsg{epoch: m.storeEpoch, agent: runningOnTab3(), unlinked: []string{"tm-1"}})
 	m = updateOnly(m, agentsListedMsg{agents: client.Agents})
 	if view := plainShell(m); strings.Contains(view, "  gone") || strings.Contains(view, "Tab 3  running") {
 		t.Errorf("the Agents tab draws the closed agent:\n%s", view)
@@ -46,7 +46,7 @@ func TestAClosedAgentIsNotDrawnGoneInTheDetailsPane(t *testing.T) {
 	client.Agents = nil
 	dropLinkLabel(t, m, "s-3")
 
-	m = updateOnly(m, agentClosedMsg{agent: idle, unlinked: []string{"tm-1"}})
+	m = updateOnly(m, agentClosedMsg{epoch: m.storeEpoch, agent: idle, unlinked: []string{"tm-1"}})
 	if view := plainShell(m); strings.Contains(view, "idle  Tab 3") {
 		t.Errorf("the Details pane draws the closed agent:\n%s", view)
 	}
