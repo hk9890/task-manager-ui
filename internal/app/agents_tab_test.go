@@ -4,6 +4,7 @@ package app
 // the keys that act on the selected one through the agent host.
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -92,7 +93,7 @@ func TestTheAgentsTabClosesTheSelectedAgent(t *testing.T) {
 	}
 }
 
-// A gone agent is resumed by Enter, and the close key has nothing to close.
+// A gone agent is resumed by Enter.
 func TestTheAgentsTabResumesAGoneAgent(t *testing.T) {
 	m, client := agentsTab(t)
 	client.Resumed = agent.Agent{Ref: "demo:home:5", Session: "s-gone-0123", Label: "Tab 5", Status: agent.Idle}
@@ -101,10 +102,6 @@ func TestTheAgentsTabResumesAGoneAgent(t *testing.T) {
 	testui.AssertContainsAll(t, plainShell(m), "Linked (2)", "Session s-gone-0  gone")
 
 	m = pressKey(t, m, "down")
-	m = pressKey(t, m, "alt+x")
-	if len(hostCalls(client, "Close")) != 0 || !strings.Contains(m.toast.View(), "is gone") {
-		t.Fatalf("close on a gone agent: calls %+v, toast %q", client.Calls(), m.toast.View())
-	}
 	m = pressKey(t, m, "enter")
 	want := []fakes.AgentHostCall{{Method: "Resume", Arg: "s-gone-0123"}, {Method: "Focus", Arg: "demo:home:5"}}
 	if got := hostCalls(client, "Resume", "Focus"); !reflect.DeepEqual(got, want) {
@@ -124,4 +121,58 @@ func TestTheAgentsTabWithoutAHostSaysWhy(t *testing.T) {
 	m = applyMessages(t, m, runBatch(m.Init()))
 	m = pressKey(t, m, "shift+tab")
 	testui.AssertContainsAll(t, plainShell(m), "No agents", "no agent host: agents are off")
+}
+
+// The close key on a gone agent unlinks it: no host call, the link label
+// leaves the issue, and the row leaves the tab.
+func TestTheAgentsTabUnlinksAGoneAgent(t *testing.T) {
+	m, client := agentsTab(t)
+	m = withLinkLabel(t, m, "s-gone-0123")
+	m = send(t, m, agentPollTickMsg{})
+	m = pressKey(t, m, "down")
+	m = pressKey(t, m, "alt+x")
+
+	if got := hostCalls(client, "Close"); len(got) != 0 {
+		t.Fatalf("the unlink asked the host to close %+v", got)
+	}
+	if got, want := labelsOf(t, m, "tm-1"), []string{"agent-session:s-1"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("labels of tm-1 = %v, want %v", got, want)
+	}
+	if !strings.Contains(m.toast.View(), "Unlinked Session s-gone-0") {
+		t.Errorf("toast = %q, want the unlink reported", m.toast.View())
+	}
+	m = pressKey(t, m, "alt+r")
+	if view := plainShell(m); strings.Contains(view, "s-gone-0  gone") || !strings.Contains(view, "Linked (1)") {
+		t.Errorf("the tab after the unlink:\n%s", view)
+	}
+}
+
+// A poll under a Detail opened from the tab does not retarget it: not one
+// that fails and empties the tab, and not one that moves its rows.
+func TestAPollDoesNotRetargetTheDetailOpenedFromTheAgentsTab(t *testing.T) {
+	m, client := agentsTab(t)
+	m = pressKey(t, m, "alt+o")
+	if m.active != mode.Detail || m.detail.Detail.Summary.ID != "tm-1" {
+		t.Fatalf("alt+o left the shell on %q showing %q, want Detail of tm-1", m.active, m.detail.Detail.Summary.ID)
+	}
+
+	client.ListErr = errors.New("revier timed out")
+	m = send(t, m, agentPollTickMsg{})
+	if got := m.detail.Detail.Summary.ID; got != "tm-1" {
+		t.Fatalf("Detail shows %q after a failed poll, want tm-1", got)
+	}
+	if sel := m.currentSelection(); sel == nil || sel.Issue.ID != "tm-1" {
+		t.Fatalf("the selection after a failed poll is %+v, want tm-1", sel)
+	}
+
+	client.ListErr = nil
+	client.Agents = []agent.Agent{idleOnTab4()}
+	m = send(t, m, agentPollTickMsg{})
+	if got := m.detail.Detail.Summary.ID; got != "tm-1" {
+		t.Fatalf("Detail shows %q after the agent left, want tm-1", got)
+	}
+	m = pressKey(t, m, "esc")
+	if m.active != mode.Agents {
+		t.Errorf("esc from Detail went to %q, want the Agents tab", m.active)
+	}
 }

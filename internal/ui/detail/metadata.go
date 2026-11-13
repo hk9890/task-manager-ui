@@ -24,6 +24,9 @@ type metadataGroup struct {
 	title  string
 	fields []metadataField
 	labels []string
+	// valueFirst draws each field as its value, padded, then its label,
+	// so the pane width cuts a long label and not the value.
+	valueFirst bool
 }
 
 const (
@@ -59,15 +62,18 @@ func renderMetadataGroups(groups []metadataGroup, width int) (lines, sessions []
 			add(renderMetadataPrefixedLine(group.title, width), "")
 		}
 
-		labelWidth := 0
+		labelWidth, valueWidth := 0, 0
 		for _, field := range group.fields {
-			if len(field.label) > labelWidth {
-				labelWidth = len(field.label)
-			}
+			labelWidth = max(labelWidth, len(field.label))
+			valueWidth = max(valueWidth, len(field.value))
 		}
 
 		for _, field := range group.fields {
-			add(renderMetadataPrefixedLine(fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value), width), field.session)
+			line := fmt.Sprintf("%-*s: %s", labelWidth, field.label, field.value)
+			if group.valueFirst {
+				line = fmt.Sprintf("%-*s  %s", valueWidth, field.value, field.label)
+			}
+			add(renderMetadataPrefixedLine(line, width), field.session)
 		}
 
 		for _, label := range group.labels {
@@ -175,14 +181,14 @@ func metadataGroups(detail domain.IssueDetail, skeleton bool) []metadataGroup {
 }
 
 // agentsGroup is the agents linked to the issue, one field each, and false
-// when there is none. A field is the agent's name and its status; what it
-// does is on the Agents tab. The agent host writes every name, so each is
-// cleaned before the label width is measured.
+// when there is none. A field is the agent's status and then its name, so a
+// long name is cut and the status stays; what it does is on the Agents tab.
+// The agent host writes every name, so each is cleaned before it is drawn.
 func agentsGroup(agents []agent.Agent) (metadataGroup, bool) {
 	if len(agents) == 0 {
 		return metadataGroup{}, false
 	}
-	group := metadataGroup{title: "Agents"}
+	group := metadataGroup{title: "Agents", valueFirst: true}
 	for _, a := range agents {
 		group.fields = append(group.fields, metadataField{
 			label:   displaytext.OneLine(a.Title()),

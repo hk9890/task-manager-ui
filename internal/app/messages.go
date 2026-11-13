@@ -75,6 +75,14 @@ type agentClosedMsg struct {
 	unlinkErr error
 }
 
+// agentUnlinkedMsg carries the result of unlinking a gone agent: the issues
+// its link label was removed from, and err when a removal failed.
+type agentUnlinkedMsg struct {
+	agent    agent.Agent
+	unlinked []string
+	err      error
+}
+
 // storeChangedMsg reports that the active store changed on disk.
 type storeChangedMsg struct{}
 

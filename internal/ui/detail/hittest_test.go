@@ -207,7 +207,7 @@ func TestHitTestFindsEveryAgentRowWhereRenderDrewIt(t *testing.T) {
 	for _, width := range []int{160, 100} {
 		state := agentsState(width, 70)
 		view := Render(state)
-		for text, session := range map[string]string{"Tab 3: running": "s-3", "Tab 5: gone": "s-5"} {
+		for text, session := range map[string]string{"running  Tab 3": "s-3", "gone     Tab 5": "s-5"} {
 			x, y := testui.FindCell(t, view, text)
 			for _, column := range []int{x - 2, x, x + len(text)} {
 				hit, ok := HitTest(state, column, y)
@@ -224,7 +224,7 @@ func TestHitTestFindsEveryAgentRowWhereRenderDrewIt(t *testing.T) {
 		}
 
 		state.Skeleton = true
-		x, y := testui.FindCell(t, Render(state), "Tab 3: running")
+		x, y := testui.FindCell(t, Render(state), "running  Tab 3")
 		if hit, ok := HitTest(state, x, y); ok {
 			t.Errorf("width %d: skeleton: HitTest on an agent row = %+v, want no hit", width, hit)
 		}
@@ -244,7 +244,7 @@ func TestHitTestFindsNoAgentUnderTheMoreIndicator(t *testing.T) {
 	if strings.Contains(view, "Tab 5") {
 		t.Fatalf("fixture draws Tab 5:\n%s", view)
 	}
-	x, y := testui.FindCell(t, view, "Tab 3: running")
+	x, y := testui.FindCell(t, view, "running  Tab 3")
 	if hit, ok := HitTest(state, x, y); !ok || hit.Agent != "s-3" {
 		t.Errorf("HitTest on Tab 3 = %+v, %v; want s-3", hit, ok)
 	}
@@ -262,10 +262,10 @@ func TestRenderBandsTheHoveredAgentRow(t *testing.T) {
 	state.Hover = &Hit{Pane: FocusPaneDetails, Agent: "s-3"}
 	view := Render(state)
 
-	if band := testui.RowBand(t, view, "Tab 3: running"); band == "" {
+	if band := testui.RowBand(t, view, "running  Tab 3"); band == "" {
 		t.Errorf("the hovered agent row draws no band:\n%s", view)
 	}
-	if band := testui.RowBand(t, view, "Tab 5: gone"); band != "" {
+	if band := testui.RowBand(t, view, "gone     Tab 5"); band != "" {
 		t.Errorf("an agent row off the pointer draws the band %q", band)
 	}
 }
@@ -280,4 +280,18 @@ func TestDetailsPaneWithAHoveredAgentGolden(t *testing.T) {
 	_, _, width := splitThreePaneWidths(state.Width)
 	pane := RenderDetailsPane(state.detailsPane(width, state.Height))
 	testui.AssertMatchesGoldenNormalized(t, []byte(pane), "details_pane_hovered_agent_w160.golden")
+}
+
+// A name longer than the pane is cut; the status of every agent row stays
+// whole.
+func TestDetailsPaneCutsALongAgentNameAndKeepsTheStatusGolden(t *testing.T) {
+	state := agentsState(160, 20)
+	state.Agents = []agent.Agent{
+		{Label: "Tab 9", Name: "review-agent-session-ui-and-more", Status: agent.NeedsYou, Session: "s-9"},
+		{Label: "Tab 3", Status: agent.Running, Session: "s-3"},
+	}
+	_, _, width := splitThreePaneWidths(state.Width)
+	pane := testui.Downsample(RenderDetailsPane(state.detailsPane(width, state.Height)))
+	testui.AssertContainsAll(t, pane, "needs you  review-agent-ses…", "running    Tab 3")
+	testui.AssertMatchesGoldenStripANSI(t, []byte(pane), "details_pane_long_agent_name_w160.golden")
 }

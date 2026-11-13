@@ -352,18 +352,24 @@ agents.
   host has not answered yet (`Model.agentsAbsent`).
 - The move keys of the board context move the selection. `open_detail` (Enter) brings the agent to
   the front and resumes a gone one first (`ActionOpenAgent`). `close_agent` closes it, and asks
-  first when it is running or needs you (`ActionCloseAgent`, `Model.requestAgentClose`); a gone
-  one raises a warning toast. A close unlinks the agent, as the agent dialog's does. `open_issue` opens the linked issue in Detail, and Escape there
-  returns to the tab; on an agent linked to none it raises the toast an empty selection raises.
-  The legend names the four; the tab has no button.
+  first when it is running or needs you (`ActionCloseAgent`, `Model.requestAgentClose`). On a gone
+  one it unlinks the agent without a host call (`Model.unlinkGoneAgent`), and a success toast says
+  `Unlinked <title>`. A close unlinks the agent, as the agent dialog's does. `open_issue` opens the
+  linked issue in Detail, and Escape there returns to the tab; on an agent linked to none it raises
+  the toast an empty selection raises. The legend names the four; the tab has no button.
 - The selection of the tab is the linked issue of the selected row, nil for an agent linked to
-  none, so the issue keys act on that issue.
+  none, so the issue keys act on that issue. The selection stays on its agent when a poll moves the
+  rows. A failed poll empties the tab but keeps that agent, and the next poll that answers selects
+  it again. A Detail opened with `open_issue` keeps its issue while a poll moves or removes the row
+  under it: the shell holds that issue as a drill-in (`ActionOpenDetail` in `Model.update`).
 - One click selects a row, a second brings its agent to the front; the wheel moves the selection.
 - The agents come from the shell's poll (`Model.applyAgentList`), the comment links with it. The tab
   reads the issues with a link label itself, with `SearchIssuesQuery.LabelContains`, on its first
   entry, its reload and its auto refresh.
 - `Model.selectAgent` switches to the tab with an agent selected. A row that is not there yet, a
-  gone agent before the read, is selected when it comes (`agents.Model.Select`).
+  gone agent before the read, is selected when it comes (`agents.Model.Select`). When the live
+  agents and the linked issues are both known and the agent has no row, such as a gone agent of a
+  closed issue, the selection stays where it was.
 
 ## Keys and the query line
 
@@ -752,18 +758,21 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   Detail (`Model.openAgentDialog`, `internal/app/agents.go`). It is centred over the screen as it
   was when it opened, titled `Agents on <id>`, and takes keys and the mouse as the selection menu
   does. The issue and its agents are taken when it opens. Its entries, in order:
-  - `Focus <title>` and `Close <title>` for each live linked agent, `Resume <title>` for each gone
-    one. A close of an agent that is running or needs you asks first and then forces the close; an
+  - `Focus <title>` and `Close <title>` for each live linked agent, `Resume <title>` and
+    `Unlink <title>` for each gone one. Unlink removes the link label from every open issue
+    without a host call (`Model.unlinkGoneAgent`); it is off on a closed issue, whose label the
+    store does not change. A close of an agent that is running or needs you asks first and then forces the close; an
     idle one closes at once. A close that succeeds unlinks the agent: its link label leaves every
     open issue that carries it (`Model.closeAgent`), so it is no `gone` row afterwards. A closed
     issue keeps the label, because the store refuses the change. A removal that fails raises an
     error toast that names the issue. An agent that ends by itself keeps its label, is `gone` and
-    can be resumed. A resume reopens the conversation and brings it to the front.
+    can be resumed or unlinked. A resume reopens the conversation and brings it to the front.
   - The heading `Start new`, then one entry per configured intent. A heading is a muted bold line
     without the gutter that takes no cursor and no click (`selectmenu.Entry.Heading`). On a closed
     issue the store refuses the link label: the heading reads `Start new: off, the issue is closed`
     and the intents are off. Without an intent the part is left out.
-  - Close.
+  - Cancel, which closes the dialog. It is not named Close, so it does not read as the close of
+    an agent. The dialog has no hint line.
 
   The cursor opens on the first entry that is on. An intent starts the agent through the agent
   host and raises an info toast at once, because a start takes as long as the agent takes to
@@ -772,8 +781,9 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   or the focus, still links the agent. A store switch does not drop the toast of a start, and each
   toast names the issue; the link label goes to the store the start began on. Without an agent host or the project path, and without a
   linked agent and an intent both, the key raises a warning toast instead of the dialog.
-- The Agents group of the Details pane is each linked agent's title (`agent.Agent.Title`), then its
-  status word — `running`, `idle`, `needs you`, `gone` (`agent.StatusWord`). What it does is on
+- The Agents group of the Details pane is each linked agent's status word — `running`, `idle`,
+  `needs you`, `gone` (`agent.StatusWord`) — padded to the longest in the group, then its title
+  (`agent.Agent.Title`). The pane width cuts a long title, never the status. What it does is on
   the Agents tab. A link label no live agent holds is `gone` after a poll that answered. Before the first answer
   and after a failed poll the live agents are not known, so such a label draws no row and the
   agent dialog offers no resume (`agent.Linked`). The Labels group leaves the link labels out.

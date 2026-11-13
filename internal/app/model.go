@@ -114,7 +114,7 @@ type Model struct {
 	selectedByMode map[mode.ID]*mode.Selection
 
 	// drillSelection is the issue Detail drilled into from its Dependencies
-	// rail. While it is set and Detail is active it IS the shell's selection:
+	// rail, or opened from the Agents tab. While it is set and Detail is active it IS the shell's selection:
 	// the browse tab's row is not what the operator is looking at, so acting on
 	// it would edit, close, comment on or launch against the wrong issue. It is
 	// cleared whenever the shell leaves Detail or a browse tab moves its own
@@ -714,6 +714,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, batchCmds(modeCmd, m.reportAgentAction("resume", "Resumed", msg.agent, msg.err))
 	case agentClosedMsg:
 		return m, batchCmds(modeCmd, m.handleAgentClosed(msg))
+	case agentUnlinkedMsg:
+		return m, batchCmds(modeCmd, m.handleAgentUnlinked(msg))
 	case agentFocusedMsg:
 		if msg.err != nil {
 			return m, batchCmds(modeCmd, m.showToast(fmt.Sprintf("Could not bring the agent to the front: %v", msg.err), toaster.StyleError))
@@ -892,6 +894,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// announces that row travels as a Cmd of its own and can arrive after
 		// the request, so the stored selection may still be an older row.
 		m.adoptSelection(msg.Mode, msg.Selection)
+		if msg.Mode == mode.Agents {
+			// Each poll can move or remove the rows of the Agents tab, so its
+			// selection must not retarget the Detail opened from it.
+			opened := *msg.Selection
+			m.drillSelection = &opened
+		}
 		m.active = mode.Detail
 		return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 	case detail.OpenRelatedIssueMsg:

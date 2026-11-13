@@ -62,7 +62,7 @@ func TestAClickOnTheAgentButtonSendsItsRequest(t *testing.T) {
 	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "agent alt+i")
 	request := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)()
 	testui.AssertActionRequest(t, request, mode.Detail, mode.ActionLaunchAgent)
-	if view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0)); !strings.Contains(view, "Tab 3: running") {
+	if view := testui.Downsample(m.View(commentsWidth, commentsHeight, false, 0)); !strings.Contains(view, "running  Tab 3") {
 		t.Errorf("the Details pane does not list the linked agent:\n%s", view)
 	}
 }
@@ -78,11 +78,11 @@ func TestAClickOnAnAgentRowAsksForThatAgent(t *testing.T) {
 		"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"},
 		"s-2": {Label: "Tab 4", Status: agent.Idle, Session: "s-2"},
 	})
-	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "Tab 4: idle")
+	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "idle     Tab 4")
 
 	m.HandleMouse(mode.MouseMsg{Kind: mode.MouseMove, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)
 	view := m.View(commentsWidth, commentsHeight, false, 0)
-	if testui.RowBand(t, view, "Tab 4: idle") == "" || testui.RowBand(t, view, "Tab 3: running") != "" {
+	if testui.RowBand(t, view, "idle     Tab 4") == "" || testui.RowBand(t, view, "running  Tab 3") != "" {
 		t.Errorf("the pointer on Tab 4 does not light that row alone:\n%s", view)
 	}
 

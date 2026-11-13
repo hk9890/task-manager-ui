@@ -157,6 +157,11 @@ suppressed for the interactive session.
   `error`) — `revier list` failed for a resolved project (`Model.applyAgentList`,
   `internal/app/agents.go`). The agents leave Detail and the board. No toast. Logged once per
   failure: the next record comes after a poll succeeds and another one fails.
+- `reading the issues linked to agents failed` (WARN, with `error`) — the Agents tab's search for
+  the issues that carry a link label failed (`Model.Update`, `internal/mode/agents/model.go`). No
+  toast. The tab keeps the issues of the last read that succeeded. When none did, it shows only
+  the live agents and those linked by a comment, with no label-linked and no `gone` agent, until a
+  reload or an auto refresh of the tab reads them.
 - `stale load-more page dropped; a reload superseded it` (DEBUG) — a Done-column page
   discarded because a reload landed first; expected, not a fault. Visible only under
   `--debug`.

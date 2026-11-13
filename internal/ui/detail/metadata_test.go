@@ -353,7 +353,7 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 		t.Errorf("the Agents group on row %d does not follow Core, which ends on row %d:\n%s", agentsY, priorityY, view)
 	}
 	previous := agentsY
-	for _, want := range []string{"Tab 2 : needs you", "Tab 1 : running", "Tab 10: idle"} {
+	for _, want := range []string{"needs you  Tab 2", "running    Tab 1", "idle       Tab 10"} {
 		_, y := testui.FindCell(t, view, want)
 		if y != previous+1 {
 			t.Errorf("%q on row %d, want row %d:\n%s", want, y, previous+1, view)
@@ -362,7 +362,7 @@ func TestTheMetadataPaneListsTheLinkedAgentsRightAfterCore(t *testing.T) {
 	}
 
 	state.Height = 12
-	if view := testui.Downsample(RenderDetailsPane(state)); !strings.Contains(view, "Tab 10: idle") {
+	if view := testui.Downsample(RenderDetailsPane(state)); !strings.Contains(view, "idle       Tab 10") {
 		t.Errorf("a short pane cuts the Agents group:\n%s", view)
 	}
 }
@@ -386,7 +386,7 @@ func TestTheAgentsGroupNamesTheAgentAndHidesTheLinkLabels(t *testing.T) {
 		},
 	}
 	view := testui.Downsample(RenderDetailsPane(state))
-	for _, want := range []string{"fix-the-board: running ", "Session s-2  : gone", "• backend"} {
+	for _, want := range []string{"running  fix-the-board", "gone     Session s-2", "• backend"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the pane does not draw %q:\n%s", want, view)
 		}

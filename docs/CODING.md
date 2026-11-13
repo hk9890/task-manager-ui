@@ -61,7 +61,8 @@ mise run ci          # the merge gate; see What the tools enforce
      with the last poll. A link label no live agent holds is `agent.Gone`.
    - A close from the app removes the link label from the open issues after the host closes the
      agent, as `RemoveLabels`, in one scoped command (`Model.closeAgent`,
-     `internal/app/agents.go`).
+     `internal/app/agents.go`). An unlink of a gone agent is the same removal without the host
+     call (`Model.unlinkGoneAgent`).
    - A link label stays in the store and off the screen: draw labels through
      `agent.VisibleLabels`. The `{{issue.labels}}` placeholder leaves them out too
      (`contextFor`, `internal/launcher/service.go`).

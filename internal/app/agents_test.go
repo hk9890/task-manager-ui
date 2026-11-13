@@ -84,7 +84,7 @@ func TestAPollTickShowsTheAgentThatCommentedOnTheIssue(t *testing.T) {
 	client.Agents = []agent.Agent{runningOnTab3(), {Ref: "demo:home:4", Label: "Tab 4", Status: agent.Idle, Session: "s-other"}}
 	m = send(t, m, agentPollTickMsg{})
 
-	testui.AssertContainsAll(t, plainShell(m), "agent alt+i", "edit alt+u", "Agents", "Tab 3: running")
+	testui.AssertContainsAll(t, plainShell(m), "agent alt+i", "edit alt+u", "Agents", "running  Tab 3")
 	if strings.Contains(plainShell(m), "Tab 4") {
 		t.Errorf("an agent that wrote no comment on the issue is listed:\n%s", plainShell(m))
 	}
@@ -175,7 +175,7 @@ func TestAFailingPollLogsOncePerFailure(t *testing.T) {
 
 	client.ListErr = errors.New("revier list: exit status 1")
 	m = send(t, send(t, m, agentPollTickMsg{}), agentPollTickMsg{})
-	if len(m.detail.LinkedAgents()) != 0 || strings.Contains(plainShell(m), "Tab 3: running") {
+	if len(m.detail.LinkedAgents()) != 0 || strings.Contains(plainShell(m), "running  Tab 3") {
 		t.Errorf("a failed poll left the agents on screen:\n%s", plainShell(m))
 	}
 	if got := strings.Count(log.String(), "level=WARN msg=\"revier agent listing failed"); got != 1 {

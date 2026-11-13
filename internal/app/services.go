@@ -55,7 +55,8 @@ type Services struct {
 	// injects a fake keeps it across a store switch.
 	ProcessRunner launcher.ProcessRunner
 	// Agents lists the live agents of the project and brings one to the
-	// front. Nil turns that off: no poll, no open button, no board glyph.
+	// front. Nil turns that off: no poll, no board glyph, no agent dialog
+	// and no Ask, and the Agents tab says there is no agent host.
 	// Like StoreCatalog it is injected after construction, so a test that
 	// builds services never runs the real host, which starts real agents.
 	Agents agent.Host

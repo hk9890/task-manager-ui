@@ -92,7 +92,7 @@ func (m *Model) selectionActions(text string) []selectionAction {
 		{entry: selectmenu.Entry{Label: "Search the store", Disabled: !canAct}, run: func(m *Model) tea.Cmd {
 			return m.searchSelection(text)
 		}},
-		m.closeMenuAction(),
+		m.closeMenuAction("Close"),
 	}
 }
 
@@ -107,9 +107,9 @@ func (m *Model) issueClosed(issue domain.IssueSummary) bool {
 
 // closeMenuAction is the last entry of a menu: it closes the menu and does
 // nothing else.
-func (m *Model) closeMenuAction() selectionAction {
+func (m *Model) closeMenuAction(label string) selectionAction {
 	return selectionAction{
-		entry: selectmenu.Entry{Label: "Close", Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
+		entry: selectmenu.Entry{Label: label, Key: m.keys.DisplayPrimary(config.ShellContext, config.ShellActionEscape)},
 		run:   func(*Model) tea.Cmd { return nil },
 	}
 }

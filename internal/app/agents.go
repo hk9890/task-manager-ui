@@ -144,8 +144,8 @@ func (m *Model) openAgent(a agent.Agent) tea.Cmd {
 
 // openAgentDialog opens the agent dialog of the issue open in Detail, in the
 // middle of the screen: first the agents linked to it, focus or close each
-// live one and resume each gone one, then one entry per configured intent
-// that starts a new agent, then Close. The issue and its agents are taken
+// live one and resume or unlink each gone one, then one entry per configured
+// intent that starts a new agent, then Cancel. The issue and its agents are taken
 // when the dialog opens, so a refresh under it cannot move an agent to
 // another issue.
 func (m *Model) openAgentDialog() tea.Cmd {
@@ -168,15 +168,15 @@ func (m *Model) openAgentDialog() tea.Cmd {
 
 	menu := &selectionMenu{
 		title:       "Agents on " + displaytext.OneLine(issue.Summary.ID),
-		hint:        "the agent opens in front",
 		backdrop:    m.frozenScreen(),
 		screenWidth: m.width,
 	}
+	closed := issue.Summary.Status == domain.StatusClosed
 	for _, a := range linked {
-		menu.entries = append(menu.entries, linkedAgentActions(a)...)
+		menu.entries = append(menu.entries, linkedAgentActions(a, closed)...)
 	}
 	if len(intents) > 0 {
-		heading, off := "Start new", issue.Summary.Status == domain.StatusClosed
+		heading, off := "Start new", closed
 		if off {
 			heading = "Start new: off, the issue is closed"
 		}
@@ -188,20 +188,27 @@ func (m *Model) openAgentDialog() tea.Cmd {
 			})
 		}
 	}
-	menu.entries = append(menu.entries, m.closeMenuAction())
+	menu.entries = append(menu.entries, m.closeMenuAction("Cancel"))
 	m.openCentredMenu(menu)
 	return nil
 }
 
 // linkedAgentActions are the entries of one linked agent in the agent
-// dialog: Focus and Close for a live one, Resume for a gone one.
-func linkedAgentActions(a agent.Agent) []selectionAction {
+// dialog: Focus and Close for a live one, Resume and Unlink for a gone one.
+// Unlink is off on a closed issue: the store refuses every change to it.
+func linkedAgentActions(a agent.Agent, issueClosed bool) []selectionAction {
 	label := displaytext.OneLine(a.Title())
 	if a.Status == agent.Gone {
-		return []selectionAction{{
-			entry: selectmenu.Entry{Label: "Resume " + label},
-			run:   func(m *Model) tea.Cmd { return m.resumeAgent(a) },
-		}}
+		return []selectionAction{
+			{
+				entry: selectmenu.Entry{Label: "Resume " + label},
+				run:   func(m *Model) tea.Cmd { return m.resumeAgent(a) },
+			},
+			{
+				entry: selectmenu.Entry{Label: "Unlink " + label, Disabled: issueClosed},
+				run:   func(m *Model) tea.Cmd { return m.unlinkGoneAgent(a) },
+			},
+		}
 	}
 	return []selectionAction{
 		{
@@ -230,13 +237,14 @@ func (m *Model) resumeAgent(gone agent.Agent) tea.Cmd {
 
 // requestAgentClose closes an idle agent at once. It asks first before it
 // closes one that is running or waits for the operator: the host refuses
-// those unless forced, and the turn in them is lost.
+// those unless forced, and the turn in them is lost. A gone agent has
+// nothing to close, so it is unlinked.
 func (m *Model) requestAgentClose(a agent.Agent) tea.Cmd {
 	switch {
 	case m.services.Agents == nil:
 		return m.showToast("No agent host: agents are off", toaster.StyleWarn)
 	case a.Status == agent.Gone:
-		return m.showToast(displaytext.OneLine(a.Title())+" is gone: there is nothing to close", toaster.StyleWarn)
+		return m.unlinkGoneAgent(a)
 	}
 	if a.Status != agent.Running && a.Status != agent.NeedsYou {
 		return m.closeAgent(a, false)
@@ -274,6 +282,29 @@ func (m *Model) closeAgent(a agent.Agent, force bool) tea.Cmd {
 		unlinked, err := unlinkAgent(ctx, repo, a.Session)
 		return agentClosedMsg{agent: a, unlinked: unlinked, unlinkErr: err}
 	})
+}
+
+// unlinkGoneAgent removes the link label of a gone agent from the open
+// issues that carry it, so it is no gone row afterwards.
+func (m *Model) unlinkGoneAgent(a agent.Agent) tea.Cmd {
+	ctx, repo := m.ctx, m.services.Repo
+	return m.scoped(func() tea.Msg {
+		unlinked, err := unlinkAgent(ctx, repo, a.Session)
+		return agentUnlinkedMsg{agent: a, unlinked: unlinked, err: err}
+	})
+}
+
+// handleAgentUnlinked reports an unlink of a gone agent.
+func (m *Model) handleAgentUnlinked(msg agentUnlinkedMsg) tea.Cmd {
+	var reload tea.Cmd
+	if len(msg.unlinked) > 0 {
+		reload = m.reloadAfterLink(msg.unlinked...)
+	}
+	label := displaytext.OneLine(msg.agent.Title())
+	if msg.err != nil {
+		return batchCmds(reload, m.showToast(fmt.Sprintf("Could not unlink %s: %s", label, displaytext.OneLine(msg.err.Error())), toaster.StyleError))
+	}
+	return batchCmds(reload, m.showToast("Unlinked "+label, toaster.StyleSuccess))
 }
 
 // unlinkAgent removes the link label of session from the open issues that

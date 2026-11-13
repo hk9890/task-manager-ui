@@ -137,6 +137,46 @@ func TestSelectWaitsForTheRowOfTheAgent(t *testing.T) {
 	}
 }
 
+// A failed poll empties the tab but keeps the agent the selection was on:
+// the next poll that answers puts the selection back on it.
+func TestAFailedPollKeepsTheSelectedAgent(t *testing.T) {
+	t.Parallel()
+	m := newTab(t)
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-2", Status: "open", Labels: []string{"agent-session:s-2"}}}})
+	agents := []agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}
+	m.SetAgents(agents, true, "")
+	m.Select("s-2")
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-2" {
+		t.Fatalf("selected %q, want s-2", row.Agent.Session)
+	}
+
+	m.SetAgents(nil, false, "the agent host failed: timeout")
+	if len(m.rows) != 0 {
+		t.Fatalf("rows after a failed poll = %v, want none", titles(m.rows))
+	}
+	m.SetAgents([]agent.Agent{live("s-0", "0", agent.NeedsYou), live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, "")
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-2" {
+		t.Errorf("after the poll answered again selected %q, want s-2", row.Agent.Session)
+	}
+}
+
+// Select of an agent with no row on a settled tab keeps the selection where
+// it was, and the selection then follows that agent when the rows reorder.
+func TestSelectOfAnAgentWithoutARowKeepsTheSelection(t *testing.T) {
+	t.Parallel()
+	m := newTab(t)
+	m.Update(linkedIssuesMsg{})
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, "")
+	m.Select("s-closed-gone")
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-1" || m.pending != "" {
+		t.Fatalf("selected %q with %q pending, want s-1 and nothing pending", row.Agent.Session, m.pending)
+	}
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.NeedsYou)}, true, "")
+	if row, _ := m.selectedRow(); row.Agent.Session != "s-1" {
+		t.Errorf("after the rows reordered selected %q, want s-1", row.Agent.Session)
+	}
+}
+
 // One click selects a row and a second brings its agent to the front.
 func TestASecondClickBringsTheAgentToTheFront(t *testing.T) {
 	t.Parallel()

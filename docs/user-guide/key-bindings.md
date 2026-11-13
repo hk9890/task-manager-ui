@@ -29,7 +29,7 @@ chords and on keys that print nothing.
 - `alt+v` — launch `nvim` action in detail mode
 - `alt+p` — launch `opencode` action in detail mode
 - `alt+l` — launch `shell-command` action in detail mode
-- `alt+i` — in detail mode, open the agent dialog of the issue, `Agents on <id>`. It lists every agent linked to the issue first: `Focus` or `Close` a live one, `Resume` a gone one. A close of an agent that is running or waits for you asks first, then closes it with force. Under `Start new` come `implement`, `review` and the intents of your config: choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent-session:<session>`. A start that fails shows the error. On a closed issue the store takes no label, so the `Start new` entries are off
+- `alt+i` — in detail mode, open the agent dialog of the issue, `Agents on <id>`. It lists every agent linked to the issue first: `Focus` or `Close` a live one, `Resume` or `Unlink` a gone one. A close of an agent that is running or waits for you asks first, then closes it with force. Under `Start new` come `implement`, `review` and the intents of your config: choosing one starts a revier agent in front with that intent's prompt, and labels the issue `agent-session:<session>`. A start that fails shows the error. On a closed issue the store takes no label, so the `Start new` entries are off
 
 `alt+v`, `alt+p`, `alt+l` and `alt+i` run in the store's project directory. When that
 directory is gone — the project was moved or deleted — they are refused with a
@@ -43,7 +43,9 @@ labelled agent that no longer runs. What it does is on the Agents tab.
 
 A close from the agent dialog or the Agents tab removes the agent's label from
 its open issues, so the issue is no longer linked. An agent that ends by itself
-keeps its label: it shows as `gone`, and you can resume it.
+keeps its label: it shows as `gone`, and you can resume it or unlink it. Unlink
+removes the label from its open issues and starts nothing. `Cancel` closes the
+dialog.
 
 In the agent dialog `up` and `down` move, `enter` or a click
 runs the entry, and `esc` or a click outside closes the menu.
@@ -115,7 +117,8 @@ or the error revier gave.
 
 - `up`, `down`, `pgup`, `pgdown`, `home`, `end` — move
 - `enter` — bring the selected agent to the front; resume a `gone` one first
-- `alt+x` — close the selected agent; one that runs or needs you asks first
+- `alt+x` — close the selected agent; one that runs or needs you asks first.
+  On a `gone` agent it unlinks the agent from its open issues
 - `alt+o` — open the issue the selected agent is linked to in detail mode;
   `esc` there returns to the tab
 - `alt+r` — read the linked issues again
@@ -194,9 +197,9 @@ An agent is linked to an issue by an `agent-session:<session>` label, which star
 from the agent dialog or the selection menu writes. In the In Progress column an
 agent whose revier session wrote a comment on the issue is linked too.
 taskmgr-ui asks `revier` for the live agents every few seconds. The Details
-pane lists the linked agents in an `Agents` group, one line each: its name and
-its status — `running`, `idle`, `needs you`, or `gone` for a labelled agent
-revier does not list. The Agents tab lists every agent of the project. On the board, a card of any
+pane lists the linked agents in an `Agents` group, one line each: its status
+— `running`, `idle`, `needs you`, or `gone` for a labelled agent revier does not
+list — then its name. A long name is cut; the status stays. The Agents tab lists every agent of the project. On the board, a card of any
 column that a live agent is linked to carries the agent mark after its status,
 green while the agent runs, grey while it is idle and orange while it needs you.
 

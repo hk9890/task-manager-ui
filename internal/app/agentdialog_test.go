@@ -53,7 +53,7 @@ func TestAStartedAgentShowsInTheAgentsGroupByItsLabel(t *testing.T) {
 	m = send(t, m, agentPollTickMsg{})
 
 	view := plainShell(m)
-	testui.AssertContainsAll(t, view, "Agents", "Tab 9: running")
+	testui.AssertContainsAll(t, view, "Agents", "running  Tab 9")
 	if strings.Contains(view, "agent-session:s-9") {
 		t.Errorf("Detail draws the link label:\n%s", view)
 	}
@@ -66,10 +66,10 @@ func TestTheAgentDialogResumesAGoneAgent(t *testing.T) {
 	client.Resumed = agent.Agent{Ref: "demo:home:5", Session: "s-gone-0123", Label: "Tab 5", Status: agent.Idle}
 	m = withLinkLabel(t, m, "s-gone-0123")
 
-	testui.AssertContainsAll(t, plainShell(m), "Session s-gone-0: gone")
+	testui.AssertContainsAll(t, plainShell(m), "gone  Session s-gone-0")
 
 	m = pressKey(t, m, "alt+i")
-	testui.AssertContainsAll(t, plainShell(m), "Agents on tm-1", "Resume Session s-gone-0", "Start new", "implement", "Close")
+	testui.AssertContainsAll(t, plainShell(m), "Agents on tm-1", "Resume Session s-gone-0", "Unlink Session s-gone-0", "Start new", "implement", "Cancel")
 	m = pressKey(t, m, "enter")
 
 	want := []fakes.AgentHostCall{{Method: "Resume", Arg: "s-gone-0123"}, {Method: "Focus", Arg: "demo:home:5"}}
@@ -81,12 +81,43 @@ func TestTheAgentDialogResumesAGoneAgent(t *testing.T) {
 	}
 }
 
+// The agent dialog unlinks a gone agent without a host call: its link label
+// leaves the issue. On a closed issue the store refuses that, so Unlink is
+// off there.
+func TestTheAgentDialogUnlinksAGoneAgent(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	m = withLinkLabel(t, m, "s-gone-0123")
+	m = pressKey(t, m, "alt+i")
+	m = pressKey(t, m, "down")
+	m = pressKey(t, m, "enter")
+
+	if got := hostCalls(client, "Close", "Resume"); len(got) != 0 {
+		t.Fatalf("the unlink asked the host %+v", got)
+	}
+	if got := labelsOf(t, m, "tm-1"); len(got) != 0 {
+		t.Errorf("labels of tm-1 = %v, want the link label removed", got)
+	}
+	if !strings.Contains(m.toast.View(), "Unlinked Session s-gone-0") {
+		t.Errorf("toast = %q, want the unlink reported", m.toast.View())
+	}
+
+	m, _, _, _ = agentShell(t)
+	m = withLinkLabel(t, m, "s-gone-0123")
+	m.detail.Detail.Summary.Status = domain.StatusClosed
+	m = pressKey(t, m, "alt+i")
+	for _, entry := range m.selMenu.entries {
+		if entry.entry.Label == "Unlink Session s-gone-0" && !entry.entry.Disabled {
+			t.Error("Unlink is on for a closed issue")
+		}
+	}
+}
+
 // After a failed poll the live agents are not known: a linked session is not
 // drawn gone and the agent dialog offers no resume.
 func TestAFailedPollReportsNoLinkedAgentGone(t *testing.T) {
 	m, client, _, _ := agentShell(t)
 	m = withLinkLabel(t, m, "s-gone-0123")
-	testui.AssertContainsAll(t, plainShell(m), "Session s-gone-0: gone")
+	testui.AssertContainsAll(t, plainShell(m), "gone  Session s-gone-0")
 	client.ListErr = errors.New("revier is down")
 	m = send(t, m, agentPollTickMsg{})
 
@@ -152,7 +183,7 @@ func TestClosingAnAgentRemovesItsLinkLabelFromTheOpenIssues(t *testing.T) {
 	if !strings.Contains(m.toast.View(), "Closed Tab 3") {
 		t.Errorf("toast = %q, want the close reported", m.toast.View())
 	}
-	if strings.Contains(plainShell(m), "Tab 3: idle") {
+	if strings.Contains(plainShell(m), "idle  Tab 3") {
 		t.Errorf("Detail still lists the unlinked agent:\n%s", plainShell(m))
 	}
 }
@@ -256,7 +287,7 @@ func TestAClickOnAnAgentRowSelectsItOnTheAgentsTab(t *testing.T) {
 
 	t.Run("live", func(t *testing.T) {
 		m, client, _, _ := agentShell(t, runningOnTab3(), agent.Agent{Ref: "demo:home:4", Label: "Tab 4", Status: agent.Idle, Session: "s-4"})
-		m = click(t, m, "Tab 3: running")
+		m = click(t, m, "running  Tab 3")
 		if m.active != mode.Agents {
 			t.Fatalf("the click left the shell on %q, want the Agents tab", m.active)
 		}
@@ -274,7 +305,7 @@ func TestAClickOnAnAgentRowSelectsItOnTheAgentsTab(t *testing.T) {
 		m, client, _, _ := agentShell(t, agent.Agent{Ref: "demo:home:4", Label: "Tab 4", Status: agent.Idle, Session: "s-4"})
 		client.Resumed = agent.Agent{Ref: "demo:home:5", Session: "s-gone-0123", Label: "Tab 5", Status: agent.Idle}
 		m = withLinkLabel(t, m, "s-gone-0123")
-		m = click(t, m, "Session s-gone-0: gone")
+		m = click(t, m, "gone  Session s-gone-0")
 		m = pressKey(t, m, "enter")
 		want := []fakes.AgentHostCall{{Method: "Resume", Arg: "s-gone-0123"}, {Method: "Focus", Arg: "demo:home:5"}}
 		if got := hostCalls(client, "Resume", "Focus"); !reflect.DeepEqual(got, want) {
@@ -310,7 +341,7 @@ func labelsOf(t *testing.T, m Model, id string) []string {
 }
 
 // The agent key opens the dialog on the issue: the linked agents first, then
-// Start new with one entry per intent, then Close. The cursor starts on the
+// Start new with one entry per intent, then Cancel. The cursor starts on the
 // first entry that is on.
 func TestTheAgentKeyOpensTheAgentDialogOnTheIssue(t *testing.T) {
 	m, client, _, _ := agentShell(t, runningOnTab3())
@@ -320,7 +351,7 @@ func TestTheAgentKeyOpensTheAgentDialogOnTheIssue(t *testing.T) {
 	for _, entry := range m.selMenu.entries {
 		labels = append(labels, entry.entry.Label)
 	}
-	if want := []string{"Focus Tab 3", "Close Tab 3", "Start new", "implement", "review", "Close"}; !reflect.DeepEqual(labels, want) {
+	if want := []string{"Focus Tab 3", "Close Tab 3", "Start new", "implement", "review", "Cancel"}; !reflect.DeepEqual(labels, want) {
 		t.Fatalf("entries = %v, want %v", labels, want)
 	}
 	testui.AssertContainsAll(t, plainShell(m), "Agents on tm-1", "Focus Tab 3", "Start new", "implement", "review")
@@ -489,8 +520,8 @@ func TestTheAgentDialogOnAClosedIssueStartsNothing(t *testing.T) {
 			t.Fatal("the implement intent is on for a closed issue")
 		}
 	}
-	if label := m.selMenu.entries[m.selMenu.cursor].entry.Label; label != "Close" {
-		t.Errorf("the cursor is on %q, want Close", label)
+	if label := m.selMenu.entries[m.selMenu.cursor].entry.Label; label != "Cancel" {
+		t.Errorf("the cursor is on %q, want Cancel", label)
 	}
 
 	x, y := testui.FindCell(t, plainShell(m), "implement")

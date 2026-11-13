@@ -48,12 +48,17 @@ type Model struct {
 	// commentLinks the In Progress issues by the session of an agent that
 	// commented on them.
 	issues       []domain.IssueSummary
+	issuesKnown  bool
 	commentLinks map[string]domain.IssueSummary
 	loading      bool
 
 	rows     []uiagents.Row
 	selected int
 	offset   int
+	// chosen is the key of the agent the selection belongs on. It outlives
+	// its row while the rows are not known, so a failed poll does not move
+	// the selection for good.
+	chosen string
 	// pending is the agent Select asked for before its row was there.
 	pending string
 
@@ -142,7 +147,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 			m.logger.Warn("reading the issues linked to agents failed", "error", msg.err.Error())
 			return nil
 		}
-		m.issues = msg.issues
+		m.issues, m.issuesKnown = msg.issues, true
 		return m.rebuild()
 	case mode.MouseMsg:
 		return m.mouse(msg)
@@ -251,34 +256,51 @@ func (m *Model) move(delta int) tea.Cmd {
 	previous := m.selected
 	m.selected = min(max(m.selected+delta, 0), len(m.rows)-1)
 	m.offset = uiagents.EnsureVisible(m.rows, m.selected, m.offset, m.height)
+	m.chosen, m.pending = m.selectedKey(), ""
 	if m.selected == previous {
 		return nil
 	}
-	m.pending = ""
 	return m.selectionChangedCmd()
 }
 
 // rebuild works out the rows again and keeps the selection on the agent it
-// was on: the one Select asked for, else the one selected before.
+// was on: the one Select asked for, else the one chosen before. While the
+// rows are not settled an agent without a row may still come, so neither
+// key is given up; once they are settled, an agent without a row is gone
+// from the tab and the selection stays on the row at its place.
 func (m *Model) rebuild() tea.Cmd {
 	before := m.selectedIssueID()
-	key := m.selectedKey()
-	if m.pending != "" {
-		key = m.pending
-	}
 	m.rows = buildRows(m.live, m.liveKnown, m.issues, m.commentLinks)
-	if at := slices.IndexFunc(m.rows, func(r uiagents.Row) bool { return r.Agent.Key() == key }); at >= 0 {
-		m.selected = at
-		if key == m.pending {
-			m.pending = ""
+	rowOf := func(key string) int {
+		if key == "" {
+			return -1
 		}
+		return slices.IndexFunc(m.rows, func(r uiagents.Row) bool { return r.Agent.Key() == key })
+	}
+	if at := rowOf(m.pending); at >= 0 {
+		m.chosen, m.pending = m.pending, ""
+	} else if m.settled() {
+		m.pending = ""
+	}
+	if at := rowOf(m.chosen); at >= 0 {
+		m.selected = at
 	}
 	m.selected = min(max(m.selected, 0), max(len(m.rows)-1, 0))
+	if m.chosen == "" || (m.settled() && rowOf(m.chosen) < 0) {
+		m.chosen = m.selectedKey()
+	}
 	m.offset = uiagents.EnsureVisible(m.rows, m.selected, m.offset, m.height)
 	if m.selectedIssueID() == before {
 		return nil
 	}
 	return m.selectionChangedCmd()
+}
+
+// settled reports whether the rows are final until the next poll or read:
+// the live agents and the linked issues are both known, and no read is in
+// flight.
+func (m *Model) settled() bool {
+	return m.liveKnown && m.issuesKnown && !m.loading
 }
 
 func (m *Model) selectedRow() (uiagents.Row, bool) {
