@@ -10,6 +10,7 @@ import (
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
 	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
 
@@ -186,4 +187,74 @@ func TestThePreviewIsASkeletonWhileTheFirstListLoads(t *testing.T) {
 	view := m.View(0)
 	testui.AssertContainsAll(t, view, "Preview", "░")
 	testui.AssertNotContainsAny(t, view, "Nothing selected")
+}
+
+func TestAReadOfAnotherIssueKeepsTheScrollOfTheSelectedDoc(t *testing.T) {
+	m := previewDocs(t)
+	m.Update(testui.Press("pgdown"))
+	scrolled := m.preview.offset
+
+	// The shell reads a board issue, then the doc again on the way back.
+	m.ShowDoc(docOf("tm-9", "Some task", "Body of tm-9."))
+	m.SetSize(170, 30)
+	m.ShowDoc(docOf("tm-1", "Auth redesign", longBody))
+
+	if m.preview.offset != scrolled {
+		t.Fatalf("the doc came back scrolled to %d, want %d", m.preview.offset, scrolled)
+	}
+}
+
+func TestAnOlderFailureIsNotDrawnOverANewRead(t *testing.T) {
+	m := previewDocs(t)
+	m.ShowDocFailure("tm-1", "store is gone")
+	m.Update(testui.Press("down"))
+	m.ShowDoc(docOf("tm-2", "Session notes", "Notes body of tm-2."))
+
+	// Back on tm-1: the shell reads it again, and until that read lands the
+	// pane waits for it rather than draw the failure of the read before.
+	m.Update(testui.Press("up"))
+	view := m.View(0)
+	testui.AssertContainsAll(t, view, "░")
+	testui.AssertNotContainsAny(t, view, "store is gone")
+}
+
+func TestAFailureWithNoTextStillReadsAsAFailure(t *testing.T) {
+	m := previewDocs(t)
+	m.ShowDocFailure("tm-1", " ")
+
+	view := m.View(0)
+	testui.AssertContainsAll(t, view, "load failed: the store gave no reason")
+	testui.AssertNotContainsAny(t, view, "(no description)")
+}
+
+func TestAWheelNotchOnAShortPaneSkipsNoLine(t *testing.T) {
+	m := previewDocs(t)
+	m.SetSize(160, 10)
+	x, y := testui.FindCell(t, m.View(0), "Paragraph line 01.")
+
+	m.Update(mode.MouseMsg{Kind: mode.MouseWheelDown, X: x, Y: y})
+	if page := uidetail.PreviewPageRows(m.previewState(0)); m.preview.offset > page {
+		t.Fatalf("a notch scrolled %d lines past a page of %d", m.preview.offset, page)
+	}
+}
+
+func TestAClickOnThePreviewEndsADoubleClick(t *testing.T) {
+	m := previewDocs(t)
+	view := m.View(0)
+	lx, ly := testui.FindCell(t, view, "Handover")
+	px, py := testui.FindCell(t, view, "Paragraph line 05.")
+
+	m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: lx, Y: ly})
+	m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: px, Y: py})
+	if cmd := m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: lx, Y: ly}); cmd != nil {
+		if _, ok := cmd().(mode.ActionRequestMsg); ok {
+			t.Fatal("click, click on the preview, click opened the doc as a double click")
+		}
+	}
+}
+
+func TestTheSplitLayout(t *testing.T) {
+	m := previewDocs(t)
+	m.SetSize(120, 24)
+	testui.AssertMatchesGoldenNormalized(t, []byte(m.View(0)), "docs_split_w120.golden")
 }

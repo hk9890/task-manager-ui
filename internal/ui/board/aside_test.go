@@ -7,14 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
-	"github.com/hk9890/task-manager-ui/internal/ui/styles"
 )
-
-func TestTheSplitGapIsTheGapOfTheColumns(t *testing.T) {
-	if styles.SplitGap != columnGap {
-		t.Fatalf("styles.SplitGap is %d, the board draws %d cells between a column and the aside", styles.SplitGap, columnGap)
-	}
-}
 
 func TestTheAsideStandsRightOfTheColumnsUnderTheListHead(t *testing.T) {
 	const width, height, aside = 120, 20, 50

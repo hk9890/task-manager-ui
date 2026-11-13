@@ -818,14 +818,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		m.detail.FinishLoad(msg.err)
 		m.markSurfaceRefreshed(mode.Detail)
-		// The Docs preview draws the selected doc from this read: the tab
-		// reads nothing itself.
 		if msg.err != nil {
+			// The Docs preview draws the selected doc from the shell's read:
+			// the tab reads nothing itself.
 			m.docs.ShowDocFailure(msg.issueID, msg.err.Error())
-		} else {
-			m.docs.ShowDoc(msg.detail)
-		}
-		if msg.err != nil {
 			// The store watch reloads a failed Detail on every change, so the
 			// toast is shown for the first failure of an issue and not again.
 			if msg.issueID == m.detailLoadFailedID {
@@ -835,6 +831,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, batchCmds(modeCmd, m.showToast("Failed to load selected issue details", toaster.StyleError))
 		}
 		m.detailLoadFailedID = ""
+		m.docs.ShowDoc(msg.detail)
 
 		if strings.TrimSpace(msg.issueID) == strings.TrimSpace(m.detail.SelectionID()) {
 			m.detail.ApplyLoadedDetail(msg.issueID, msg.detail)
@@ -1219,8 +1216,11 @@ func (m Model) handleShellKey(msg tea.KeyPressMsg, modeCmd tea.Cmd) (tea.Model, 
 				m.clearDrillSelection()
 				return m, modeCmd
 			}
+			// A drill-in left Detail on another issue: read the tab's
+			// selection again, as a tab switch does, or the Docs preview
+			// waits on a read nobody started.
 			m.enterBrowseMode(m.lastBrowse)
-			return m, modeCmd
+			return m, batchCmds(modeCmd, m.ensureDetailForCurrentSelectionCmd())
 		}
 		// A tab with a query spends Escape on clearing it.
 		if tab := m.browseController(m.active); tab != nil {

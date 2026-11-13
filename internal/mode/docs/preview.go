@@ -1,6 +1,8 @@
 package docs
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/hk9890/task-manager-ui/internal/config"
@@ -15,13 +17,16 @@ import (
 // scrolls the Content pane of Detail.
 const previewWheelLines = 3
 
-// preview is the Preview pane: the doc the shell last read and where it is
-// scrolled. The shell reads the selected issue for Detail on every selection
-// change, and hands each read here (ShowDoc, ShowDocFailure), so the tab reads
-// nothing itself.
+// preview is the Preview pane: the outcome of the shell's last read, and where
+// the selected doc is scrolled. The shell reads the selected issue for Detail
+// on every selection change, and hands each outcome here (ShowDoc,
+// ShowDocFailure), so the tab reads nothing itself. Only the last outcome is
+// kept: a read the shell made for another surface replaces it, and the shell
+// reads the selection again on the way back to the tab.
 type preview struct {
+	// doc is the last read, when it succeeded.
 	doc domain.IssueDetail
-	// failedID is the doc whose last read failed, and failure why.
+	// failedID is the issue of the last read, when it failed, and failure why.
 	failedID string
 	failure  string
 
@@ -34,17 +39,18 @@ type preview struct {
 // that issue is the selected doc.
 func (m *Model) ShowDoc(doc domain.IssueDetail) {
 	m.preview.doc = doc
-	if m.preview.failedID == doc.Summary.ID {
-		m.preview.failedID, m.preview.failure = "", ""
-	}
+	m.preview.failedID, m.preview.failure = "", ""
 	m.clampPreview()
 }
 
 // ShowDocFailure is a read of the issue id that failed. The pane draws the
-// error while that issue is the selected doc, until a read of it lands.
+// error while that issue is the selected doc, until the next read lands.
 func (m *Model) ShowDocFailure(id, failure string) {
+	if strings.TrimSpace(failure) == "" {
+		failure = "the store gave no reason"
+	}
+	m.preview.doc = domain.IssueDetail{}
 	m.preview.failedID, m.preview.failure = id, failure
-	m.clampPreview()
 }
 
 // Previewing reports whether the pane is drawn with a doc in it, and the page
@@ -96,16 +102,21 @@ func (m *Model) previewState(skeletonPhase int) uidetail.PreviewState {
 	return state
 }
 
-// scrollPreview moves the preview by delta lines, held inside the doc.
+// scrollPreview moves the preview by delta lines, held inside the doc. Until
+// the read of the selected doc lands there is nothing to scroll.
 func (m *Model) scrollPreview(delta int) {
+	if m.preview.doc.Summary.ID != m.selectedIssueID() {
+		return
+	}
 	m.preview.offset += delta
 	m.clampPreview()
 }
 
-// clampPreview holds the offset inside the doc as the pane draws it now. A
-// screen too narrow for the pane leaves the offset as it is.
+// clampPreview holds the offset inside the selected doc. It acts only on a
+// read of that doc on a screen wide enough to draw it: a skeleton, an error or
+// a read of another issue says nothing about how far the doc scrolls.
 func (m *Model) clampPreview() {
-	if _, _, ok := m.split(); !ok {
+	if _, _, ok := m.split(); !ok || m.preview.doc.Summary.ID == "" || m.preview.doc.Summary.ID != m.selectedIssueID() {
 		return
 	}
 	m.preview.offset = textutil.Clamp(m.preview.offset, 0, uidetail.PreviewMaxOffset(m.previewState(0)))

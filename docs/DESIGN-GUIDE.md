@@ -348,20 +348,26 @@ opens Detail.
   preview shows the doc, and a divider between docs says nothing a reader acts on.
 - The preview follows the selection and reads nothing itself. The shell reads the selected issue
   for Detail on every selection change, and its `detailLoadedMsg` handler hands each read to the
-  tab (`docs.Model.ShowDoc`, `ShowDocFailure`). The pane draws a read only while its issue is the
-  selected doc, so a read of another issue, or one that lands after the selection moved on, is
-  not drawn. Do not give the tab a read of its own: a move would read the doc twice.
+  tab (`docs.Model.ShowDoc`, `ShowDocFailure`). The tab keeps the outcome of the last read only,
+  and draws it only while its issue is the selected doc. Do not give the tab a read of its own: a
+  move would read the doc twice.
+- A read the shell makes for another surface (the Board, the search, a drill-in) replaces that
+  outcome, so every way back to the tab reads the selection again: a tab switch and Escape from
+  Detail both call `ensureDetailForCurrentSelectionCmd`. A new way back must too, or the pane
+  waits on a read nobody started.
 - Until the read lands the pane draws the row's header over skeleton rows, and skeleton rows alone
-  while the first list loads; a failed read draws the error in place of the body until a read of
-  that doc lands.
+  while the first list loads; a failed read draws the error in place of the body until the next
+  read lands.
 - The page keys of the board context scroll the preview while it is drawn (`previewKey`): the tab
   reads every key from that context, so the reserved keys stay refused for it. Below
   `styles.SplitMinWidth` they page the list; above it no key pages the list, which `home`, `end`
   and the wheel still cross. The legend names them only while they scroll
-  (`footerHints`). Each doc opens at its top, a reload's included, and a resize holds the scroll
-  inside the doc (`clampPreview`).
-- The wheel over the preview scrolls it `previewWheelLines` lines a notch and moves no selection;
-  a click there does nothing. `board.OverAside` says whether a cell is on the pane, from the
+  (`footerHints`). Each doc opens at its top, a reload's included. The scroll is clamped only
+  against a read of the selected doc (`clampPreview`), so a read of another issue, a resize
+  meanwhile or a round trip through another surface leaves the doc where it was.
+- The wheel over the preview scrolls it `previewWheelLines` lines a notch, never more than a page
+  (`detail.PreviewPageRows`), and moves no selection; a click there does nothing, and ends a
+  double click begun on the list. `board.OverAside` says whether a cell is on the pane, from the
   layout `Render` draws.
 
 ### The Agents tab

@@ -18,7 +18,7 @@ import (
 const (
 	defaultBoardWidth   = 100
 	defaultBoardHeight  = 20
-	columnGap           = 2
+	columnGap           = styles.SplitGap
 	minRenderableWidth  = 24
 	minReadableColumn   = 32
 	minReadableWideCol  = 40

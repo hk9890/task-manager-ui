@@ -5,6 +5,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	uiboard "github.com/hk9890/task-manager-ui/internal/ui/board"
+	uidetail "github.com/hk9890/task-manager-ui/internal/ui/detail"
 )
 
 // handleMouse is the board's mouse on one column: the wheel moves the
@@ -13,11 +14,13 @@ import (
 func (m *Model) handleMouse(msg mode.MouseMsg) tea.Cmd {
 	if uiboard.OverAside(m.viewState(0), msg.X, msg.Y) {
 		m.list.Mouse(mode.MouseMsg{Kind: mode.MouseLeave}, m.viewState(0))
+		// A notch moves no further than a page, so a short pane skips no line.
+		step := min(previewWheelLines, uidetail.PreviewPageRows(m.previewState(0)))
 		switch msg.Kind {
 		case mode.MouseWheelUp:
-			m.scrollPreview(-previewWheelLines)
+			m.scrollPreview(-step)
 		case mode.MouseWheelDown:
-			m.scrollPreview(previewWheelLines)
+			m.scrollPreview(step)
 		}
 		return nil
 	}
