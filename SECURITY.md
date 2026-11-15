@@ -5,10 +5,9 @@
 Please report security vulnerabilities **privately**. Do not open a public
 issue for a suspected vulnerability.
 
-Report through GitHub's
+Report only through GitHub's
 [private vulnerability reporting](https://github.com/hk9890/task-manager-ui/security/advisories/new)
-("Report a vulnerability" under the repository's **Security** tab). It is the
-only reporting channel.
+("Report a vulnerability" under the repository's **Security** tab).
 
 Please include:
 
