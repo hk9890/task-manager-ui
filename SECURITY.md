@@ -5,11 +5,9 @@
 Please report security vulnerabilities **privately**. Do not open a public
 issue for a suspected vulnerability.
 
-- Preferred: use GitHub's
-  [private vulnerability reporting](https://github.com/hk9890/task-manager-ui/security/advisories/new)
-  ("Report a vulnerability" under the repository's **Security** tab).
-- Alternatively, email the maintainer at **hans.kohlreiter@gmail.com** with
-  details and, if possible, a minimal reproduction.
+Report only through GitHub's
+[private vulnerability reporting](https://github.com/hk9890/task-manager-ui/security/advisories/new)
+("Report a vulnerability" under the repository's **Security** tab).
 
 Please include:
 
