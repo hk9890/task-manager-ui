@@ -126,6 +126,46 @@ func TestATickDuringAPollStartsNoSecondPoll(t *testing.T) {
 	}
 }
 
+// Each poll runs a revier process. A tick while the terminal is not focused
+// polls nothing and still re-arms the timer, and the focus-in polls at once.
+func TestNoTickPollsWhileTheTerminalIsNotFocused(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	armed := 0
+	m.scheduleAgentPoll = func() tea.Cmd {
+		armed++
+		return nil
+	}
+	m = send(t, m, tea.BlurMsg{})
+
+	m = send(t, m, agentPollTickMsg{})
+	m = send(t, m, agentPollTickMsg{})
+	if got := callsOf(client, "List"); len(got) != 1 {
+		t.Errorf("List calls while blurred = %v, want the bind's poll only", got)
+	}
+	if armed != 2 {
+		t.Errorf("two ticks while blurred armed the timer %d times, want 2", armed)
+	}
+
+	send(t, m, tea.FocusMsg{})
+	if got := callsOf(client, "List"); len(got) != 2 {
+		t.Errorf("List calls after the focus-in = %v, want one more", got)
+	}
+}
+
+// A terminal that sends no focus events keeps the poll on every tick, and a
+// focus-in with no blur before it asks nothing extra.
+func TestATerminalWithoutFocusEventsPollsOnEveryTick(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+
+	m = send(t, m, agentPollTickMsg{})
+	m = send(t, m, tea.FocusMsg{})
+	send(t, m, agentPollTickMsg{})
+
+	if got := callsOf(client, "List"); len(got) != 3 {
+		t.Errorf("List calls = %v, want the bind's poll and one per tick", got)
+	}
+}
+
 // A new store's poll does not see the previous store's agents.
 func TestBindingAStoreClearsTheAgentsOfThePreviousOne(t *testing.T) {
 	m, _, _, _ := agentShell(t, runningOnTab3())

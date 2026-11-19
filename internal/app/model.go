@@ -729,18 +729,21 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.FocusMsg:
-		wasBlurred := m.focusKnown && !m.terminalFocused
+		wasBlurred := m.terminalBlurred()
 		m.focusKnown = true
 		m.terminalFocused = true
-		if !wasBlurred {
+		if !wasBlurred || m.runtime.DisableAutoRefresh {
 			return m, modeCmd
 		}
+		// The agent poll skips its ticks while the terminal is not focused,
+		// so the agents are asked for at once.
+		pollCmd := m.pollAgentsCmd()
 		// The watch reloads a surface also while the terminal is not focused,
 		// so on a watched store there is nothing to catch up on.
-		if m.runtime.DisableAutoRefresh || m.storeWatched() {
-			return m, modeCmd
+		if m.storeWatched() {
+			return m, batchCmds(modeCmd, pollCmd)
 		}
-		return m, batchCmds(modeCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
+		return m, batchCmds(modeCmd, pollCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
 	case tea.BlurMsg:
 		m.focusKnown = true
 		m.terminalFocused = false
@@ -751,6 +754,12 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case agentPollTickMsg:
+		// Each poll runs a revier process, about a tenth of a core at this
+		// rate, so no tick polls while the terminal is not focused; the
+		// focus-in polls. The tick still re-arms: nothing else arms it.
+		if m.terminalBlurred() {
+			return m, batchCmds(modeCmd, m.scheduleAgentPoll())
+		}
 		return m, batchCmds(modeCmd, m.scheduleAgentPoll(), m.pollAgentsCmd())
 	case agentsListedMsg:
 		return m, batchCmds(modeCmd, m.applyAgentList(msg))
