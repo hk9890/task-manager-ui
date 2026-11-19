@@ -790,8 +790,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case agentPollTickMsg:
-		// Each poll runs a revier process, about a tenth of a core at this
-		// rate, so no tick polls while the terminal is not focused; the
+		// Each poll runs a revier process, several percent of a core at
+		// this rate, so no tick polls while the terminal is not focused; the
 		// focus-in polls. The tick still re-arms: nothing else arms it, and
 		// the wait after a root that is no project still counts down.
 		if m.terminalBlurred() {

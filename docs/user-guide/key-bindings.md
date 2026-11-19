@@ -221,8 +221,8 @@ or click in it. A window without the focus, such as a split beside the agent you
 type in, shows the agents of the last ask. The Details
 pane lists the linked agents in an `Agents` group, one line each: its status
 — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier does not
-list — then its name. A label written after the last ask shows no `gone` agent
-until the next ask: revier may run that agent. A long name is cut; the status stays. The Agents tab lists every agent of the project. On the board, a card of any
+list — then its name. After any change to the store, no agent shows `gone`
+until the next ask: a label written since may name an agent revier runs. A long name is cut; the status stays. The Agents tab lists every agent of the project. On the board, a card of any
 column that a live agent is linked to carries the agent mark after its status,
 green while the agent runs, grey while it is idle and orange while it needs you.
 

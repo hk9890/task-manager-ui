@@ -16,7 +16,7 @@ window    kitty
 attached  1 window
 `
 
-// recordedList is revier list --json --conversations output with a local
+// recordedList is revier list --json output with a local
 // agent in each state, one whose harness names no session, one without a
 // target, one in a state revier does not document, and one on a link's remote
 // host, which has no ref.

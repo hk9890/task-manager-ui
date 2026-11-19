@@ -66,7 +66,8 @@ mise run ci          # the merge gate; see What the tools enforce
    - The agents of an issue are `agent.Linked`: its link labels and, on an In Progress issue, its
      comment sessions, merged with the last poll. `agent.Link` is the one copy of that rule; Detail
      and the Agents tab both call it. A link label no live agent holds is `agent.Gone`, on an issue
-     that is not closed only.
+     that is not closed only, and only from a poll that began after the latest store change
+     (`Model.liveAgentsCurrent`).
    - A close from the app removes the link label from the open issues after the host closes the
      agent, as `RemoveLabels`, in one unscoped command (`Model.closeAgent`,
      `internal/app/agents.go`). An unlink of a gone agent is the same removal without the host
@@ -165,9 +166,9 @@ still holds: each repository instance is bound to one store, and switching repla
   handler, so a dropped tick stops the chain for the rest of the session. A one-shot timer that
   belongs to a store is the opposite case: the pause before a store search is scoped, and the
   previous store's is dropped.
-- A timer whose handler starts a subprocess skips that work while `Model.terminalBlurred`
+- A repeating timer whose handler starts a subprocess skips that work while `Model.terminalBlurred`
   reports the terminal lost the focus, and still re-arms. Record the skip, and do the work once at
-  the focus-in (`Model.regainFocus`): one `revier` call per agent poll tick costs about a tenth of
+  the focus-in (`Model.regainFocus`): one `revier` call per agent poll tick costs several percent of
   a core per instance.
 - The store watch (`internal/app/storewatch.go`) is the opposite case and is scoped: `bindStore`
   starts one per store on that store's context, so the previous store's wait ends by itself and

@@ -167,7 +167,7 @@ must report `changed: false`. The `--cwd` store persists between the capture run
 - **Live agents** — the app runs `revier` itself every few seconds, so put a fake `revier` first on
   `PATH` for every run, never the real one: `alt+i` would focus or start a real agent.
   Make its `status` print `project` and `path` lines for the project root and its
-  `list --json --conversations` print an agent whose `.state.session` wrote a comment on an In
+  `list --json` print an agent whose `.state.session` wrote a comment on an In
   Progress issue, as `fakeRevier` in `internal/agent/revier/revier_integration_test.go` does. The card
   carries the agent mark, Detail lists the agent under `Agents`. `alt+i`
   opens the agent dialog; its Close and Resume entries run `revier agent close` and
