@@ -388,9 +388,11 @@ store's project. It draws the list head of the board — the rule and the query 
 - An agent is linked by a link label on any issue, closed ones included, or by a comment on an In
   Progress card (`Board.CommentLinks`); a label wins over a comment, and the first issue over a
   later one (`agent.Link`, which `buildRows` and Detail's `linkedAgents` share). A link label no
-  live agent holds is a `gone` row, on an open issue only and only after a poll that answered and
-  began after the latest store change (`Model.liveAgentsCurrent`): a label written since may name
-  an agent that poll did not see.
+  live agent holds is a `gone` row, on an open issue only, only after a poll that answered, and
+  only on an issue last updated before the second that poll began: a label written since may name
+  an agent that poll did not see. Until the next poll such a label draws no row. While the
+  selected row is withheld so, no row is selected: the row at its place may be an idle agent the
+  close key closes without a question.
   The Details pane and the agent dialog of Detail follow the same rule: a closed issue has no
   `gone` agent (`linkedAgents`, `internal/mode/detail/model.go`), because the store refuses the
   unlink of its label.
@@ -449,8 +451,7 @@ store's project. It draws the list head of the board — the rule and the query 
 - The agents come from the shell's poll (`Model.publishAgents`), the comment links with them in
   one `agents.Model.SetAgents`. The poll runs every few seconds and skips its ticks while the
   terminal reports that it lost the focus; the focus-in, a key or a click then polls once
-  (`Model.regainFocus`). A store change publishes the agents again, so no agent is drawn `gone`
-  before the next poll. The tab reads the issues with a link label itself, with
+  (`Model.regainFocus`). The tab reads the issues with a link label itself, with
   `SearchIssuesQuery.LabelContains`, on its first entry, its reload and its auto refresh. Its
   reload, the key and the `reload` button, also polls the host at once (`ActionPollAgents`,
   `Model.pollAgentsNow`), with no auto refresh too.
@@ -893,7 +894,7 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   (`agent.Agent.Title`). The pane width cuts a long title, never the status. What it does is on
   the Agents tab. A live agent whose session wrote a comment on the issue is in the group on an
   In Progress issue only (`linkedAgents`), as on the board and the Agents tab; a link label links
-  it on an issue of any status. A link label no live agent holds is `gone` after a poll that answered and began after the latest store change. Before the first answer
+  it on an issue of any status. A link label no live agent holds is `gone` after a poll that answered, on an issue last updated before that poll began. Before the first answer
   and after a failed poll the live agents are not known, so such a label draws no row and the
   agent dialog offers no resume (`agent.Linked`). The Labels group leaves the link labels out.
 - The action modal carries five things: the store form of the picker (`Model.openStoreForm`),

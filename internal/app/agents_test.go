@@ -35,9 +35,22 @@ func agentShell(t *testing.T, agents ...agent.Agent) (Model, *fakes.FakeAgentHos
 	return agentShellAt(t, t.TempDir(), agents...)
 }
 
+// pollClockAt runs the shell's clock offset from the real one, which the
+// store stamps its writes with. A poll begins at the shell's clock, and an
+// issue updated in or after that second draws no agent gone (agent.Link).
+func pollClockAt(t *testing.T, offset time.Duration) {
+	t.Helper()
+	original := modelNow
+	modelNow = func() time.Time { return time.Now().Add(offset) }
+	t.Cleanup(func() { modelNow = original })
+}
+
 // agentShellAt is agentShell with root as the project path of the store.
+// Its polls begin two seconds after the real clock, so a test that writes a
+// label and polls sees the poll begin after the write.
 func agentShellAt(t *testing.T, root string, agents ...agent.Agent) (Model, *fakes.FakeAgentHost, *fakes.FakeLauncher, *bytes.Buffer) {
 	t.Helper()
+	pollClockAt(t, 2*time.Second)
 
 	gw := fakes.NewTracked()
 	seedInProgress(gw, "tm-1", "Ready first", "task", 1)
@@ -243,6 +256,9 @@ func TestTheNoProjectWaitCountsDownWhileBlurred(t *testing.T) {
 func TestALabelWrittenWhileBlurredDrawsNoGoneAgent(t *testing.T) {
 	m, client, _, _ := agentShell(t)
 	m.storeChanges = make(chan struct{})
+	// The last poll before the blur begins before the write below.
+	pollClockAt(t, -2*time.Second)
+	m = send(t, m, agentPollTickMsg{})
 	m = send(t, m, tea.BlurMsg{})
 	m = send(t, m, agentPollTickMsg{})
 

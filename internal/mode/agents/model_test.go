@@ -30,6 +30,12 @@ func live(session, label string, status agent.Status) agent.Agent {
 	return agent.Agent{Ref: "demo:home:" + label, Session: session, Label: "Tab " + label, Status: status}
 }
 
+// polledLater is a poll that began after every change a test makes.
+var polledLater = time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// rowsOf is the rows of buildRows, without whether it withheld one.
+func rowsOf(rows []uiagents.Row, _ bool) []uiagents.Row { return rows }
+
 func titles(rows []uiagents.Row) []string {
 	var out []string
 	for _, row := range rows {
@@ -63,13 +69,13 @@ func TestBuildRowsGroupsTheAgentsByTheirLink(t *testing.T) {
 	}
 	comments := []mode.CommentLink{{Issue: domain.IssueSummary{ID: "tm-4"}, Sessions: []string{"s-3"}}, {Issue: domain.IssueSummary{ID: "tm-5"}, Sessions: []string{"s-1"}}}
 
-	got := titles(buildRows(agents, true, true, issues, comments))
+	got := titles(rowsOf(buildRows(agents, true, polledLater, issues, comments)))
 	want := []string{"Tab 2@tm-2", "Tab 3@tm-4", "Tab 1@tm-1", "Session s-gone@tm-1", "Tab 4@", "Tab 9@"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("rows = %v\nwant %v", got, want)
 	}
 
-	if got := titles(buildRows(nil, false, true, issues, comments)); len(got) != 0 {
+	if got := titles(rowsOf(buildRows(nil, false, polledLater, issues, comments))); len(got) != 0 {
 		t.Errorf("rows without the live agents = %v, want none", got)
 	}
 }
@@ -94,13 +100,43 @@ func request(t *testing.T, m *Model, key string) mode.ActionRequestMsg {
 	return msg
 }
 
+// A change to the issue of the selected gone agent, after the last poll
+// began, withholds that row until the next poll. No row stands in for it:
+// the close key would close the idle agent below without a question. The
+// next poll selects the gone agent again.
+func TestAWithheldGoneRowLeavesNoRowSelectedInItsPlace(t *testing.T) {
+	t.Parallel()
+	polled := time.Date(2026, 11, 19, 10, 0, 0, 0, time.UTC)
+	gone := domain.IssueSummary{ID: "tm-1", Title: "Fix", Status: "open", Labels: []string{"agent-session:s-gone"}, UpdatedAt: polled.Add(-time.Minute)}
+	agents := []agent.Agent{live("s-idle", "2", agent.Idle)}
+	m := newTab(t)
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{gone}})
+	m.SetAgents(agents, true, polled, "", nil)
+	if got := request(t, m, "alt+x"); got.Agent.Session != "s-gone" {
+		t.Fatalf("fixture: alt+x asks for %#v, want the gone agent", got.Agent)
+	}
+
+	gone.UpdatedAt = polled
+	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{gone}})
+	if cmd := m.Update(testui.Press("alt+x")); cmd != nil {
+		if msg, ok := cmd().(mode.ActionRequestMsg); ok && msg.Agent.Session != "" {
+			t.Errorf("alt+x on a withheld row asks for %#v", msg.Agent)
+		}
+	}
+
+	m.SetAgents(agents, true, polled.Add(3*time.Second), "", nil)
+	if got := request(t, m, "alt+x"); got.Agent.Session != "s-gone" {
+		t.Errorf("after the next poll alt+x asks for %#v, want the gone agent", got.Agent)
+	}
+}
+
 // Enter, the close key and the issue key ask the shell for the selected
 // agent's action; the issue key opens the issue the agent is linked to.
 func TestTheKeysActOnTheSelectedAgent(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
 	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Title: "Fix", Status: "open", Labels: []string{"agent-session:s-1"}}}})
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 
 	if got := request(t, m, "enter"); got.Action != mode.ActionOpenAgent || got.Agent.Session != "s-1" {
 		t.Errorf("enter sent %#v", got)
@@ -126,14 +162,14 @@ func TestTheKeysActOnTheSelectedAgent(t *testing.T) {
 func TestSelectWaitsForTheRowOfTheAgent(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running)}, true, polledLater, "", nil)
 	m.Select("s-gone")
 	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-gone"}}}})
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-gone" {
 		t.Fatalf("selected %q, want the gone agent", row.Agent.Session)
 	}
 	// A later poll keeps the selection on that agent.
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-0", "0", agent.NeedsYou)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-0", "0", agent.NeedsYou)}, true, polledLater, "", nil)
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-gone" {
 		t.Errorf("after a poll selected %q, want the gone agent", row.Agent.Session)
 	}
@@ -146,17 +182,17 @@ func TestAFailedPollKeepsTheSelectedAgent(t *testing.T) {
 	m := newTab(t)
 	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-2", Status: "open", Labels: []string{"agent-session:s-2"}}}})
 	agents := []agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}
-	m.SetAgents(agents, true, true, "", nil)
+	m.SetAgents(agents, true, polledLater, "", nil)
 	m.Select("s-2")
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-2" {
 		t.Fatalf("selected %q, want s-2", row.Agent.Session)
 	}
 
-	m.SetAgents(nil, false, true, "the agent host failed: timeout", nil)
+	m.SetAgents(nil, false, polledLater, "the agent host failed: timeout", nil)
 	if len(m.rows) != 0 {
 		t.Fatalf("rows after a failed poll = %v, want none", titles(m.rows))
 	}
-	m.SetAgents([]agent.Agent{live("s-0", "0", agent.NeedsYou), live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-0", "0", agent.NeedsYou), live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-2" {
 		t.Errorf("after the poll answered again selected %q, want s-2", row.Agent.Session)
 	}
@@ -168,12 +204,12 @@ func TestSelectOfAnAgentWithoutARowKeepsTheSelection(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
 	m.Update(linkedIssuesMsg{})
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 	m.Select("s-closed-gone")
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-1" || m.pending != "" {
 		t.Fatalf("selected %q with %q pending, want s-1 and nothing pending", row.Agent.Session, m.pending)
 	}
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.NeedsYou)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.NeedsYou)}, true, polledLater, "", nil)
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-1" {
 		t.Errorf("after the rows reordered selected %q, want s-1", row.Agent.Session)
 	}
@@ -186,7 +222,7 @@ func TestTheFirstSelectionIsTheTopRowOnceTheRowsSettle(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
 	links := []mode.CommentLink{{Issue: domain.IssueSummary{ID: "tm-2", Status: "in_progress"}, Sessions: []string{"s-work"}}}
-	m.SetAgents([]agent.Agent{live("s-7", "7", agent.NeedsYou), live("s-work", "work", agent.Running)}, true, true, "", links)
+	m.SetAgents([]agent.Agent{live("s-7", "7", agent.NeedsYou), live("s-work", "work", agent.Running)}, true, polledLater, "", links)
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-work" {
 		t.Fatalf("fixture: before the read selected %q, want s-work on top", row.Agent.Session)
 	}
@@ -196,7 +232,7 @@ func TestTheFirstSelectionIsTheTopRowOnceTheRowsSettle(t *testing.T) {
 		t.Fatalf("after the read selected %q, want s-7, the top row", row.Agent.Session)
 	}
 	// From here the selection follows its agent.
-	m.SetAgents([]agent.Agent{live("s-7", "7", agent.Running), live("s-work", "work", agent.NeedsYou)}, true, true, "", links)
+	m.SetAgents([]agent.Agent{live("s-7", "7", agent.Running), live("s-work", "work", agent.NeedsYou)}, true, polledLater, "", links)
 	if row, _ := m.selectedRow(); row.Agent.Session != "s-7" {
 		t.Errorf("after the rows reordered selected %q, want s-7", row.Agent.Session)
 	}
@@ -209,7 +245,7 @@ func TestAFailedReadKeepsTheRowsAndReadsAgain(t *testing.T) {
 	m := NewModel(context.Background(), memory.New(), slog.New(slog.DiscardHandler), keys(t), nil)
 	m.SetSize(80, 24)
 	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-1"}}}})
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 	before := titles(m.rows)
 
 	if m.Reload() == nil {
@@ -231,7 +267,7 @@ func TestAFailedReadKeepsTheRowsAndReadsAgain(t *testing.T) {
 func TestASecondClickBringsTheAgentToTheFront(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Running), live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 	x, y := testui.FindCell(t, m.View(0), "Tab 2")
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	m.Update(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: at})
@@ -253,7 +289,7 @@ func TestAnEmptyTabSaysWhy(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
 	testui.AssertContainsAll(t, testui.Downsample(m.View(0)), "No agents", "waiting for the agent host")
-	m.SetAgents(nil, false, true, "no agent host: agents are off", nil)
+	m.SetAgents(nil, false, polledLater, "no agent host: agents are off", nil)
 	testui.AssertContainsAll(t, testui.Downsample(m.View(0)), "No agents", "no agent host: agents are off")
 }
 
@@ -286,13 +322,13 @@ func TestADroppedAgentIsNoGoneRowUntilItsUnlinkLands(t *testing.T) {
 	m := newTab(t)
 	linked := []domain.IssueSummary{{ID: "tm-1", Status: "open", Labels: []string{"agent-session:s-1"}}}
 	m.Update(linkedIssuesMsg{issues: linked})
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 
 	m.DropAgent(live("s-1", "1", agent.Idle))
 	if got, want := titles(m.rows), []string{"Tab 2@"}; !reflect.DeepEqual(got, want) {
 		t.Fatalf("rows after the drop = %v, want %v", got, want)
 	}
-	m.SetAgents([]agent.Agent{live("s-2", "2", agent.Idle)}, true, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-2", "2", agent.Idle)}, true, polledLater, "", nil)
 	m.Update(linkedIssuesMsg{issues: linked})
 	if got, want := titles(m.rows), []string{"Tab 2@"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("rows after a stale read = %v, want %v", got, want)

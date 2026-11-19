@@ -66,8 +66,8 @@ mise run ci          # the merge gate; see What the tools enforce
    - The agents of an issue are `agent.Linked`: its link labels and, on an In Progress issue, its
      comment sessions, merged with the last poll. `agent.Link` is the one copy of that rule; Detail
      and the Agents tab both call it. A link label no live agent holds is `agent.Gone`, on an issue
-     that is not closed only, and only from a poll that began after the latest store change
-     (`Model.liveAgentsCurrent`).
+     that is not closed only, and only on an issue last updated before the second the poll
+     began (`IssueLinks.UpdatedAt`, `Model.liveAgentsPolledAt`).
    - A close from the app removes the link label from the open issues after the host closes the
      agent, as `RemoveLabels`, in one unscoped command (`Model.closeAgent`,
      `internal/app/agents.go`). An unlink of a gone agent is the same removal without the host

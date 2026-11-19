@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"time"
 )
 
 // Status is how much an agent needs the operator. A host may pass a status it
@@ -195,6 +196,7 @@ type IssueLinks struct {
 	Labels          []string
 	CommentSessions []string
 	Closed          bool
+	UpdatedAt       time.Time
 }
 
 // LinkedAgent is an agent linked to an issue: Issue is the index of the
@@ -206,30 +208,33 @@ type LinkedAgent struct {
 
 // Link is the agents linked to issues, merged by session with the live
 // agents of the project. live is nil when the live agents are not known: no
-// poll answered yet, or the last one failed. current is false when the store
-// changed after the poll that gave live began: a label written since may
-// name an agent that poll did not see.
+// poll answered yet, or the last one failed. polledAt is when the poll that
+// gave live began.
 //
 //   - A session a link label names is linked to the issue of the label. A
 //     label wins over a comment, and the first issue over a later one.
 //   - A session a label names that no live agent holds is Gone, but only on
-//     an issue that is not closed and only when live is known and current: a
-//     closed issue's agent finished and the store refuses the unlink of its
-//     label, and an unknown or older list must not report a live agent gone.
+//     an issue that is not closed, only when live is known, and only on an
+//     issue last updated before the second the poll began: a closed issue's
+//     agent finished and the store refuses the unlink of its label, an
+//     unknown list must not report a live agent gone, and a label written
+//     since may name an agent the poll did not see. The store keeps whole
+//     seconds. Such a session is withheld: neither linked nor gone.
 //   - A comment session no live agent holds is left out: every past session
 //     that commented would show.
 //
 // The agent that needs the operator most is first (ByNeed).
-func Link(live map[string]Agent, current bool, issues []IssueLinks) []LinkedAgent {
-	mayReportGone := live != nil && current
-	var linked []LinkedAgent
+func Link(live map[string]Agent, polledAt time.Time, issues []IssueLinks) (linked []LinkedAgent, withheld bool) {
+	known := live != nil
+	polledSecond := polledAt.Truncate(time.Second)
 	seen := make(map[string]bool)
-	add := func(session string, issue int, mayBeGone bool) {
+	add := func(session string, issue int, mayBeGone, mayBeWithheld bool) {
 		if session == "" || seen[session] {
 			return
 		}
 		a, ok := live[session]
 		if !ok && !mayBeGone {
+			withheld = withheld || mayBeWithheld
 			return
 		}
 		if !ok {
@@ -239,23 +244,25 @@ func Link(live map[string]Agent, current bool, issues []IssueLinks) []LinkedAgen
 		linked = append(linked, LinkedAgent{Agent: a, Issue: issue})
 	}
 	for i, issue := range issues {
+		newer := !issue.UpdatedAt.Before(polledSecond)
 		for _, session := range LinkSessions(issue.Labels) {
-			add(session, i, mayReportGone && !issue.Closed)
+			add(session, i, known && !issue.Closed && !newer, known && !issue.Closed && newer)
 		}
 	}
 	for i, issue := range issues {
 		for _, session := range issue.CommentSessions {
-			add(session, i, false)
+			add(session, i, false, false)
 		}
 	}
 	slices.SortStableFunc(linked, func(a, b LinkedAgent) int { return ByNeed(a.Agent, b.Agent) })
-	return linked
+	return linked, withheld
 }
 
 // Linked is the agents Link links to the one issue.
-func Linked(live map[string]Agent, current bool, issue IssueLinks) []Agent {
+func Linked(live map[string]Agent, polledAt time.Time, issue IssueLinks) []Agent {
 	var agents []Agent
-	for _, linked := range Link(live, current, []IssueLinks{issue}) {
+	linked, _ := Link(live, polledAt, []IssueLinks{issue})
+	for _, linked := range linked {
 		agents = append(agents, linked.Agent)
 	}
 	return agents

@@ -80,13 +80,15 @@ type Model struct {
 	height int
 
 	// live is the agents of the last poll, liveKnown false before the first
-	// answer and after a failed poll, liveCurrent false when the store
-	// changed after that poll began (agent.Link), and absent why there may
-	// be none.
-	live        []agent.Agent
-	liveKnown   bool
-	liveCurrent bool
-	absent      string
+	// answer and after a failed poll, livePolledAt when that poll began
+	// (agent.Link), and absent why there may be none. withheld is true while
+	// a link label is neither drawn linked nor gone, because its issue
+	// changed after the poll began.
+	live         []agent.Agent
+	liveKnown    bool
+	livePolledAt time.Time
+	absent       string
+	withheld     bool
 
 	// issues is every issue with a link label, closed ones included;
 	// commentLinks the In Progress issues agents commented on.
@@ -209,10 +211,9 @@ func (m *Model) TakesKey(msg tea.KeyPressMsg) bool { return mode.IsQueryKey(msg)
 // SetAgents replaces the live agents with those of a poll, and the In
 // Progress issues agents commented on with the board's. known is false when
 // the poll failed, and absent then, or when there is no host to ask, says
-// why no agent is shown. current is false when the store changed after the
-// poll began, so no agent is drawn gone.
-func (m *Model) SetAgents(live []agent.Agent, known, current bool, absent string, commentLinks []mode.CommentLink) tea.Cmd {
-	m.live, m.liveKnown, m.liveCurrent, m.absent, m.commentLinks = live, known, current, absent, commentLinks
+// why no agent is shown. polledAt is when the poll began.
+func (m *Model) SetAgents(live []agent.Agent, known bool, polledAt time.Time, absent string, commentLinks []mode.CommentLink) tea.Cmd {
+	m.live, m.liveKnown, m.livePolledAt, m.absent, m.commentLinks = live, known, polledAt, absent, commentLinks
 	return m.rebuild()
 }
 
@@ -551,7 +552,7 @@ func (m *Model) rebuild() tea.Cmd {
 // after a query change, gives the selection to the first row instead.
 func (m *Model) rebuildWith(toFirst bool) tea.Cmd {
 	before, beforeKey := m.selectedIssue(), m.selectedKey()
-	m.all = buildRows(m.live, m.liveKnown, m.liveCurrent, m.issues, m.commentLinks)
+	m.all, m.withheld = buildRows(m.live, m.liveKnown, m.livePolledAt, m.issues, m.commentLinks)
 	m.rows = m.matching(m.all)
 	rowOf := func(key string) int {
 		if key == "" {
@@ -570,6 +571,11 @@ func (m *Model) rebuildWith(toFirst bool) tea.Cmd {
 		m.selected = 0
 	}
 	m.selected = min(max(m.selected, 0), max(len(m.rows)-1, 0))
+	if m.withheld && m.chosen != "" && rowOf(m.chosen) < 0 {
+		// The chosen row is withheld until the next poll. No row stands in
+		// for it: the close key closes an idle agent without a question.
+		m.selected = -1
+	}
 	// Before the rows settle their order is not final: the selection stays on
 	// the first row, whichever agent comes there, unless the operator or
 	// Select chose one.
@@ -592,8 +598,10 @@ func (m *Model) rebuildWith(toFirst bool) tea.Cmd {
 // settled reports whether the rows are final until the next poll or read:
 // the live agents and the linked issues are both known, and no read is in
 // flight.
+// A withheld row comes back with the next poll, so until then the selection
+// waits for it as it waits for the first answer.
 func (m *Model) settled() bool {
-	return m.liveKnown && m.issuesKnown && !m.loading
+	return m.liveKnown && m.issuesKnown && !m.loading && !m.withheld
 }
 
 // PaneShown reports whether the Agent pane is on screen, for the legend.
@@ -649,7 +657,7 @@ func selectionOf(row uiagents.Row) *mode.Selection {
 // labels of issues and the comments of commentLinks (agent.Link), then each
 // live agent linked to none. Each group puts the agent that needs the
 // operator most first (agent.ByNeed).
-func buildRows(live []agent.Agent, liveKnown, liveCurrent bool, issues []domain.IssueSummary, commentLinks []mode.CommentLink) []uiagents.Row {
+func buildRows(live []agent.Agent, liveKnown bool, polledAt time.Time, issues []domain.IssueSummary, commentLinks []mode.CommentLink) (rows []uiagents.Row, withheld bool) {
 	var bySession map[string]agent.Agent
 	if liveKnown {
 		bySession = make(map[string]agent.Agent, len(live))
@@ -663,15 +671,15 @@ func buildRows(live []agent.Agent, liveKnown, liveCurrent bool, issues []domain.
 	links := make([]agent.IssueLinks, 0, cap(targets))
 	for _, issue := range issues {
 		targets = append(targets, issue)
-		links = append(links, agent.IssueLinks{Labels: issue.Labels, Closed: issue.Status == domain.StatusClosed})
+		links = append(links, agent.IssueLinks{Labels: issue.Labels, Closed: issue.Status == domain.StatusClosed, UpdatedAt: issue.UpdatedAt})
 	}
 	for _, link := range commentLinks {
 		targets = append(targets, link.Issue)
 		links = append(links, agent.IssueLinks{CommentSessions: link.Sessions})
 	}
-	var rows []uiagents.Row
 	seen := make(map[string]bool)
-	for _, linked := range agent.Link(bySession, liveCurrent, links) {
+	linkedAgents, withheld := agent.Link(bySession, polledAt, links)
+	for _, linked := range linkedAgents {
 		seen[linked.Agent.Key()] = true
 		issue := targets[linked.Issue]
 		rows = append(rows, uiagents.Row{Agent: linked.Agent, Issue: &issue})
@@ -683,5 +691,5 @@ func buildRows(live []agent.Agent, liveKnown, liveCurrent bool, issues []domain.
 		}
 	}
 	slices.SortStableFunc(unlinked, func(x, y uiagents.Row) int { return agent.ByNeed(x.Agent, y.Agent) })
-	return append(rows, unlinked...)
+	return append(rows, unlinked...), withheld
 }
