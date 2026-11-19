@@ -61,7 +61,10 @@ type Model struct {
 	// liveAgents is the live agents of the store's revier project, by
 	// session. The shell sets it from each poll; Reset keeps it, because it
 	// belongs to the project and not to the issue on screen.
-	liveAgents map[string]agent.Agent
+	// liveAgentsCurrent is false when the store changed after that poll
+	// began (agent.Link).
+	liveAgents        map[string]agent.Agent
+	liveAgentsCurrent bool
 }
 
 // OpenRelatedIssueMsg asks the shell to navigate detail mode to another issue.
@@ -168,12 +171,15 @@ func (m *Model) IsLoading() bool { return m.loading }
 func (m *Model) Error() string { return m.errText }
 
 // Reset returns the model to its zero state, dropping any in-flight load.
-func (m *Model) Reset() { *m = Model{Keys: m.Keys, liveAgents: m.liveAgents} }
+func (m *Model) Reset() {
+	*m = Model{Keys: m.Keys, liveAgents: m.liveAgents, liveAgentsCurrent: m.liveAgentsCurrent}
+}
 
 // SetLiveAgents replaces the live agents of the store's project, keyed
-// by the session each holds. A nil map is a list not known (agent.Linked).
-func (m *Model) SetLiveAgents(agents map[string]agent.Agent) {
-	m.liveAgents = agents
+// by the session each holds. A nil map is a list not known, and current is
+// false when the store changed after the poll began (agent.Linked).
+func (m *Model) SetLiveAgents(agents map[string]agent.Agent, current bool) {
+	m.liveAgents, m.liveAgentsCurrent = agents, current
 }
 
 // DropAgent takes the agent a off the issue at once, after the app closed or
@@ -198,17 +204,17 @@ func (m *Model) DropAgent(a agent.Agent) {
 // operator most; the gone ones are last. A closed issue has no gone agent, as
 // on the Agents tab: the store refuses the unlink of its label.
 func (m *Model) LinkedAgents() []agent.Agent {
-	return linkedAgents(m.liveAgents, m.Detail)
+	return linkedAgents(m.liveAgents, m.liveAgentsCurrent, m.Detail)
 }
 
-func linkedAgents(live map[string]agent.Agent, d domain.IssueDetail) []agent.Agent {
+func linkedAgents(live map[string]agent.Agent, current bool, d domain.IssueDetail) []agent.Agent {
 	issue := agent.IssueLinks{Labels: d.Summary.Labels, Closed: d.Summary.Status == domain.StatusClosed}
 	if d.Summary.Status == domain.StatusInProgress {
 		for _, comment := range d.Comments {
 			issue.CommentSessions = append(issue.CommentSessions, comment.Session)
 		}
 	}
-	return agent.Linked(live, issue)
+	return agent.Linked(live, current, issue)
 }
 
 // SetDrillFromDepsFocus prepares the model for a drill-from-Dependencies navigation
@@ -378,7 +384,7 @@ func (m *Model) viewState(maxWidth, viewportHeight, skeletonPhase int) detail.St
 			DeleteComment: m.Keys.DisplayLabel(config.DetailContext, config.DetailActionDeleteComment),
 			LaunchAgent:   m.Keys.DisplayLabel(config.ShellContext, config.ShellActionLaunchAgent),
 		},
-		Agents: linkedAgents(m.liveAgents, d),
+		Agents: linkedAgents(m.liveAgents, m.liveAgentsCurrent, d),
 		BrowserItems: func() []domain.IssueReference {
 			return append([]domain.IssueReference(nil), m.BrowserItems...)
 		}(),

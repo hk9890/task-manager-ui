@@ -36,7 +36,7 @@ func TestLinkedAgentsAreTheLiveAgentsThatCommentedInOrderOfNeed(t *testing.T) {
 		"s-run-a":  {Label: "Tab 4", Status: agent.Running, Session: "s-run-a"},
 		"s-attn":   {Label: "Tab 9", Status: agent.NeedsYou, Session: "s-attn"},
 		"s-silent": {Label: "Tab 2", Status: agent.NeedsYou, Session: "s-silent"},
-	})
+	}, true)
 
 	var labels []string
 	for _, linked := range m.LinkedAgents() {
@@ -68,7 +68,7 @@ func TestACommentLinksItsAgentOnAnInProgressIssueOnly(t *testing.T) {
 		m := commentsBySessions(t, "s-1")
 		m.Detail.Summary.Status = status
 		m.Detail.Summary.Labels = []string{"agent-session:s-2"}
-		m.SetLiveAgents(live)
+		m.SetLiveAgents(live, true)
 		var labels []string
 		for _, linked := range m.LinkedAgents() {
 			labels = append(labels, linked.Label)
@@ -85,7 +85,7 @@ func TestAClickOnTheAgentButtonSendsItsRequest(t *testing.T) {
 	t.Parallel()
 
 	m := commentsBySessions(t, "s-1")
-	m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}})
+	m.SetLiveAgents(map[string]agent.Agent{"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"}}, true)
 	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "agent alt+i")
 	request := m.HandleMouse(mode.MouseMsg{Kind: mode.MouseClick, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)()
 	testui.AssertActionRequest(t, request, mode.Detail, mode.ActionLaunchAgent)
@@ -104,7 +104,7 @@ func TestAClickOnAnAgentRowAsksForThatAgent(t *testing.T) {
 	m.SetLiveAgents(map[string]agent.Agent{
 		"s-1": {Label: "Tab 3", Status: agent.Running, Session: "s-1"},
 		"s-2": {Label: "Tab 4", Status: agent.Idle, Session: "s-2"},
-	})
+	}, true)
 	x, y := testui.FindCell(t, m.View(commentsWidth, commentsHeight, false, 0), "idle     Tab 4")
 
 	m.HandleMouse(mode.MouseMsg{Kind: mode.MouseMove, X: x, Y: y, At: mouseStart}, commentsWidth, commentsHeight)

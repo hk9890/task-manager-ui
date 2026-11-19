@@ -45,6 +45,7 @@ func (m *Model) pollAgentsCmd() tea.Cmd {
 		return nil
 	}
 	m.agentPollInFlight = true
+	m.agentPollChangeSeq = m.storeChangeSeq
 	ctx := m.ctx
 	return m.scoped(func() tea.Msg {
 		agents, err := host.List(ctx, root)
@@ -95,6 +96,24 @@ func (m *Model) applyAgentList(msg agentsListedMsg) tea.Cmd {
 	}
 	m.agentPollFailing = false
 	m.liveAgents, m.liveAgentsKnown, m.agentPollErr = msg.agents, true, nil
+	m.liveAgentsChangeSeq = m.agentPollChangeSeq
+	return m.publishAgents()
+}
+
+// liveAgentsCurrent reports whether the poll that gave the live agents began
+// after the latest store change. Until the next poll, a link label written
+// since may name an agent that poll did not see, so no agent is drawn gone.
+// While the terminal is not focused that is until the focus-in.
+func (m Model) liveAgentsCurrent() bool {
+	return m.liveAgentsChangeSeq == m.storeChangeSeq
+}
+
+// publishAgentsIfKnown hands the live agents on again after a store change,
+// so the surfaces stop drawing an agent gone until a poll began after it.
+func (m *Model) publishAgentsIfKnown() tea.Cmd {
+	if !m.liveAgentsKnown {
+		return nil
+	}
 	return m.publishAgents()
 }
 
@@ -114,9 +133,10 @@ func (m *Model) publishAgents() tea.Cmd {
 			}
 		}
 	}
-	m.detail.SetLiveAgents(bySession)
+	current := m.liveAgentsCurrent()
+	m.detail.SetLiveAgents(bySession, current)
 	m.board.SetLiveAgents(statusBySession)
-	return m.scoped(m.agents.SetAgents(m.liveAgents, m.liveAgentsKnown, m.agentsAbsent(m.agentPollErr), m.board.CommentLinks()))
+	return m.scoped(m.agents.SetAgents(m.liveAgents, m.liveAgentsKnown, current, m.agentsAbsent(m.agentPollErr), m.board.CommentLinks()))
 }
 
 // addStartedAgent puts an agent the app started among the live agents at

@@ -205,6 +205,11 @@ type Model struct {
 	agentPollFailing  bool
 	projectLookupWait int
 	agentPollOwed     bool
+	// agentPollChangeSeq is the storeChangeSeq the poll in flight began at,
+	// and liveAgentsChangeSeq the one the poll that gave liveAgents began at:
+	// a link label written after it may name an agent that poll did not see.
+	agentPollChangeSeq  int
+	liveAgentsChangeSeq int
 
 	// liveAgents is the agents of the last poll that answered, with each
 	// agent the app started since put in and each it closed taken out.
@@ -356,8 +361,9 @@ func (m *Model) bindStore(services Services) {
 	m.agentPollFailing = false
 	m.projectLookupWait = 0
 	m.agentPollOwed = false
+	m.agentPollChangeSeq, m.liveAgentsChangeSeq = 0, 0
 	m.liveAgents, m.liveAgentsKnown, m.agentPollErr, m.agentPollStale = nil, false, nil, false
-	m.agents.SetAgents(nil, false, m.agentsAbsent(nil), nil)
+	m.agents.SetAgents(nil, false, true, m.agentsAbsent(nil), nil)
 	m.applyWorkspaceSizeToBrowseModes()
 
 	m.active = mode.Board
@@ -818,7 +824,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, modeCmd
 	case storeChangedMsg:
 		m.storeChangeSeq++
-		return m, batchCmds(modeCmd, m.waitForStoreChangeCmd())
+		return m, batchCmds(modeCmd, m.waitForStoreChangeCmd(), m.publishAgentsIfKnown())
 	case storeWatchEndedMsg:
 		m.storeChanges = nil
 		// A watch that ends in the burst of a write sends no signal for it, and
@@ -826,7 +832,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// as a change, so the write is read.
 		m.storeChangeSeq++
 		m.logger().Warn("store change watch ended; the refresh tick is the only trigger")
-		return m, modeCmd
+		return m, batchCmds(modeCmd, m.publishAgentsIfKnown())
 	case loading.TickMsg:
 		m.spinnerFrame = loading.NextFrame(m.spinnerFrame)
 		// This tick has fired; Update re-arms it only while work is in flight.

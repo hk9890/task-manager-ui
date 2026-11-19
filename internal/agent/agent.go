@@ -206,20 +206,22 @@ type LinkedAgent struct {
 
 // Link is the agents linked to issues, merged by session with the live
 // agents of the project. live is nil when the live agents are not known: no
-// poll answered yet, or the last one failed.
+// poll answered yet, or the last one failed. current is false when the store
+// changed after the poll that gave live began: a label written since may
+// name an agent that poll did not see.
 //
 //   - A session a link label names is linked to the issue of the label. A
 //     label wins over a comment, and the first issue over a later one.
 //   - A session a label names that no live agent holds is Gone, but only on
-//     an issue that is not closed and only when live is known: a closed
-//     issue's agent finished and the store refuses the unlink of its label,
-//     and an unknown list must not report a live agent gone.
+//     an issue that is not closed and only when live is known and current: a
+//     closed issue's agent finished and the store refuses the unlink of its
+//     label, and an unknown or older list must not report a live agent gone.
 //   - A comment session no live agent holds is left out: every past session
 //     that commented would show.
 //
 // The agent that needs the operator most is first (ByNeed).
-func Link(live map[string]Agent, issues []IssueLinks) []LinkedAgent {
-	known := live != nil
+func Link(live map[string]Agent, current bool, issues []IssueLinks) []LinkedAgent {
+	mayReportGone := live != nil && current
 	var linked []LinkedAgent
 	seen := make(map[string]bool)
 	add := func(session string, issue int, mayBeGone bool) {
@@ -238,7 +240,7 @@ func Link(live map[string]Agent, issues []IssueLinks) []LinkedAgent {
 	}
 	for i, issue := range issues {
 		for _, session := range LinkSessions(issue.Labels) {
-			add(session, i, known && !issue.Closed)
+			add(session, i, mayReportGone && !issue.Closed)
 		}
 	}
 	for i, issue := range issues {
@@ -251,9 +253,9 @@ func Link(live map[string]Agent, issues []IssueLinks) []LinkedAgent {
 }
 
 // Linked is the agents Link links to the one issue.
-func Linked(live map[string]Agent, issue IssueLinks) []Agent {
+func Linked(live map[string]Agent, current bool, issue IssueLinks) []Agent {
 	var agents []Agent
-	for _, linked := range Link(live, []IssueLinks{issue}) {
+	for _, linked := range Link(live, current, []IssueLinks{issue}) {
 		agents = append(agents, linked.Agent)
 	}
 	return agents

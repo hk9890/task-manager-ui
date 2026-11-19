@@ -23,7 +23,7 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 	labels := []string{"backend", "agent-session:s-label", "agent-session:0123456789abcdef"}
 	comments := []string{"s-comment", "s-label", "s-old", ""}
 
-	got := Linked(live, IssueLinks{Labels: labels, CommentSessions: comments})
+	got := Linked(live, true, IssueLinks{Labels: labels, CommentSessions: comments})
 	want := []Agent{
 		live["s-comment"],
 		live["s-label"],
@@ -38,12 +38,24 @@ func TestLinkedMergesTheLinksWithTheLiveAgents(t *testing.T) {
 // Gone; a known list with no agent makes it Gone.
 func TestLinkedReportsNoGoneAgentWhileTheLiveListIsNotKnown(t *testing.T) {
 	labels := []string{"agent-session:s-1"}
-	if got := Linked(nil, IssueLinks{Labels: labels}); len(got) != 0 {
+	if got := Linked(nil, true, IssueLinks{Labels: labels}); len(got) != 0 {
 		t.Fatalf("Linked(nil) = %+v, want no agent", got)
 	}
-	got := Linked(map[string]Agent{}, IssueLinks{Labels: labels})
+	got := Linked(map[string]Agent{}, true, IssueLinks{Labels: labels})
 	if len(got) != 1 || got[0].Status != Gone {
 		t.Fatalf("Linked(empty) = %+v, want s-1 gone", got)
+	}
+}
+
+// A list from a poll that began before the latest store change may miss an
+// agent whose label was written since: such a label is not Gone, and a live
+// agent the list holds stays linked.
+func TestLinkedReportsNoGoneAgentFromAListOlderThanTheStore(t *testing.T) {
+	live := map[string]Agent{"s-live": {Session: "s-live", Label: "Tab 1", Status: Idle}}
+	labels := []string{"agent-session:s-live", "agent-session:s-new"}
+	got := Linked(live, false, IssueLinks{Labels: labels})
+	if want := []Agent{live["s-live"]}; !slices.Equal(got, want) {
+		t.Fatalf("Linked(not current) = %+v, want %+v", got, want)
 	}
 }
 
@@ -52,7 +64,7 @@ func TestLinkedReportsNoGoneAgentWhileTheLiveListIsNotKnown(t *testing.T) {
 func TestLinkedReportsNoGoneAgentOfAClosedIssue(t *testing.T) {
 	live := map[string]Agent{"s-live": {Session: "s-live", Label: "Tab 1", Status: Idle}}
 	labels := []string{"agent-session:s-live", "agent-session:s-old"}
-	got := Linked(live, IssueLinks{Labels: labels, Closed: true})
+	got := Linked(live, true, IssueLinks{Labels: labels, Closed: true})
 	if want := []Agent{live["s-live"]}; !slices.Equal(got, want) {
 		t.Fatalf("Linked(closed) = %+v, want %+v", got, want)
 	}
@@ -65,7 +77,7 @@ func TestLinkOrdersAgentsOfARankByTitle(t *testing.T) {
 		"s-1": {Session: "s-1", Label: "Tab 1", Name: "zeta", Status: Idle},
 		"s-2": {Session: "s-2", Label: "Tab 2", Name: "alpha", Status: Idle},
 	}
-	got := Linked(live, IssueLinks{Labels: []string{"agent-session:s-1", "agent-session:s-2"}})
+	got := Linked(live, true, IssueLinks{Labels: []string{"agent-session:s-1", "agent-session:s-2"}})
 	if want := []Agent{live["s-2"], live["s-1"]}; !slices.Equal(got, want) {
 		t.Fatalf("Linked = %+v, want alpha first", got)
 	}
@@ -83,7 +95,7 @@ func TestLinkLinksASessionToTheFirstIssue(t *testing.T) {
 		{CommentSessions: []string{"s-2"}},
 		{Labels: []string{"agent-session:s-1"}},
 	}
-	got := Link(live, issues)
+	got := Link(live, true, issues)
 	want := []LinkedAgent{{Agent: live["s-1"], Issue: 2}, {Agent: live["s-2"], Issue: 0}}
 	if !slices.Equal(got, want) {
 		t.Fatalf("Link = %+v, want %+v", got, want)

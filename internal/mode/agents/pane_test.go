@@ -51,7 +51,7 @@ func TestTheQueryFiltersTheAgents(t *testing.T) {
 	m.Update(linkedIssuesMsg{issues: []domain.IssueSummary{{ID: "tm-7", Title: "Fix the board", Status: "open", Labels: []string{"agent-session:s-1"}}}})
 	editing := live("s-2", "2", agent.Running)
 	editing.Activity = "Editing docs"
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), editing, live("s-3", "3", agent.Idle)}, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), editing, live("s-3", "3", agent.Idle)}, true, true, "", nil)
 
 	for _, tc := range []struct{ query, want string }{
 		{"board", "Tab 1@tm-7"},
@@ -93,17 +93,17 @@ func TestTheLastMessageIsReadOncePerActivity(t *testing.T) {
 	m := splitTab(t, reads)
 	running := live("s-1", "1", agent.Running)
 	running.Activity = "Editing"
-	settle(t, m, m.SetAgents([]agent.Agent{running, live("s-2", "2", agent.Idle)}, true, "", nil))
+	settle(t, m, m.SetAgents([]agent.Agent{running, live("s-2", "2", agent.Idle)}, true, true, "", nil))
 	if reads["s-1"] != 1 || m.pane().Message != "said s-1" {
 		t.Fatalf("reads %v, pane %+v; want s-1 read once", reads, m.pane())
 	}
 
-	settle(t, m, m.SetAgents([]agent.Agent{running, live("s-2", "2", agent.Idle)}, true, "", nil))
+	settle(t, m, m.SetAgents([]agent.Agent{running, live("s-2", "2", agent.Idle)}, true, true, "", nil))
 	if reads["s-1"] != 1 {
 		t.Errorf("a poll with the same activity read again: %v", reads)
 	}
 	running.Activity = "Testing"
-	settle(t, m, m.SetAgents([]agent.Agent{running, live("s-2", "2", agent.Idle)}, true, "", nil))
+	settle(t, m, m.SetAgents([]agent.Agent{running, live("s-2", "2", agent.Idle)}, true, true, "", nil))
 	if reads["s-1"] != 2 {
 		t.Errorf("a new activity did not read again: %v", reads)
 	}
@@ -121,7 +121,7 @@ func TestOnlyTheRestingSelectionIsRead(t *testing.T) {
 	t.Parallel()
 	reads := map[string]int{}
 	m := splitTab(t, reads)
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle), live("s-3", "3", agent.Idle)}, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle), live("s-3", "3", agent.Idle)}, true, true, "", nil)
 	first := m.move(1)
 	settle(t, m, m.move(1))
 	settle(t, m, first)
@@ -132,7 +132,7 @@ func TestOnlyTheRestingSelectionIsRead(t *testing.T) {
 	narrow := splitTab(t, reads)
 	narrow.SetSize(90, 30)
 	narrow.SetShown(true)
-	settle(t, narrow, narrow.SetAgents([]agent.Agent{live("s-9", "9", agent.Idle)}, true, "", nil))
+	settle(t, narrow, narrow.SetAgents([]agent.Agent{live("s-9", "9", agent.Idle)}, true, true, "", nil))
 	if reads["s-9"] != 0 {
 		t.Errorf("a narrow screen read %v", reads)
 	}
@@ -147,7 +147,7 @@ func TestThePageKeysScrollThePane(t *testing.T) {
 	})
 	m.SetSize(140, 30)
 	m.SetShown(true)
-	settle(t, m, m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, "", nil))
+	settle(t, m, m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, true, "", nil))
 
 	m.Update(testui.Press("pgdown"))
 	if m.paneOffset == 0 || m.selected != 0 {
@@ -187,7 +187,7 @@ func TestThePaneScrollsWithTheBoardPageKeys(t *testing.T) {
 	for i := range 30 {
 		agents = append(agents, live(fmt.Sprintf("s-%02d", i), fmt.Sprintf("%02d", i), agent.Idle))
 	}
-	settle(t, m, m.SetAgents(agents, true, "", nil))
+	settle(t, m, m.SetAgents(agents, true, true, "", nil))
 
 	m.Update(testui.Press("alt+k"))
 	if m.paneOffset != 0 {

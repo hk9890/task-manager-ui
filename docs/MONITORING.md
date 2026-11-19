@@ -113,8 +113,9 @@ These, all expected:
   `error`) — the agent poll (`internal/app/agents.go`) found no revier project at the project
   root: `revier status` ran and named another project or none. Detail, the board and the Agents tab show no agent; the tab
   names the cause (`Model.agentsAbsent`). Logged once until a
-  poll succeeds, and only under `--debug`. The poll then asks again about once a minute, and at
-  once after a store switch.
+  poll succeeds, and only under `--debug`. The poll then asks again about once a minute while
+  the terminal has the focus, at the focus-in after a longer blur, and at once after a store
+  switch.
 
 Anything else after startup means something went wrong.
 

@@ -80,10 +80,13 @@ type Model struct {
 	height int
 
 	// live is the agents of the last poll, liveKnown false before the first
-	// answer and after a failed poll, and absent why there may be none.
-	live      []agent.Agent
-	liveKnown bool
-	absent    string
+	// answer and after a failed poll, liveCurrent false when the store
+	// changed after that poll began (agent.Link), and absent why there may
+	// be none.
+	live        []agent.Agent
+	liveKnown   bool
+	liveCurrent bool
+	absent      string
 
 	// issues is every issue with a link label, closed ones included;
 	// commentLinks the In Progress issues agents commented on.
@@ -206,9 +209,10 @@ func (m *Model) TakesKey(msg tea.KeyPressMsg) bool { return mode.IsQueryKey(msg)
 // SetAgents replaces the live agents with those of a poll, and the In
 // Progress issues agents commented on with the board's. known is false when
 // the poll failed, and absent then, or when there is no host to ask, says
-// why no agent is shown.
-func (m *Model) SetAgents(live []agent.Agent, known bool, absent string, commentLinks []mode.CommentLink) tea.Cmd {
-	m.live, m.liveKnown, m.absent, m.commentLinks = live, known, absent, commentLinks
+// why no agent is shown. current is false when the store changed after the
+// poll began, so no agent is drawn gone.
+func (m *Model) SetAgents(live []agent.Agent, known, current bool, absent string, commentLinks []mode.CommentLink) tea.Cmd {
+	m.live, m.liveKnown, m.liveCurrent, m.absent, m.commentLinks = live, known, current, absent, commentLinks
 	return m.rebuild()
 }
 
@@ -547,7 +551,7 @@ func (m *Model) rebuild() tea.Cmd {
 // after a query change, gives the selection to the first row instead.
 func (m *Model) rebuildWith(toFirst bool) tea.Cmd {
 	before, beforeKey := m.selectedIssue(), m.selectedKey()
-	m.all = buildRows(m.live, m.liveKnown, m.issues, m.commentLinks)
+	m.all = buildRows(m.live, m.liveKnown, m.liveCurrent, m.issues, m.commentLinks)
 	m.rows = m.matching(m.all)
 	rowOf := func(key string) int {
 		if key == "" {
@@ -645,7 +649,7 @@ func selectionOf(row uiagents.Row) *mode.Selection {
 // labels of issues and the comments of commentLinks (agent.Link), then each
 // live agent linked to none. Each group puts the agent that needs the
 // operator most first (agent.ByNeed).
-func buildRows(live []agent.Agent, liveKnown bool, issues []domain.IssueSummary, commentLinks []mode.CommentLink) []uiagents.Row {
+func buildRows(live []agent.Agent, liveKnown, liveCurrent bool, issues []domain.IssueSummary, commentLinks []mode.CommentLink) []uiagents.Row {
 	var bySession map[string]agent.Agent
 	if liveKnown {
 		bySession = make(map[string]agent.Agent, len(live))
@@ -667,7 +671,7 @@ func buildRows(live []agent.Agent, liveKnown bool, issues []domain.IssueSummary,
 	}
 	var rows []uiagents.Row
 	seen := make(map[string]bool)
-	for _, linked := range agent.Link(bySession, links) {
+	for _, linked := range agent.Link(bySession, liveCurrent, links) {
 		seen[linked.Agent.Key()] = true
 		issue := targets[linked.Issue]
 		rows = append(rows, uiagents.Row{Agent: linked.Agent, Issue: &issue})

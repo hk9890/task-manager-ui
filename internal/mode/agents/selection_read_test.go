@@ -23,7 +23,7 @@ func TestAQueryThatMovesTheSelectionAnnouncesIt(t *testing.T) {
 		{ID: "tm-1", Title: "Fix the board", Status: "open", Labels: []string{"agent-session:s-1"}},
 		{ID: "tm-2", Title: "Write the docs", Status: "open", Labels: []string{"agent-session:s-2"}},
 	}})
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, true, "", nil)
 	m.move(1) // the agent of tm-2
 
 	var announced *mode.Selection
@@ -42,7 +42,7 @@ func TestAQueryThatMovesTheSelectionAnnouncesIt(t *testing.T) {
 func TestSelectClearsAQueryThatHidesTheAgent(t *testing.T) {
 	t.Parallel()
 	m := newTab(t)
-	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, "", nil)
+	m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle), live("s-2", "2", agent.Idle)}, true, true, "", nil)
 	m.Update(linkedIssuesMsg{})
 	m.Update(tea.PasteMsg{Content: "tab 1"})
 	m.Select("s-2")
@@ -66,12 +66,12 @@ func TestAFailedReadIsTriedAgainOnTheNextPoll(t *testing.T) {
 	m.SetSize(140, 30)
 	m.SetShown(true)
 	agents := []agent.Agent{live("s-1", "1", agent.Idle)}
-	settle(t, m, m.SetAgents(agents, true, "", nil))
+	settle(t, m, m.SetAgents(agents, true, true, "", nil))
 	if calls != 1 || m.pane().Error == "" {
 		t.Fatalf("calls %d, pane %+v; want one failed read", calls, m.pane())
 	}
 	fail = false
-	settle(t, m, m.SetAgents(agents, true, "", nil))
+	settle(t, m, m.SetAgents(agents, true, true, "", nil))
 	if calls != 2 || m.pane().Message != "done" {
 		t.Errorf("the next poll did not read again: calls %d, pane %+v", calls, m.pane())
 	}
@@ -88,7 +88,7 @@ func TestThePaneReadsOnlyWhileItIsOnScreen(t *testing.T) {
 	reads := map[string]int{}
 	m := splitTab(t, reads)
 	m.SetShown(false)
-	settle(t, m, m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle)}, true, "", nil))
+	settle(t, m, m.SetAgents([]agent.Agent{live("s-1", "1", agent.Idle)}, true, true, "", nil))
 	if reads["s-1"] != 0 || m.pane().Reading {
 		t.Fatalf("a tab off screen read %v, or says reading: %+v", reads, m.pane())
 	}
@@ -100,7 +100,7 @@ func TestThePaneReadsOnlyWhileItIsOnScreen(t *testing.T) {
 	narrow := splitTab(t, reads)
 	narrow.SetSize(90, 30)
 	narrow.SetShown(true)
-	settle(t, narrow, narrow.SetAgents([]agent.Agent{live("s-2", "2", agent.Idle)}, true, "", nil))
+	settle(t, narrow, narrow.SetAgents([]agent.Agent{live("s-2", "2", agent.Idle)}, true, true, "", nil))
 	narrow.SetSize(140, 30)
 	settle(t, narrow, narrow.SetShown(true))
 	if reads["s-2"] != 1 {
