@@ -6,6 +6,29 @@ history readable from a checkout with no network.
 Each [GitHub release](https://github.com/hk9890/task-manager-ui/releases)
 carries its `vX.Y.Z` section of this file as its notes.
 
+## v0.22.1
+
+- **Fixed: each idle taskmgr-ui used about a tenth of a CPU core.** With a
+  store open, the app ran `revier` every 3 seconds to list the agents, also
+  in a window that did not have the focus. Each run cost about 0.3 seconds of
+  CPU. `top` showed that cost under `revier` and `claude`, not under
+  taskmgr-ui, so ten idle windows used about one core. The app now asks
+  `revier` only while its terminal has the focus, and once when the focus
+  comes back, or when you press a key or click in it. A window without the
+  focus, such as a split beside the agent you type in, shows the agents of
+  the last ask. Each ask also costs about a third less. A terminal that does
+  not report the focus gets the agents every 3 seconds, as before.
+- **Fixed: an app that started on the store picker used CPU for as long as it
+  ran.** When no store resolved at start, the app redrew its screen ten times
+  a second behind the picker, about 1% of a core. It now does no work while
+  the picker waits for you.
+- **Fixed: a running agent could show as `gone`, with Resume and Unlink.**
+  When another taskmgr-ui or the `taskmgr` CLI linked an agent to an issue,
+  Detail and the Agents tab drew that agent `gone` until the next ask, though
+  `revier` ran it. Resume then opened a second tab on the same conversation.
+  An issue that changed since the last ask now shows no `gone` agent until
+  the next ask.
+
 ## v0.22.0
 
 - **Action required if your config binds `alt+i` in the `shell` keys, or
