@@ -215,10 +215,15 @@ An agent is linked to an issue by an `agent-session:<session>` label, which star
 from the agent dialog or the selection menu writes. A live agent whose revier
 session wrote a comment on the issue is linked too, but only while the issue is
 In Progress: in detail mode, on the board and on the Agents tab.
-taskmgr-ui asks `revier` for the live agents every few seconds. The Details
+taskmgr-ui asks `revier` for the live agents every few seconds while its
+terminal has the focus. While it has not, it asks nothing; when the focus comes
+back, or you press a key or click in it, it asks once if it skipped an ask
+meanwhile. A window without the focus, such as a split beside the agent you
+type in, shows the agents of the last ask. The Details
 pane lists the linked agents in an `Agents` group, one line each: its status
 — `running`, `idle`, `needs you`, or `gone` for a labelled agent revier does not
-list — then its name. A long name is cut; the status stays. The Agents tab lists every agent of the project. On the board, a card of any
+list — then its name. An issue changed since the last ask shows no `gone`
+agent until the next ask: a label written since may name an agent revier runs. A long name is cut; the status stays. The Agents tab lists every agent of the project. On the board, a card of any
 column that a live agent is linked to carries the agent mark after its status,
 green while the agent runs, grey while it is idle and orange while it needs you.
 

@@ -198,10 +198,18 @@ type Model struct {
 	// to the next one that succeeds: a failure is logged once, not every
 	// tick. projectLookupWait is the ticks left before a poll is tried again
 	// after the host said the project root is no project of its own: outside
-	// one every poll fails, and each one runs the host.
+	// one every poll fails, and each one runs the host. agentPollOwed is set
+	// when a tick skipped its poll because the terminal was not focused, so
+	// the focus-in polls once and a quick focus change does not.
 	agentPollInFlight bool
 	agentPollFailing  bool
 	projectLookupWait int
+	agentPollOwed     bool
+	// agentPollStartedAt is when the poll in flight began, and
+	// liveAgentsPolledAt when the poll that gave liveAgents began: an issue
+	// updated since may carry a label that poll did not see (agent.Link).
+	agentPollStartedAt time.Time
+	liveAgentsPolledAt time.Time
 
 	// liveAgents is the agents of the last poll that answered, with each
 	// agent the app started since put in and each it closed taken out.
@@ -352,8 +360,10 @@ func (m *Model) bindStore(services Services) {
 	m.agentPollInFlight = false
 	m.agentPollFailing = false
 	m.projectLookupWait = 0
+	m.agentPollOwed = false
+	m.agentPollStartedAt, m.liveAgentsPolledAt = time.Time{}, time.Time{}
 	m.liveAgents, m.liveAgentsKnown, m.agentPollErr, m.agentPollStale = nil, false, nil, false
-	m.agents.SetAgents(nil, false, m.agentsAbsent(nil), nil)
+	m.agents.SetAgents(nil, false, time.Time{}, m.agentsAbsent(nil), nil)
 	m.applyWorkspaceSizeToBrowseModes()
 
 	m.active = mode.Board
@@ -575,6 +585,7 @@ func (m *Model) lazyInitActiveTabCmd() tea.Cmd {
 // It wraps update so the spinner tick is armed at one choke point: whatever a
 // handler did, the tick runs if and only if something is loading afterwards.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	focusCmd := m.focusFromInput(msg)
 	next, cmd := m.update(msg)
 
 	model, ok := next.(Model)
@@ -589,7 +600,48 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if model.agents != nil {
 		agentsCmd = model.scoped(model.agents.SetShown(model.active == mode.Agents))
 	}
-	return model, batchCmds(cmd, refreshCmd, agentsCmd, model.ensureSpinnerTickCmd())
+	return model, batchCmds(focusCmd, cmd, refreshCmd, agentsCmd, model.ensureSpinnerTickCmd())
+}
+
+// focusFromInput takes a key press or a click while the terminal is blurred
+// as the focus-in: a terminal or a multiplexer that drops the focus-in would
+// otherwise keep the agent poll off while the operator works in the app. A
+// motion or a wheel event is no proof, as a terminal can send them to a
+// window that is not focused.
+func (m *Model) focusFromInput(msg tea.Msg) tea.Cmd {
+	if !m.terminalBlurred() {
+		return nil
+	}
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseClickMsg:
+		return m.regainFocus()
+	}
+	return nil
+}
+
+// regainFocus records that the terminal has the focus and catches up on what
+// the blur held back: the agent poll a tick skipped, and on a store that is
+// not watched, the refresh of the active surface.
+func (m *Model) regainFocus() tea.Cmd {
+	wasBlurred := m.terminalBlurred()
+	m.focusKnown = true
+	m.terminalFocused = true
+	if !wasBlurred || m.runtime.DisableAutoRefresh {
+		return nil
+	}
+	// While the wait after a root that is no project runs, the poll stays
+	// owed: only a tick counts the wait down.
+	var pollCmd tea.Cmd
+	if m.agentPollOwed && m.projectLookupWait == 0 {
+		m.agentPollOwed = false
+		pollCmd = m.pollAgentsCmd()
+	}
+	// The watch reloads the surfaces also while the terminal is not focused,
+	// so on a watched store only the agents are owed.
+	if m.storeWatched() {
+		return pollCmd
+	}
+	return batchCmds(pollCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
 }
 
 // ensureSpinnerTickCmd arms the spinner tick when work is in flight and no tick
@@ -729,18 +781,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.FocusMsg:
-		wasBlurred := m.focusKnown && !m.terminalFocused
-		m.focusKnown = true
-		m.terminalFocused = true
-		if !wasBlurred {
-			return m, modeCmd
-		}
-		// The watch reloads a surface also while the terminal is not focused,
-		// so on a watched store there is nothing to catch up on.
-		if m.runtime.DisableAutoRefresh || m.storeWatched() {
-			return m, modeCmd
-		}
-		return m, batchCmds(modeCmd, m.maybeAutoRefreshActiveSurfaceCmdOnFocusRegain())
+		return m, batchCmds(modeCmd, m.regainFocus())
 	case tea.BlurMsg:
 		m.focusKnown = true
 		m.terminalFocused = false
@@ -751,6 +792,17 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, batchCmds(modeCmd, m.scheduleRefreshTick(), m.maybeAutoRefreshActiveSurfaceCmd())
 	case agentPollTickMsg:
+		// Each poll runs a revier process, several percent of a core at
+		// this rate, so no tick polls while the terminal is not focused; the
+		// focus-in polls. The tick still re-arms: nothing else arms it, and
+		// the wait after a root that is no project still counts down.
+		if m.terminalBlurred() {
+			m.agentPollOwed = true
+			if m.projectLookupWait > 0 {
+				m.projectLookupWait--
+			}
+			return m, batchCmds(modeCmd, m.scheduleAgentPoll())
+		}
 		return m, batchCmds(modeCmd, m.scheduleAgentPoll(), m.pollAgentsCmd())
 	case agentsListedMsg:
 		return m, batchCmds(modeCmd, m.applyAgentList(msg))

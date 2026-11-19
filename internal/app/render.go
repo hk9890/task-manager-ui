@@ -543,13 +543,23 @@ func (m Model) renderFooter() string {
 // screen or not, an agent start or resume is in flight, or the store picker
 // is loading while it is up: it is what draws the header spinner and arms its
 // tick.
+//
+// With no store open the browse surfaces and the detail load nothing: the
+// board starts in its loading state and keeps it until a store is bound, and
+// counting it re-armed the tick ten times a second for the life of a process
+// that never left the picker.
 func (m Model) workInFlight() bool {
-	for _, entry := range m.browseTabs() {
-		if entry.Tab.IsLoading() {
+	if m.storeOpen {
+		for _, entry := range m.browseTabs() {
+			if entry.Tab.IsLoading() {
+				return true
+			}
+		}
+		if m.detail.IsLoading() {
 			return true
 		}
 	}
-	if m.detail.IsLoading() || m.agentStarts > 0 || len(m.agentResumes) > 0 {
+	if m.agentStarts > 0 || len(m.agentResumes) > 0 {
 		return true
 	}
 	// The picker draws its own spinner, and this is what arms the tick that

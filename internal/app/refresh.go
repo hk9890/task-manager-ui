@@ -19,7 +19,7 @@ func (m *Model) maybeAutoRefreshActiveSurfaceCmdWithPolicy(force bool) tea.Cmd {
 	if m.overlayOpen() {
 		return nil
 	}
-	if m.focusKnown && !m.terminalFocused {
+	if m.terminalBlurred() {
 		return nil
 	}
 	if !force && !m.shouldRefreshSurface(m.active) {
@@ -113,4 +113,10 @@ func (m *Model) shouldRefreshSurface(surface mode.ID) bool {
 		return true
 	}
 	return modelNow().Sub(state.lastRefresh) >= refreshTickInterval
+}
+
+// terminalBlurred reports whether the terminal said it lost the focus. A
+// terminal that sends no focus events is never blurred.
+func (m Model) terminalBlurred() bool {
+	return m.focusKnown && !m.terminalFocused
 }

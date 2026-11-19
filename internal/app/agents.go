@@ -45,6 +45,7 @@ func (m *Model) pollAgentsCmd() tea.Cmd {
 		return nil
 	}
 	m.agentPollInFlight = true
+	m.agentPollStartedAt = modelNow()
 	ctx := m.ctx
 	return m.scoped(func() tea.Msg {
 		agents, err := host.List(ctx, root)
@@ -95,6 +96,7 @@ func (m *Model) applyAgentList(msg agentsListedMsg) tea.Cmd {
 	}
 	m.agentPollFailing = false
 	m.liveAgents, m.liveAgentsKnown, m.agentPollErr = msg.agents, true, nil
+	m.liveAgentsPolledAt = m.agentPollStartedAt
 	return m.publishAgents()
 }
 
@@ -114,9 +116,9 @@ func (m *Model) publishAgents() tea.Cmd {
 			}
 		}
 	}
-	m.detail.SetLiveAgents(bySession)
+	m.detail.SetLiveAgents(bySession, m.liveAgentsPolledAt)
 	m.board.SetLiveAgents(statusBySession)
-	return m.scoped(m.agents.SetAgents(m.liveAgents, m.liveAgentsKnown, m.agentsAbsent(m.agentPollErr), m.board.CommentLinks()))
+	return m.scoped(m.agents.SetAgents(m.liveAgents, m.liveAgentsKnown, m.liveAgentsPolledAt, m.agentsAbsent(m.agentPollErr), m.board.CommentLinks()))
 }
 
 // addStartedAgent puts an agent the app started among the live agents at

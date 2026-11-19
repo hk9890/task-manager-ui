@@ -117,7 +117,7 @@ func TestListResolvesTheProjectInTheRootOnce(t *testing.T) {
 			t.Errorf("agents = %+v, want %+v", agents, want)
 		}
 	}
-	want := []string{"status", "list --json --conversations demo", "list --json --conversations demo"}
+	want := []string{"status", "list --json demo", "list --json demo"}
 	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {
 		t.Errorf("revier calls = %q, want %q", calls, want)
 	}
@@ -145,7 +145,7 @@ func TestAFailedListResolvesTheProjectAgain(t *testing.T) {
 			t.Fatal("expected the failed list to fail")
 		}
 	}
-	want := []string{"status", "list --json --conversations demo", "status", "list --json --conversations demo"}
+	want := []string{"status", "list --json demo", "status", "list --json demo"}
 	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {
 		t.Errorf("revier calls = %q, want %q", calls, want)
 	}
@@ -205,7 +205,7 @@ func TestStartPromptsTheNewAgentOnceItsSessionIsKnown(t *testing.T) {
 		"status",
 		"agent new --no-focus -p demo",
 		"agent wait demo:home:7 --until idle --timeout 60",
-		"list --json --conversations demo",
+		"list --json demo",
 		"agent prompt demo:home:7 -- talk about tm-1",
 	}
 	if calls := readCalls(t, log); !reflect.DeepEqual(calls, want) {

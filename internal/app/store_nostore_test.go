@@ -15,6 +15,7 @@ import (
 	"github.com/hk9890/task-manager-ui/internal/storecatalog"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
 	testui "github.com/hk9890/task-manager-ui/internal/testing/ui"
+	"github.com/hk9890/task-manager-ui/internal/ui/loading"
 )
 
 type noStoreStart struct {
@@ -130,6 +131,28 @@ func TestNoStoreStartArmsTheRefreshTick(t *testing.T) {
 				t.Errorf("refresh tick armed %d times, want %d", armed, tc.wantArmed)
 			}
 		})
+	}
+}
+
+// The board starts in its loading state and no store loads it. The spinner
+// tick counted it and re-armed itself ten times a second for as long as the
+// picker was up, though the picker draws no board.
+func TestNoStoreStartArmsNoSpinnerTickOnceThePickerListed(t *testing.T) {
+	s := newNoStoreStart(t)
+	if s.m.storePicker.IsLoading() {
+		t.Fatal("fixture: the picker is still listing")
+	}
+	ticks := 0
+	s.m.scheduleSpinnerTick = func() tea.Cmd {
+		ticks++
+		return nil
+	}
+
+	m := applyMessages(t, s.m, []tea.Msg{loading.TickMsg{}})
+	applyMessages(t, m, []tea.Msg{testui.Press("down")})
+
+	if ticks != 0 {
+		t.Errorf("the idle picker armed %d spinner ticks, want none", ticks)
 	}
 }
 

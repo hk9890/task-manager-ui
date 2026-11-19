@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/hk9890/task-manager-ui/internal/agent"
 	"github.com/hk9890/task-manager-ui/internal/config"
+	"github.com/hk9890/task-manager-ui/internal/domain"
 	"github.com/hk9890/task-manager-ui/internal/mode"
 	memoryrepo "github.com/hk9890/task-manager-ui/internal/repository/memory"
 	"github.com/hk9890/task-manager-ui/internal/testing/fakes"
@@ -33,9 +35,22 @@ func agentShell(t *testing.T, agents ...agent.Agent) (Model, *fakes.FakeAgentHos
 	return agentShellAt(t, t.TempDir(), agents...)
 }
 
+// pollClockAt runs the shell's clock offset from the real one, which the
+// store stamps its writes with. A poll begins at the shell's clock, and an
+// issue updated in or after that second draws no agent gone (agent.Link).
+func pollClockAt(t *testing.T, offset time.Duration) {
+	t.Helper()
+	original := modelNow
+	modelNow = func() time.Time { return time.Now().Add(offset) }
+	t.Cleanup(func() { modelNow = original })
+}
+
 // agentShellAt is agentShell with root as the project path of the store.
+// Its polls begin two seconds after the real clock, so a test that writes a
+// label and polls sees the poll begin after the write.
 func agentShellAt(t *testing.T, root string, agents ...agent.Agent) (Model, *fakes.FakeAgentHost, *fakes.FakeLauncher, *bytes.Buffer) {
 	t.Helper()
+	pollClockAt(t, 2*time.Second)
 
 	gw := fakes.NewTracked()
 	seedInProgress(gw, "tm-1", "Ready first", "task", 1)
@@ -123,6 +138,161 @@ func TestATickDuringAPollStartsNoSecondPoll(t *testing.T) {
 	}
 	if m.agentPollInFlight {
 		t.Error("a poll is still in flight after its result")
+	}
+}
+
+// Each poll runs a revier process. A tick while the terminal is not focused
+// polls nothing and still re-arms the timer, and the focus-in polls at once.
+func TestNoTickPollsWhileTheTerminalIsNotFocused(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	armed := 0
+	m.scheduleAgentPoll = func() tea.Cmd {
+		armed++
+		return nil
+	}
+	m = send(t, m, tea.BlurMsg{})
+
+	m = send(t, m, agentPollTickMsg{})
+	m = send(t, m, agentPollTickMsg{})
+	if got := callsOf(client, "List"); len(got) != 1 {
+		t.Errorf("List calls while blurred = %v, want the bind's poll only", got)
+	}
+	if armed != 2 {
+		t.Errorf("two ticks while blurred armed the timer %d times, want 2", armed)
+	}
+
+	send(t, m, tea.FocusMsg{})
+	if got := callsOf(client, "List"); len(got) != 2 {
+		t.Errorf("List calls after the focus-in = %v, want one more", got)
+	}
+}
+
+// A terminal that sends no focus events keeps the poll on every tick, and a
+// focus-in with no blur before it asks nothing extra.
+func TestATerminalWithoutFocusEventsPollsOnEveryTick(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+
+	m = send(t, m, agentPollTickMsg{})
+	m = send(t, m, tea.FocusMsg{})
+	send(t, m, agentPollTickMsg{})
+
+	if got := callsOf(client, "List"); len(got) != 3 {
+		t.Errorf("List calls = %v, want the bind's poll and one per tick", got)
+	}
+}
+
+// On a watched store the focus-in polls the skipped tick too: the watch
+// reloads the surfaces, not the agents.
+func TestAFocusInOnAWatchedStorePollsTheSkippedTick(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	m.storeChanges = make(chan struct{})
+
+	m = send(t, m, tea.BlurMsg{})
+	m = send(t, m, agentPollTickMsg{})
+	send(t, m, tea.FocusMsg{})
+
+	if got := callsOf(client, "List"); len(got) != 2 {
+		t.Errorf("List calls = %v, want the bind's poll and the focus-in's", got)
+	}
+}
+
+// A blur and a focus-in with no tick between them skipped no poll, so the
+// focus-in runs none: a focus that changes every second must not poll every
+// second.
+func TestAFocusChangeWithNoSkippedTickPollsNothing(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+
+	for range 3 {
+		m = send(t, send(t, m, tea.BlurMsg{}), tea.FocusMsg{})
+	}
+
+	if got := callsOf(client, "List"); len(got) != 1 {
+		t.Errorf("List calls = %v, want the bind's poll only", got)
+	}
+}
+
+// A key while blurred proves the focus. A terminal that dropped the focus-in
+// would otherwise keep the poll off while the operator works in the app.
+func TestAKeyWhileBlurredTakesTheFocusBack(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+
+	m = send(t, m, tea.BlurMsg{})
+	m = send(t, m, agentPollTickMsg{})
+	m = pressKey(t, m, "down")
+
+	if m.terminalBlurred() {
+		t.Error("the terminal is still blurred after a key")
+	}
+	if got := callsOf(client, "List"); len(got) != 2 {
+		t.Errorf("List calls = %v, want the bind's poll and the key's", got)
+	}
+}
+
+// The wait after a root that is no project counts down while the terminal
+// is blurred too, so the focus-in after a long blur asks again at once.
+func TestTheNoProjectWaitCountsDownWhileBlurred(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.ListErr = noProject
+	m = send(t, m, agentPollTickMsg{})
+	if m.projectLookupWait != projectRetryTicks {
+		t.Fatalf("fixture: wait = %d, want %d", m.projectLookupWait, projectRetryTicks)
+	}
+
+	m = send(t, m, tea.BlurMsg{})
+	for range projectRetryTicks {
+		m = send(t, m, agentPollTickMsg{})
+	}
+	send(t, m, tea.FocusMsg{})
+
+	if got := callsOf(client, "List"); len(got) != 3 {
+		t.Errorf("List calls = %v, want the bind's poll, the tick's and the focus-in's", got)
+	}
+}
+
+// While the terminal is blurred the watch still reloads the issue, but no
+// poll runs. A label written since then names an agent the last poll did
+// not see: it is not drawn gone, so no Resume opens a second tab on a running
+// conversation. The focus-in poll sees the agent.
+func TestALabelWrittenWhileBlurredDrawsNoGoneAgent(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	m.storeChanges = make(chan struct{})
+	// The last poll before the blur begins before the write below.
+	pollClockAt(t, -2*time.Second)
+	m = send(t, m, agentPollTickMsg{})
+	m = send(t, m, tea.BlurMsg{})
+	m = send(t, m, agentPollTickMsg{})
+
+	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent-session:s-new"}}); err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	m = send(t, m, storeChangedMsg{})
+	if !slices.Contains(m.detail.Detail.Summary.Labels, "agent-session:s-new") {
+		t.Fatalf("fixture: the watch did not reload the label, labels %v", m.detail.Detail.Summary.Labels)
+	}
+	if got := m.detail.LinkedAgents(); len(got) != 0 {
+		t.Errorf("Detail links %+v after a store change no poll followed, want none drawn gone", got)
+	}
+
+	client.Agents = []agent.Agent{{Ref: "demo:home:5", Label: "Tab 5", Status: agent.Running, Session: "s-new"}}
+	m = send(t, m, tea.FocusMsg{})
+	if got := m.detail.LinkedAgents(); len(got) != 1 || got[0].Status != agent.Running {
+		t.Errorf("Detail links %+v after the focus-in poll, want s-new running", got)
+	}
+}
+
+// A poll that began after the store change may report the agent gone.
+func TestALabelNoPollAfterTheChangeHoldsIsGone(t *testing.T) {
+	m, _, _, _ := agentShell(t)
+	m.storeChanges = make(chan struct{})
+
+	if err := m.services.Repo.UpdateIssue(m.ctx, "tm-1", domain.UpdateIssueInput{AddLabels: []string{"agent-session:s-old"}}); err != nil {
+		t.Fatalf("UpdateIssue: %v", err)
+	}
+	m = send(t, m, storeChangedMsg{})
+	m = send(t, m, agentPollTickMsg{})
+
+	if got := m.detail.LinkedAgents(); len(got) != 1 || got[0].Status != agent.Gone {
+		t.Errorf("Detail links %+v, want s-old gone", got)
 	}
 }
 

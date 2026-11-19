@@ -272,7 +272,7 @@ func wait(ctx context.Context, addr, status string, seconds int) (string, error)
 }
 
 func listAgents(ctx context.Context, project string) ([]agent.Agent, error) {
-	out, err := run(ctx, callTimeout, "", "list", "--json", "--conversations", project)
+	out, err := run(ctx, callTimeout, "", "list", "--json", project)
 	if err != nil {
 		return nil, err
 	}
