@@ -166,6 +166,74 @@ func TestATerminalWithoutFocusEventsPollsOnEveryTick(t *testing.T) {
 	}
 }
 
+// On a watched store the focus-in polls the skipped tick too: the watch
+// reloads the surfaces, not the agents.
+func TestAFocusInOnAWatchedStorePollsTheSkippedTick(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	m.storeChanges = make(chan struct{})
+
+	m = send(t, m, tea.BlurMsg{})
+	m = send(t, m, agentPollTickMsg{})
+	send(t, m, tea.FocusMsg{})
+
+	if got := callsOf(client, "List"); len(got) != 2 {
+		t.Errorf("List calls = %v, want the bind's poll and the focus-in's", got)
+	}
+}
+
+// A blur and a focus-in with no tick between them skipped no poll, so the
+// focus-in runs none: a focus that changes every second must not poll every
+// second.
+func TestAFocusChangeWithNoSkippedTickPollsNothing(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+
+	for range 3 {
+		m = send(t, send(t, m, tea.BlurMsg{}), tea.FocusMsg{})
+	}
+
+	if got := callsOf(client, "List"); len(got) != 1 {
+		t.Errorf("List calls = %v, want the bind's poll only", got)
+	}
+}
+
+// A key while blurred proves the focus. A terminal that dropped the focus-in
+// would otherwise keep the poll off while the operator works in the app.
+func TestAKeyWhileBlurredTakesTheFocusBack(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+
+	m = send(t, m, tea.BlurMsg{})
+	m = send(t, m, agentPollTickMsg{})
+	m = pressKey(t, m, "down")
+
+	if m.terminalBlurred() {
+		t.Error("the terminal is still blurred after a key")
+	}
+	if got := callsOf(client, "List"); len(got) != 2 {
+		t.Errorf("List calls = %v, want the bind's poll and the key's", got)
+	}
+}
+
+// The wait after a root that is no project counts down while the terminal
+// is blurred too, so the focus-in after a long blur asks again at once.
+func TestTheNoProjectWaitCountsDownWhileBlurred(t *testing.T) {
+	m, client, _, _ := agentShell(t)
+	client.ListErr = noProject
+	m = send(t, m, agentPollTickMsg{})
+	if m.projectLookupWait != projectRetryTicks {
+		t.Fatalf("fixture: wait = %d, want %d", m.projectLookupWait, projectRetryTicks)
+	}
+
+	m = send(t, m, tea.BlurMsg{})
+	for range projectRetryTicks {
+		m = send(t, m, agentPollTickMsg{})
+	}
+	send(t, m, tea.FocusMsg{})
+
+	if got := callsOf(client, "List"); len(got) != 3 {
+		t.Errorf("List calls = %v, want the bind's poll, the tick's and the focus-in's", got)
+	}
+}
+
 // A new store's poll does not see the previous store's agents.
 func TestBindingAStoreClearsTheAgentsOfThePreviousOne(t *testing.T) {
 	m, _, _, _ := agentShell(t, runningOnTab3())
