@@ -231,7 +231,7 @@ need the exact one.
 |---|---|---|
 | `lint` | `staticcheck` and `errcheck`, deliberately narrow, non-test packages only | `.golangci.yml` |
 | `vet` | the `go vet` suite | the toolchain |
-| `guardrails` | the import bans on `./cmd/taskmgr-ui`'s full transitive graph: no `database/sql`, no `orchestration` / `control-plane` / `control_plane` segment | `cmd/taskmgr-ui/architecture_guardrails_test.go` |
+| `guardrails` | the import bans on the first-party packages that `./cmd/taskmgr-ui` reaches: none imports `database/sql`, and none has an `orchestration`, `controlplane`, `control-plane` or `control_plane` path segment | `cmd/taskmgr-ui/architecture_guardrails_test.go` |
 | `fmt:check` | `goimports -local github.com/hk9890/task-manager-ui`, and a tidy `go.mod` / `go.sum` | `.mise.toml` |
 | `scripts:check` | shell and Python syntax under `scripts/` | `.mise.toml` |
 | `test` | the unit tier | [TESTING.md](TESTING.md) |

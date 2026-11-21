@@ -36,8 +36,8 @@ contract, the architectural rules, and which doc outranks it inside each area.
 
 **MUST read [docs/DESIGN-GUIDE.md](docs/DESIGN-GUIDE.md) before creating or editing ANY file under
 `internal/ui/` or `internal/mode/`, and before writing any plan or answer that specifies a screen, a
-key, a glyph, or a colour.** It is the interaction law; two of its rules are gated and the rest is
-held at review.
+key, a glyph, or a colour.** It is the interaction law; it names the rules that are gated, and the
+rest is held at review.
 
 ### Runtime config, keybindings, launcher templates
 
