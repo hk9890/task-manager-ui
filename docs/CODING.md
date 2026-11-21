@@ -25,7 +25,7 @@ mise run ci          # the merge gate; see What the tools enforce
 
 1. **No direct SQL.** All issue reads and writes go through `repository.Repository`. No `database/sql` and no direct database access in the primary product path.
 
-2. **SDK surfaces only.** The `taskmgr.Repository` implementation talks to the task-manager Go SDK (`github.com/hk9890/task-manager/sdk/tasks`) in-process. There is no external CLI binary in the product path; do not read the store's internals directly.
+2. **SDK surfaces only.** Reach a store through the task-manager Go SDK (`github.com/hk9890/task-manager/sdk/tasks`), in-process ([decision 0001](decisions/0001-taskmgr-ui-opens-a-store-in-process-through-the-task-manager-go-sdk.md)).
 
 3. **Repository is source-specific.** A `taskmgr.Repository` instance is bound to one task-manager store (one project directory). Federation is a future layer above repositories, not a change to the core interface.
 
@@ -37,9 +37,9 @@ mise run ci          # the merge gate; see What the tools enforce
    - The screen writes nothing. It emits `issueedit.SubmitMsg` with the values it opened with and the values it holds.
    - The shell builds the write from the difference (`saveEditor` and `issueUpdate` in `internal/app/issue_editor.go`), so a field nobody changed is not written.
    - A refused write leaves the screen open with the typed values and shows the error on it (`Model.handleEditorSaved`).
-   - No flow hands the terminal to an external editor.
+   - No flow hands the terminal to an external editor ([decision 0003](decisions/0003-an-issue-is-edited-on-one-full-screen-inside-the-app.md)).
 
-6. **Launchers are thin.** Launchers receive issue context and produce a subprocess. They must not become an orchestration engine.
+6. **Launchers are thin.** A launcher receives issue context and starts one detached process; it must not become an orchestration engine ([decision 0004](decisions/0004-a-launcher-starts-one-detached-process-and-returns-at-once.md)).
 
    The agent host (`agent.Host` in `internal/agent`, `Services.Agents`) is a seam outside the
    store path, over the program that runs the agents. Each call is bounded: none outlives its
@@ -151,9 +151,10 @@ central store. `--repo=memory` has no store to ask, so it keeps the target direc
 ### Switching stores
 
 `cmd/` resolves the store the app starts on. Every later store is opened in-process through
-`storecatalog.Catalog.Open` and made active by `Model.bindStore` (`internal/app/model.go`) —
-so the app, not only `cmd/`, knows where the active store lives. Core Architectural Rule 3
-still holds: each repository instance is bound to one store, and switching replaces it.
+`storecatalog.Catalog.Open` and made active by `Model.bindStore` (`internal/app/model.go`):
+[decision 0002](decisions/0002-a-store-switch-happens-inside-the-running-program.md). Core
+Architectural Rule 3 still holds: each repository instance is bound to one store, and switching
+replaces it.
 
 - Rebuild store-bound state through `bindStore`, the path startup also takes. It cancels the
   previous store's context and constructs board, docs, search and detail from scratch; a

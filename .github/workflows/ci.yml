@@ -23,9 +23,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # linux + macOS are the supported/released platforms (see .goreleaser.yaml).
-        # Windows is not a release target and the file-based store backend does not
-        # support Windows directory fsync, so it is intentionally excluded.
+        # No Windows: docs/decisions/0007-windows-is-not-a-supported-platform.md
         os: [ubuntu-latest, macos-latest]
     steps:
       - name: Check out repository

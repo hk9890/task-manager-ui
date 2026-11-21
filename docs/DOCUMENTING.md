@@ -20,6 +20,9 @@ does not exist.
   fine.
 - The gate proves cited paths resolve. It cannot prove a *symbol* still exists — `constructRepository`
   outlived its rename in two docs — so read the code when you cite a function.
+- The gate checks a path written from the repository root, in Markdown only. A record link from a
+  doc under `docs/` (`decisions/NNNN-…`), in a workflow file or in a Go comment is not checked: run
+  `rg -n 'decisions/NNNN' docs .github cmd internal` when you replace a record.
 
 ## The anchor gate
 
@@ -48,6 +51,9 @@ Adding a doc under `docs/` takes two registrations, in this order, or nothing wi
 1. A `MUST read … before <action>` route in [AGENTS.md](../AGENTS.md).
 2. An inline link from [CONTRIBUTING.md](../CONTRIBUTING.md) where a human needs it.
 
+A record under [decisions/](decisions/) needs no registration of its own: the folder has both. Add
+a path the record governs to the AGENTS.md route when the route does not name it.
+
 [CODING.md](CODING.md)'s header table states which doc outranks which inside each area.
 
 - [DESIGN-GUIDE.md](DESIGN-GUIDE.md) sits outside the canonical topic set deliberately: folding the
@@ -64,7 +70,7 @@ Adding a doc under `docs/` takes two registrations, in this order, or nothing wi
 ## Decisions
 
 What this repository has decided not to document, and why. Re-open one here rather than filling the
-gap somewhere else.
+gap somewhere else. A decision about the product itself is a record in [decisions/](decisions/).
 
 - **`CHANGELOG.md` stays.** The GitHub release notes are generated per release, but the tracked file
   is the one history readable from a checkout with no network.

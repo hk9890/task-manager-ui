@@ -19,6 +19,13 @@ small.
 this repository, and before writing any plan or design.** It is the map — the layout and the search
 expressions that locate things fast. Go there instead of grepping blind.
 
+### Changing a decided design
+
+**MUST read the records in [docs/decisions/](docs/decisions/) that bear on the change before creating or
+editing ANY file under `cmd/`, `internal/`, or `.github/workflows/`, or `go.mod` or `.goreleaser.yaml`.**
+Each holds a decision in force, and a change against one is the user's call — name the record and
+ask.
+
 ### Coding and file changes
 
 **MUST read [docs/CODING.md](docs/CODING.md) before creating or editing ANY file under `cmd/`,
