@@ -53,6 +53,7 @@ what. Read the one that matches what you are about to do:
 | You are | Read |
 |---|---|
 | finding your way around the packages | [docs/OVERVIEW.md](docs/OVERVIEW.md) |
+| changing a design that a record decides | [docs/decisions/](docs/decisions/) |
 | changing code under `cmd/`, `internal/` or `scripts/` | [docs/CODING.md](docs/CODING.md) |
 | changing a screen, a key, a glyph or a colour | [docs/DESIGN-GUIDE.md](docs/DESIGN-GUIDE.md) |
 | adding a config key, a keybinding or a launcher template | [docs/CONFIGURATION.md](docs/CONFIGURATION.md) |

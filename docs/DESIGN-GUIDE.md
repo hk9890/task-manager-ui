@@ -470,8 +470,9 @@ Board, Docs, Agents and the store search each hold one `mode.Query` (`internal/m
 on the line above their columns, under a rule. It is always live: no key enters it and nothing
 focuses it.
 
-- **No action is bound to a printable key outside a modal.** `mode.IsQueryKey` names the keys a
-  query takes — every rune key and `space` without alt, `backspace`, `ctrl+w`, `ctrl+u` — and the
+- **No action is bound to a printable key outside a modal**
+  ([decision 0005](decisions/0005-outside-a-modal-no-action-is-bound-to-a-printable-key.md)).
+  `mode.IsQueryKey` names the keys a query takes — every rune key and `space` without alt, `backspace`, `ctrl+w`, `ctrl+u` — and the
   surface offers each key to `Query.HandleKey` before its bindings. `handleShellKey` asks the
   surface on screen (`Browse.TakesKey`), so a key it took runs no shell action. Bind a new action
   to an `alt+` chord or a key that prints nothing; `config.ResolveKeyBindings` refuses anything
@@ -540,7 +541,8 @@ it.
   the search is not up.
 - While it is up it owns the selection, also under a Detail opened from it: `currentSelection`
   reads the search row, and Escape in that Detail returns to the results as they were left.
-- Its query is not matched in memory. An edit waits `editPause`, and one `Repository.Search` runs
+- Its query is not matched in memory, and the app ranks nothing
+  ([decision 0008](decisions/0008-store-search-is-the-search-of-the-sdk-and-taskmgr-ui-ranks-nothing.md)). An edit waits `editPause`, and one `Repository.Search` runs
   for the text as it is when the pause ends (`Model.searchAfterPause`), so a typed word costs one
   search. The pause and each search carry a generation, and an older one is dropped. The scope key
   and Escape search at once and replace a waiting edit; a reload and an auto refresh are dropped
@@ -807,7 +809,8 @@ The selection menu is the one exception: no key selects text, so no key reaches 
   nothing does during a save. It lights nothing under the pointer: a lit button there would show
   a focus that Enter does not act on.
 - `Model.View` asks for `tea.MouseModeAllMotion`, which stops the terminal's own drag-select, so
-  the shell selects text itself (`internal/app/textselect.go`): a drag of the left button draws a
+  the shell selects text itself (`internal/app/textselect.go`,
+  [decision 0006](decisions/0006-the-app-captures-the-mouse-and-selects-text-itself.md)): a drag of the left button draws a
   reverse-video box over the screen as it was when the drag began, and the release sends the box
   to the clipboard with OSC 52. A drag that runs into the margin stops the box at the screen's
   edge (`mouseHeld`). While the box is up every other mouse event and every key
