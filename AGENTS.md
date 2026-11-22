@@ -19,6 +19,13 @@ small.
 this repository, and before writing any plan or design.** It is the map — the layout and the search
 expressions that locate things fast. Go there instead of grepping blind.
 
+### Changing a decided design
+
+**MUST read the records in [docs/decisions/](docs/decisions/) that bear on the change before creating or
+editing ANY file under `cmd/`, `internal/`, or `.github/workflows/`, or `go.mod` or `.goreleaser.yaml`.**
+Each holds a decision in force, and a change against one is the user's call — name the record and
+ask.
+
 ### Coding and file changes
 
 **MUST read [docs/CODING.md](docs/CODING.md) before creating or editing ANY file under `cmd/`,
@@ -29,8 +36,8 @@ contract, the architectural rules, and which doc outranks it inside each area.
 
 **MUST read [docs/DESIGN-GUIDE.md](docs/DESIGN-GUIDE.md) before creating or editing ANY file under
 `internal/ui/` or `internal/mode/`, and before writing any plan or answer that specifies a screen, a
-key, a glyph, or a colour.** It is the interaction law; two of its rules are gated and the rest is
-held at review.
+key, a glyph, or a colour.** It is the interaction law; it names the rules that are gated, and the
+rest is held at review.
 
 ### Runtime config, keybindings, launcher templates
 

@@ -31,7 +31,7 @@ func NewExecProcessRunner() ProcessRunner {
 //  2. setSysProcAttr(cmd) is called to detach the subprocess from taskmgr-ui's process
 //     group so that signals sent to taskmgr-ui's process group (SIGHUP, SIGINT) do not
 //     propagate to the launched tool. Linux/macOS use syscall.SysProcAttr{Setsid: true}.
-//     Windows is not a supported target (see .goreleaser.yaml and the CI matrix).
+//     Windows is not a supported target (docs/decisions/0007-windows-is-not-a-supported-platform.md).
 //
 //  3. A reaper goroutine calls cmd.Wait() after Start succeeds. This claims the
 //     exit status from the kernel, preventing the child from becoming a zombie in

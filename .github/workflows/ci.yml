@@ -23,16 +23,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # linux + macOS are the supported/released platforms (see .goreleaser.yaml).
-        # Windows is not a release target and the file-based store backend does not
-        # support Windows directory fsync, so it is intentionally excluded.
+        # No Windows: docs/decisions/0007-windows-is-not-a-supported-platform.md
         os: [ubuntu-latest, macos-latest]
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install mise (handles Go toolchain via .mise.toml)
-        uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
+        uses: jdx/mise-action@236a21c3b91f5db6d4e174b348674a0f0caac06d # v5.2.9
         with:
           # Pin the mise binary to a known-good release rather than auto-floating
           # "latest"; bump deliberately.
