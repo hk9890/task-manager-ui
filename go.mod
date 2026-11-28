@@ -9,7 +9,7 @@ require (
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/catppuccin/go v0.3.0
 	github.com/charmbracelet/colorprofile v0.4.3
-	github.com/charmbracelet/x/ansi v0.11.9
+	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261012121918-43427fdbad12
 	github.com/hk9890/task-manager/sdk v0.14.1
 	github.com/yuin/goldmark v1.8.7
